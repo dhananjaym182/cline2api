@@ -149,3 +149,93 @@ func TestProviderPrioritySelection(t *testing.T) {
 		t.Fatalf("after cooldown want Low, got %+v", p)
 	}
 }
+
+// stampUpstream 归因优先级：provider 标记 > zen 模型 > 默认 cline。
+func TestStampUpstreamAttribution(t *testing.T) {
+	var rl RequestLog
+
+	stampUpstream(&rl, map[string]any{"model": "custom-model-1", servedByParam: upstreamProvider})
+	if rl.Upstream != upstreamProvider {
+		t.Fatalf("provider-marked upstream = %q, want %q", rl.Upstream, upstreamProvider)
+	}
+
+	stampUpstream(&rl, map[string]any{"model": "z-ai/glm-5.3-flash"})
+	if rl.Upstream != upstreamCline {
+		t.Fatalf("plain model upstream = %q, want %q", rl.Upstream, upstreamCline)
+	}
+
+	// 无标记时绝不误判为 provider
+	stampUpstream(&rl, map[string]any{})
+	if rl.Upstream != upstreamCline {
+		t.Fatalf("empty params upstream = %q, want %q", rl.Upstream, upstreamCline)
+	}
+}
+
+// model="free" 别名链必须与显式链一致：命中自定义 provider 时优先走 provider，
+// 而不是无条件只用 Cline 账号池；成功后 params 留下归因标记。
+func TestFreeAliasUsesCustomProvider(t *testing.T) {
+	oldPool := pool
+	oldConfig := getProxyConfig()
+	oldTransport := httpClient.Transport
+	t.Cleanup(func() {
+		pool = oldPool
+		setProxyConfig(oldConfig)
+		httpClient.Transport = oldTransport
+		_ = deleteProvider("prov_free1")
+	})
+
+	pool = &AccountPool{Accounts: []*Account{{
+		AccountID: "a", Email: "a@x.com", AccessToken: "t",
+		ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), Status: "active",
+	}}}
+	cfg := defaultProxyConfig()
+	cfg.ModelChain = []string{"custom-model-free"}
+	setProxyConfig(cfg)
+
+	providerCalls := 0
+	clineCalls := 0
+	httpClient.Transport = freeModelRoundTripper(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "provider.test" {
+			providerCalls++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"id":"p1","choices":[{"message":{"role":"assistant","content":"from-provider"}}]}`)),
+				Header:     make(http.Header),
+				Request:    req,
+			}, nil
+		}
+		clineCalls++
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"id":"c1","choices":[{"message":{"role":"assistant","content":"from-cline"}}]}`)),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	})
+
+	upsertProvider(&CustomProvider{
+		ID: "prov_free1", Name: "FreeChainProv", BaseURL: "http://provider.test/v1",
+		APIKey: "sk-x", ModelIDs: []string{"custom-model-free"}, Enabled: true, Priority: 10,
+	})
+
+	params := map[string]any{"model": "free", "max_tokens": 16, "messages": []any{map[string]any{"role": "user", "content": "hi"}}}
+	resp, acc, err := callClineAPI(params, false)
+	if err != nil {
+		t.Fatalf("expected provider success via free chain, got %v", err)
+	}
+	defer resp.Body.Close()
+	if providerCalls != 1 || clineCalls != 0 {
+		t.Fatalf("providerCalls=%d clineCalls=%d, want 1/0", providerCalls, clineCalls)
+	}
+	if acc != nil {
+		t.Fatal("provider-served free request should not consume a cline account")
+	}
+	if params[servedByParam] != upstreamProvider {
+		t.Fatalf("servedBy marker = %v, want %q", params[servedByParam], upstreamProvider)
+	}
+	var rl RequestLog
+	stampUpstream(&rl, params)
+	if rl.Upstream != upstreamProvider {
+		t.Fatalf("log upstream = %q, want %q", rl.Upstream, upstreamProvider)
+	}
+}
