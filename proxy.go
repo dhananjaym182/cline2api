@@ -184,6 +184,18 @@ func getDefaultModel() string {
 		}
 	}
 
+	// 远程同步已启用但上游没有免费模型（列表调整 / 接口变化）：从仍然在线的
+	// 模型里挑一个，绝不在有实时数据时退回下面的硬编码内置表（写死的模型
+	// 已下架时会让每个无模型请求必败）。
+	if remoteModelsActive() {
+		for _, m := range p.Models {
+			if m.Status == "active" {
+				return m.ID
+			}
+		}
+	}
+
+	// 仅离线 / 从未同步成功时才允许内置硬编码 fallback。
 	for _, m := range builtinModels {
 		if m.Cost == "free" {
 			return m.ID
