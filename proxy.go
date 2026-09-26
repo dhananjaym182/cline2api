@@ -2527,6 +2527,14 @@ func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch 
 			return
 		}
 		resp.Body.Close()
+		// 客户端主动断开（Esc 中断 / Claude Code 空闲看门狗重连）不是模型的失败：
+		// 此时冷却会把用户点名/配置的模型拉黑 2 分钟，后续请求被静默赶到回退链上，
+		// 表现为「配置了模型却总走 fallback」。实测见 proxy.log 2026/09/26 09:52:52 /
+		// 09:59:00：「client disconnected before first token」紧跟 pixel-canary 被冷却。
+		// ctx 由 r.Context() 派生，在 handler 内只有客户端断开才会取消。
+		if ctx.Err() != nil {
+			return
+		}
 		// 上游在产出任何内容前失败（排队超时 / 空闲 504 / 早断流）：把这次实际使用的模型
 		// 标记为短时冷却，下一次尝试就会自动落到链上的下一个模型（pool 的选择器会跳过
 		// 冷却中的模型）。有备用模型时才冷却，避免把整条链一起冷掉。
