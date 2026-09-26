@@ -172,7 +172,9 @@ func getDefaultModel() string {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
-	if p.DefaultModel != "" {
+	// 管理员设置的默认模型也会随上游下架而失效：远程同步已启用却查不到时
+	// 视为已下架，落到下方「第一个远程免费模型」，避免每个无模型请求必败。
+	if p.DefaultModel != "" && (!remoteModelsActive() || liveModelSet(p)[p.DefaultModel]) {
 		return p.DefaultModel
 	}
 
@@ -1066,6 +1068,58 @@ func defaultFreeChain() []string {
 	return chain
 }
 
+// liveModelSet 返回当前仍然「在线」的模型 ID 集合：池内全部模型（远程同步
+// remote / opencode zen 同步 / 管理员自定义）+ 启用中自定义 provider 声明的模型。
+// 调用方须持有 poolMu；providers 走独立的 providersMu，仓库内不存在反向持锁路径。
+func liveModelSet(p *AccountPool) map[string]bool {
+	live := make(map[string]bool, len(p.Models))
+	for _, m := range p.Models {
+		live[m.ID] = true
+	}
+	for _, sp := range listProviders() {
+		if !sp.Enabled {
+			continue
+		}
+		for _, id := range sp.ModelIDs {
+			live[id] = true
+		}
+	}
+	return live
+}
+
+// filterStaleModels 从回退链里剔除已下架的模型。
+//
+// 上游免费/推荐模型每日调整，写死或旧配置里的模型会随下架而失效：继续尝试
+// 只会白白多一次必败的上游往返（404/400 + 冷却），排在链头时每个请求都要先
+// 撞一次失败。判定来源：远程同步成功的模型列表（含 zen/自定义）+ 启用中
+// provider 的 modelIds。
+//
+// 远程同步从未成功（离线冷启动）时不判定、原样保留；剔空时也原样保留
+// （宁可按原链试一次，也不要空链直接报错）。
+func filterStaleModels(chain []string) []string {
+	if len(chain) == 0 || !remoteModelsActive() {
+		return chain
+	}
+	p := loadPool()
+	poolMu.Lock()
+	live := liveModelSet(p)
+	poolMu.Unlock()
+	out := make([]string, 0, len(chain))
+	var dropped []string
+	for _, m := range chain {
+		if m == "" || live[m] {
+			out = append(out, m)
+		} else {
+			dropped = append(dropped, m)
+		}
+	}
+	if len(dropped) == 0 || len(out) == 0 {
+		return chain
+	}
+	log.Printf("  model chain: dropped delisted model(s) %v -> %v", dropped, out)
+	return out
+}
+
 // hasAnyFallbackLeft 判断点名模型之后是否还有候选（决定 500 是否透传）。
 func hasAnyFallbackLeft(requested, current string) bool {
 	chain := modelFallbackChain(requested)
@@ -1079,11 +1133,14 @@ func hasAnyFallbackLeft(requested, current string) bool {
 
 // modelFallbackChain 显式模型的降级序列：点名模型优先，其后是管理员配置的
 // 回退链（modelChain）；未配置时动态派生默认链（排除已下架模型）。均去重。
+// 配置链会先经 filterStaleModels 剔除已下架条目；点名模型本身始终保留——
+// 它是客户端显式要求的（可能由 zen / provider 服务，不归本仓判定）。
 func modelFallbackChain(requested string) []string {
 	configured := getProxyConfig().ModelChain
 	if len(configured) == 0 {
 		configured = defaultFreeChain()
 	}
+	configured = filterStaleModels(configured)
 	chain := make([]string, 0, 1+len(configured))
 	chain = append(chain, requested)
 	for _, m := range configured {
@@ -1114,7 +1171,9 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 	if len(configured) == 0 {
 		chain = defaultFreeChain()
 	}
-	// 同样按可用性重排：把流量摊到用量最少的可用模型上，而不是顺序打满第一个。
+	// 先剔除已下架模型，再按可用性重排：把流量摊到用量最少的可用模型上，
+	// 而不是顺序打满第一个，也不在必败的死模型上浪费一次上游往返。
+	chain = filterStaleModels(chain)
 	chain = sortModelsByAvailability(chain)
 	delete(params, servedByParam) // 本次调用重新归因
 	var lastErr error
