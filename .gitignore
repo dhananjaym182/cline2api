@@ -1,5 +1,6 @@
 .cline-accounts.json
 .cline-credentials.json
+.cline-providers.json
 .cline-request-logs.json
 .cline-zen.json
 .cline-config.json
