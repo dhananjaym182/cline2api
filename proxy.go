@@ -778,15 +778,47 @@ func hasToolUseBlocks(content any) bool {
 	return false
 }
 
+func numericInt(value any) (int, bool) {
+	switch number := value.(type) {
+	case int:
+		return number, true
+	case float64:
+		return int(number), true
+	default:
+		return 0, false
+	}
+}
+// modelMaxOutputLimit 返回模型已知的最大输出 token 硬上限（0=未知，不封顶）。
+// 已知硬限制表优先（gemini-3.8-flash 等）；其次取池中该模型的 Output 元数据
+// （remote 同步 / 管理页设置 / 用户自定义模型）。zen 模型的 Output 是压缩预算
+// 用的估值（未知模型默认 32768），作为硬上限会误伤长输出，跳过。
+func modelMaxOutputLimit(model string) int {
+	if meta, ok := lookupClineModelMeta(model); ok && meta.Output > 0 {
+		return meta.Output
+	}
+	if strings.TrimSpace(model) == "" {
+		return 0
+	}
+	p := loadPool()
+	poolMu.Lock()
+	defer poolMu.Unlock()
+	for _, m := range p.Models {
+		if m.ID == model && !isZenSource(m) && m.Output > 0 {
+			return m.Output
+		}
+	}
+	return 0
+}
+
 func buildUpstreamBody(params map[string]any, stream bool) map[string]any {
 	sessionID := fmt.Sprintf("sess_%d", time.Now().UnixMilli())
 
 	maxTokens := maxOutputTokens()
 	source := ""
-	if mt, ok := params["max_tokens"].(float64); ok {
-		maxTokens, source = clampMaxTokens(int(mt)), "max_tokens"
-	} else if mt, ok := params["max_completion_tokens"].(float64); ok {
-		maxTokens, source = clampMaxTokens(int(mt)), "max_completion_tokens"
+	if mt, ok := numericInt(params["max_tokens"]); ok {
+		maxTokens, source = clampMaxTokens(mt), "max_tokens"
+	} else if mt, ok := numericInt(params["max_completion_tokens"]); ok {
+		maxTokens, source = clampMaxTokens(mt), "max_completion_tokens"
 	}
 	// 客户端发的 0 视为未设置、1~15 低于上游硬下限：一律兜到默认值，
 	// 否则 muse-spark 等模型直接 400 且错误会被回退链吞掉
@@ -800,6 +832,14 @@ func buildUpstreamBody(params map[string]any, stream bool) map[string]any {
 	model := getDefaultModel()
 	if m, ok := params["model"].(string); ok && m != "" {
 		model = m
+	}
+
+	// 模型已知硬上限封顶：gemini-3.8-flash 最大输出 65536，默认预算 128000 会被
+	// 上游网关 400（maxOutputTokens out of range / Request contains an invalid argument），
+	// 且 429 配额限流回退到 vertex/google 路由时必现。
+	if limit := modelMaxOutputLimit(model); limit > 0 && maxTokens > limit {
+		log.Printf("  clamp max_tokens=%d -> %d (model %q output limit)", maxTokens, limit, model)
+		maxTokens = limit
 	}
 
 	body := map[string]any{
@@ -1300,8 +1340,6 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 				return nil, acc, &clineAccountUnavailableError{err: fmt.Errorf("account %s token expired permanently", acc.Email)}
 			}
 		} else {
-			acc.Status = "expired"
-			savePool()
 			return nil, acc, &clineAccountUnavailableError{err: fmt.Errorf("account %s refresh failed: %w", acc.Email, err)}
 		}
 	}
@@ -1321,6 +1359,10 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 				acc.CooldownUntil = until
 				savePool()
 			}
+		}
+		// 上游明确报「模型不存在」时清理下架残留（同步标记 Delisted 保留的模型）
+		if model, _ := body["model"].(string); model != "" && isModelGoneError(resp.StatusCode, bodyStr) {
+			markModelGone(model)
 		}
 		return nil, acc, &clineAPIError{statusCode: resp.StatusCode, message: truncate(bodyStr, 500)}
 	}
@@ -2642,6 +2684,8 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 	// 必须从第 0 秒起就有事件流动 —— 大上下文下上游排队/预填充实测 TTFT 可达 3~4 分钟，
 	// 期间只有注释行（不是事件）时，Claude Code 的流空闲看门狗会把连接当成卡死。
 	// 重试沿用同一信封（sw.envelope 幂等），客户端看不到任何重试痕迹。
+	// model 取 reqLog.Model（调用方已在 fetch 时更新为含回退的实际服务模型），
+	// 不能发空串 —— 客户端会丢失流式消息的模型身份。
 	sw.start()
 	if !sw.envelope {
 		sw.envelope = true
@@ -2652,7 +2696,7 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 				"type":        "message",
 				"role":        "assistant",
 				"content":     []any{},
-				"model":       "",
+				"model":       reqLog.Model,
 				"stop_reason": nil,
 			},
 		})

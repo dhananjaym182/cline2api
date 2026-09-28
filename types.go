@@ -36,6 +36,10 @@ type Model struct {
 	Output  int `json:"output,omitempty"`
 	// MetaLocked 用户在管理页手动设置过 Context/Output：zen 同步保留该值不再覆盖
 	MetaLocked bool `json:"metaLocked,omitempty"`
+	// Delisted 模型已从上游官方列表消失，但被保留不删 —— 实测官方列表移除后
+	// 模型往往仍可继续用（如 z-ai/glm-5.3-flash）。同步只做标记，管理页显示
+	// 「已下架」徽标并支持手动移除；上游明确报模型不存在时自动清理。
+	Delisted bool `json:"delisted,omitempty"`
 }
 
 // ModelStat 是单个模型在某账号下的用量统计（仅统计 free 模型）。

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -12,7 +13,8 @@ import (
 
 // clineRecommendedModelsURL 是 Cline 官方的「推荐/免费模型」接口（无需认证）。
 // 参考 model-api.md：Cline 4.1.15 的 Free Models 由该接口直接返回。
-const clineRecommendedModelsURL = "https://api.cline.bot/api/v1/ai/cline/recommended-models"
+// var 便于测试注入 httptest 假服务。
+var clineRecommendedModelsURL = "https://api.cline.bot/api/v1/ai/cline/recommended-models"
 
 const modelSyncTimeout = 10 * time.Second
 
@@ -88,6 +90,45 @@ func fetchClineRecommendedModels() (clineRecommendedResponse, error) {
 	return data, nil
 }
 
+// modelMeta 是已知模型的上下文窗口 / 最大输出 token 元数据。
+type modelMeta struct {
+	Context int
+	Output  int
+}
+
+// clineModelMeta 是已知 Cline 侧模型的硬限制表（按模型基名匹配）。
+// Cline 官方 recommended-models 接口不返回 contextWindow/maxTokens 元数据，
+// 只能按实测维护；上游网关按路由（vertex/google）强制校验 maxOutputTokens。
+// gemini-3.8-flash：vertex 路由实测支持范围 1~65536 —— maxOutputTokens=128000
+// 会被直接 400 invalid argument（2026-09 实测，含 google 路由的同源报错）。
+var clineModelMeta = map[string]modelMeta{
+	"gemini-3.8-flash": {Context: 1048576, Output: 65536},
+}
+
+// clineModelPrefixes 是 Cline 侧模型 ID 的路由前缀（基名之前的限定段）。
+var clineModelPrefixes = []string{"cline-free/", "cline-pass/", "google/", "cline/"}
+
+// modelBaseName 去掉模型 ID 的路由前缀得到基名：
+// cline-free/gemini-3.8-flash / google/gemini-3.8-flash → gemini-3.8-flash。
+func modelBaseName(id string) string {
+	id = strings.TrimSpace(id)
+	if idx := strings.Index(id, "/"); idx > 0 {
+		base := id[idx+1:]
+		for _, p := range clineModelPrefixes {
+			if strings.HasPrefix(id, p) {
+				return base
+			}
+		}
+	}
+	return id
+}
+
+// lookupClineModelMeta 按基名查已知模型元数据；未收录时 ok=false。
+func lookupClineModelMeta(id string) (modelMeta, bool) {
+	meta, ok := clineModelMeta[modelBaseName(id)]
+	return meta, ok
+}
+
 // remoteCost 判断远程模型计费：tags 含 "FREE" 或来自 free 数组 → free，否则 pass。
 func remoteCost(m clineRemoteModel, inFreeList bool) string {
 	if inFreeList {
@@ -141,7 +182,18 @@ func syncClineModels() modelSyncResult {
 		return fail(err)
 	}
 
-	// 组装远程模型列表（去重，free 数组在前）
+	// 组装远程模型列表（去重，free 数组在前）。
+	// 先取池中旧 remote 条目：管理页锁定过 Context/Output（MetaLocked）的保留原值。
+	p := loadPool()
+	poolMu.Lock()
+	oldRemote := make(map[string]Model)
+	for _, m := range p.Models {
+		if m.Source == "remote" {
+			oldRemote[m.ID] = m
+		}
+	}
+	poolMu.Unlock()
+
 	var remote []Model
 	seen := make(map[string]bool)
 	addGroup := func(group []clineRemoteModel, inFree bool) {
@@ -150,14 +202,26 @@ func syncClineModels() modelSyncResult {
 				continue
 			}
 			seen[m.ID] = true
-			remote = append(remote, Model{
+			entry := Model{
 				ID:       m.ID,
 				Provider: remoteProvider(m.ID),
 				Cost:     remoteCost(m, inFree),
 				Status:   "active",
 				Custom:   false,
 				Source:   "remote",
-			})
+			}
+			// 远程接口不带 context/maxTokens：按已知硬限制表补全，
+			// 用户锁定过的值（MetaLocked）优先于表；未收录的模型默认 1M
+			// 上下文（主流模型现状，与 zen 同步的默认一致，仅展示与编辑
+			// 预填，不参与压缩/封顶）。Output 保持 0=未知，不引入意外封顶。
+			if old, ok := oldRemote[m.ID]; ok && old.MetaLocked {
+				entry.Context, entry.Output, entry.MetaLocked = old.Context, old.Output, true
+			} else if meta, ok := lookupClineModelMeta(m.ID); ok {
+				entry.Context, entry.Output = meta.Context, meta.Output
+			} else if entry.Context == 0 {
+				entry.Context = 1048576
+			}
+			remote = append(remote, entry)
 		}
 	}
 	addGroup(data.Free, true)
@@ -169,25 +233,32 @@ func syncClineModels() modelSyncResult {
 	}
 
 	// 与池中现有 remote 模型比较
-	p := loadPool()
+	p = loadPool()
 	poolMu.Lock()
-	oldRemote := make(map[string]bool)
+	oldIDs := make(map[string]bool)
 	var kept []Model
 	for _, m := range p.Models {
 		if m.Source == "remote" {
-			oldRemote[m.ID] = true
+			oldIDs[m.ID] = true
 			continue
 		}
 		kept = append(kept, m)
 	}
 	for _, m := range remote {
-		if !oldRemote[m.ID] {
+		if !oldIDs[m.ID] {
 			res.Added = append(res.Added, m.ID)
 		}
 	}
-	for id := range oldRemote {
-		if !seen[id] {
-			res.Removed = append(res.Removed, id)
+	// 上游列表里消失的旧模型不删除：实测官方列表移除后模型往往仍可继续用，
+	// 只打上 Delisted 标记（管理页显示「已下架」，支持手动移除）；
+	// 重新出现时新条目天然无标记，标记自动清除。res.Removed 只记录新下架的。
+	for _, m := range p.Models {
+		if m.Source == "remote" && !seen[m.ID] {
+			if !m.Delisted {
+				res.Removed = append(res.Removed, m.ID)
+			}
+			m.Delisted = true
+			kept = append(kept, m)
 		}
 	}
 	kept = append(kept, remote...)
@@ -214,6 +285,47 @@ func syncClineModels() modelSyncResult {
 // triggerModelSync 供管理后台手动触发同步；非阻塞等待完成并返回结果。
 func triggerModelSync() modelSyncResult {
 	return syncClineModels()
+}
+
+// modelGoneRe 匹配上游「模型不存在」类错误响应体（400/404）。
+var modelGoneRe = regexp.MustCompile(
+	`(?i)model[\s_-]*(not[\s_-]*found|does\s+not\s+exist|no\s+such|unknown|invalid)|(invalid|unknown|no\s+such)[\s_-]*model`)
+
+// isModelGoneError 判断上游响应是否为明确的「模型不存在」类错误（400/404）。
+func isModelGoneError(status int, body string) bool {
+	if status != http.StatusBadRequest && status != http.StatusNotFound {
+		return false
+	}
+	return modelGoneRe.MatchString(body)
+}
+
+// markModelGone 上游明确报「模型不存在」时按请求校验自动清理：只删同步打上
+// Delisted 标记的模型 —— 官方列表下架后仍保留的残留，实测大概率还能用，但
+// 上游真删了就该清掉。仍在官方列表里的模型报错可能是瞬时路由问题，不凭单次
+// 请求误删；自定义模型（Custom）永远留给用户手动处理。
+func markModelGone(model string) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return
+	}
+	p := loadPool()
+	poolMu.Lock()
+	found := false
+	for i, m := range p.Models {
+		if m.ID == model && m.Delisted && !m.Custom {
+			p.Models = append(p.Models[:i], p.Models[i+1:]...)
+			found = true
+			break
+		}
+	}
+	if found && p.DefaultModel == model {
+		p.DefaultModel = ""
+	}
+	poolMu.Unlock()
+	if found {
+		savePool()
+		log.Printf("model %q removed: upstream reports it no longer exists (was delisted)", model)
+	}
 }
 
 // getModelSyncResult 返回最近一次同步结果（供管理后台展示）。

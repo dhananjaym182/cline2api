@@ -109,13 +109,15 @@ th{color:var(--text2);font-weight:600;font-size:11px;text-transform:uppercase;le
 tbody tr:last-child td{border-bottom:none}
 tbody tr{transition:background 0.15s var(--ease)}
 tbody tr:hover{background:var(--surface2)}
-.account-table th:first-child,.account-table td:first-child{width:17%}
-.account-table td:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.account-table th:nth-child(2),.account-table td:nth-child(2){width:9%}
-.account-table th:nth-child(3),.account-table td:nth-child(3){width:6%;text-align:right;font-variant-numeric:tabular-nums}
-.account-table th:nth-child(4),.account-table td:nth-child(4),.account-table th:nth-child(5),.account-table td:nth-child(5),.account-table th:nth-child(6),.account-table td:nth-child(6),.account-table th:nth-child(7),.account-table td:nth-child(7){width:7%;text-align:right;font-variant-numeric:tabular-nums}
-.account-table th:nth-child(8),.account-table td:nth-child(8),.account-table th:nth-child(9),.account-table td:nth-child(9){width:11%;white-space:nowrap;color:var(--text2);overflow:hidden;text-overflow:ellipsis}
+/* 账号表格列宽：1 勾选 / 2 序号 / 3 邮箱(自适应省略) / 4 状态 / 5-9 数字右对齐 / 10-11 时间不折行 / 12 操作 */
+.account-table th:nth-child(1),.account-table td:nth-child(1){width:36px;min-width:36px;text-align:center}
+.account-table th:nth-child(2),.account-table td:nth-child(2){width:44px;min-width:44px;color:var(--text3)}
+.account-table td:nth-child(3){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-table th:nth-child(4),.account-table td:nth-child(4){width:9%}
+.account-table th:nth-child(5),.account-table td:nth-child(5),.account-table th:nth-child(6),.account-table td:nth-child(6),.account-table th:nth-child(7),.account-table td:nth-child(7),.account-table th:nth-child(8),.account-table td:nth-child(8),.account-table th:nth-child(9),.account-table td:nth-child(9){width:7%;text-align:right;font-variant-numeric:tabular-nums}
+.account-table th:nth-child(10),.account-table td:nth-child(10),.account-table th:nth-child(11),.account-table td:nth-child(11){width:10%;color:var(--text2)}
 .account-table th:last-child,.account-table td:last-child{width:172px;min-width:172px;text-align:right;white-space:nowrap}
+.account-table input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;vertical-align:middle}
 .account-table td:last-child .btn{width:32px;padding-left:0;padding-right:0;justify-content:center}
 .account-email{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:500}
 .account-cards{display:none}
@@ -203,6 +205,7 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .empty-state .icon svg{width:24px;height:24px}
 
 .model-tag{display:inline-block;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:500;background:var(--surface2);color:var(--text2);margin:3px;border:1px solid var(--border2)}
+.delisted-badge{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;font-size:10px;color:var(--red);border:1px solid var(--red);font-weight:500}
 .model-tag.free{border-color:var(--green);color:var(--green);background:var(--green-soft)}
 .model-tag.pass{border-color:var(--yellow);color:var(--yellow);background:var(--yellow-soft)}
 .model-item{display:inline-flex;align-items:center;gap:2px;margin:3px}
@@ -451,7 +454,9 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-sm" onclick="testAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>测试全部</button>
-      <button class="btn btn-sm" onclick="exportAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出</button>
+      <button class="btn btn-sm" onclick="exportSelectedAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出选中<span id="selCount"></span></button>
+      <button class="btn btn-sm btn-danger" onclick="deleteSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除选中<span id="delCount"></span></button>
+      <button class="btn btn-sm" onclick="exportAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出全部</button>
       <button class="btn btn-primary btn-sm" onclick="switchTab('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
       <button class="btn btn-sm" onclick="loadAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
     </div>
@@ -460,12 +465,13 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
     <div class="section-body flush">
       <table class="account-table">
         <thead>
-          <tr><th>邮箱</th><th>状态</th><th>请求</th><th>输入</th><th>输出</th><th>总 Token</th><th>缓存</th><th>最后使用</th><th>创建时间</th><th>操作</th></tr>
+          <tr><th style="width:30px;text-align:center"><input type="checkbox" id="accSelAll" onchange="toggleAllAccountSel(this)" title="全选本页"></th><th style="width:40px">#</th><th>邮箱</th><th>状态</th><th>请求</th><th>输入</th><th>输出</th><th>总 Token</th><th>缓存</th><th>最后使用</th><th>创建时间</th><th>操作</th></tr>
         </thead>
         <tbody id="accountTableBody">
-          <tr><td colspan="10" class="empty">加载中...</td></tr>
+          <tr><td colspan="12" class="empty">加载中...</td></tr>
         </tbody>
       </table>
+      <div id="accountPager" style="display:none;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;border-top:1px solid var(--border2)"></div>
       <div id="accountCards" class="account-cards"></div>
     </div>
   </div>
@@ -1202,6 +1208,30 @@ const I18N = {
   '添加失败: ': 'Add failed: ',
   '账号已导出': 'Accounts exported',
   '导出失败: ': 'Export failed: ',
+  '已导出 ': 'Exported ',
+  '导出选中': 'Export selected',
+  '删除选中': 'Delete selected',
+  '导出全部': 'Export all',
+  '请先勾选要导出的账号': 'Select accounts to export first',
+  '请先勾选要删除的账号': 'Select accounts to delete first',
+  '确认删除选中的 ': 'Confirm deleting ',
+  ' 个账号？此操作不可恢复': ' selected accounts? This cannot be undone',
+  '删除中...': 'Deleting...',
+  '已删除 ': 'Deleted ',
+  ' 个，失败 ': ' accounts, ',
+  ' 个失败': ' failed',
+  '共': 'Total ',
+  '个账号 · 每页': ' accounts · per page ',
+  '全选本页': 'Select all on this page',
+  '已下架': 'Delisted',
+  '免费模型': 'Free models',
+  '付费模型': 'Paid models',
+  '（免费）': ' (free)',
+  '（付费）': ' (paid)',
+  '（当前）': ' (current)',
+  '移除（已下架模型支持手动移除）': 'Remove (delisted models can be removed manually)',
+  '已下架（保留在列表，标记显示）': 'Delisted (kept in list, marked)',
+  '已从上游官方列表移除，实测可能仍可用；同步只标记不删除，上游报模型不存在时自动清理': 'Removed from the upstream official list but may still work; sync only marks it, and it is auto-cleaned when the upstream reports the model no longer exists',
   '请输入账号数据': 'Enter account data',
   '导入完成': 'Import done',
   '导入失败: ': 'Import failed: ',
@@ -1639,17 +1669,40 @@ async function loadStats() {
 }
 
 // ========== 账号管理 ==========
+// ========== 账号管理：分页 + 勾选 ==========
+let _accPage = 1;
+const _accPageSize = 20;
+const _checkedAccounts = new Set();
+let _lastAccountList = []; // loadAccounts 缓存：全选本页/分页器复用，避免重复请求
+
 async function loadAccounts() {
   try {
     const d = await api('GET', '/accounts');
     const list = d.data.accounts;
+    _lastAccountList = list || [];
     const tbody = _('accountTableBody');
     const cards = _('accountCards');
+    // 勾选状态跟随列表清理（已删除的账号从勾选中移除）
+    if (list) {
+      const ids = new Set(list.map(a => a.accountId));
+      [..._checkedAccounts].forEach(id => { if (!ids.has(id)) _checkedAccounts.delete(id); });
+    }
     if (!list || list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty">👋 还没有账号 — 前往 <a href="#" onclick="switchTab(\'import\')" style="color:var(--accent);cursor:pointer">' + t('导入账号') + '</a> ' + t('添加你的第一个 Cline 账号') + '</td></tr>';
+      _accPage = 1;
+      _('accountPager').style.display = 'none';
+      updateSelCount();
+      tbody.innerHTML = '<tr><td colspan="12" class="empty">👋 还没有账号 — 前往 <a href="#" onclick="switchTab(\'import\')" style="color:var(--accent);cursor:pointer">' + t('导入账号') + '</a> ' + t('添加你的第一个 Cline 账号') + '</td></tr>';
       cards.innerHTML = '<div class="empty">👋 还没有账号 — 前往 <a href="#" onclick="switchTab(\'import\')" style="color:var(--accent)">' + t('导入账号') + '</a> ' + t('添加你的第一个 Cline 账号') + '</div>';
       return;
     }
+    // 分页：前端切片，页码越界时收敛
+    const totalPages = Math.max(1, Math.ceil(list.length / _accPageSize));
+    if (_accPage > totalPages) _accPage = totalPages;
+    if (_accPage < 1) _accPage = 1;
+    const start = (_accPage - 1) * _accPageSize;
+    const pageList = list.slice(start, start + _accPageSize);
+    updateSelCount();
+    renderAccountPager(list.length);
     const sn = { active: t('活跃'), cooldown: t('冷却'), expired: t('已过期') };
     // 模型统计子行（仅 free 模型 + 模型级冷却状态）
     const modelStatsRow = a => {
@@ -1688,15 +1741,17 @@ async function loadAccounts() {
       }
       return title + rows + extraCools;
     };
-    tbody.innerHTML = list.map(a => {
-      const lu = a.lastUsed ? new Date(a.lastUsed).toLocaleString(LC()) : '-';
-      const cr = a.createdAt ? new Date(a.createdAt).toLocaleString(LC()) : '-';
+    tbody.innerHTML = pageList.map((a, i) => {
+      const seq = start + i + 1;
       const statusBadge = a.status === 'cooldown' && a.cooldownUntil
         ? '<span class="status cooldown status-cooldown" title="' + t('冷却 · 剩余 ') + formatCooldown(a.cooldownUntil) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(a.cooldownUntil) + '</span></span>'
         : '<span class="status ' + a.status + '"><span class="status-dot ' + a.status + '"></span>' + (sn[a.status] || a.status) + '</span>';
       // 始终显示模型统计展开按钮（无数据时子行提示暂无）
       const expander = '<button class="btn btn-sm btn-icon" onclick="toggleModelRow(\'' + a.accountId + '\', this)" title="' + t('展开') + '">▸</button>';
+      const selBox = '<input type="checkbox" ' + (_checkedAccounts.has(a.accountId) ? 'checked' : '') + ' onchange="onSelAccount(\'' + a.accountId + '\', this.checked)">';
       return '<tr>' +
+        '<td style="text-align:center">' + selBox + '</td>' +
+        '<td class="mono" style="font-size:12px;color:var(--text3)">' + seq + '</td>' +
         '<td class="mono" style="font-size:12px" title="' + esc(a.email) + '">' + esc(a.email) + '</td>' +
         '<td>' + statusBadge + '</td>' +
         '<td>' + formatNumber(a.usageCount) + '</td>' +
@@ -1704,17 +1759,17 @@ async function loadAccounts() {
         '<td>' + formatTokenCount(a.completionTokens) + '</td>' +
         '<td>' + formatTokenCount(a.totalTokens) + '</td>' +
         '<td>' + formatTokenCount(a.cachedTokens) + '</td>' +
-        '<td class="mono" style="font-size:11px">' + lu + '</td>' +
-        '<td class="mono" style="font-size:11px">' + cr + '</td>' +
+        '<td>' + fmtDateTime2(a.lastUsed) + '</td>' +
+        '<td>' + fmtDateTime2(a.createdAt) + '</td>' +
         '<td style="white-space:nowrap">' + expander +
           '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="测试">⚡</button> ' +
           '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="重置">↻</button> ' +
           '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\')" title="删除">✕</button>' +
         '</td></tr>' +
-        '<tr id="modelRow-' + a.accountId + '" style="display:none"><td colspan="10" style="padding:0">' +
+        '<tr id="modelRow-' + a.accountId + '" style="display:none"><td colspan="12" style="padding:0">' +
           '<table class="model-subtable" style="width:100%">' + modelStatsRow(a) + '</table></td></tr>';
     }).join('');
-    cards.innerHTML = list.map(a => {
+    cards.innerHTML = pageList.map(a => {
       const lu = a.lastUsed ? new Date(a.lastUsed).toLocaleString(LC()) : t('从未使用');
       const cardStatus = a.status === 'cooldown' && a.cooldownUntil
         ? '<span class="status cooldown status-cooldown" title="' + t('冷却 · 剩余 ') + formatCooldown(a.cooldownUntil) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(a.cooldownUntil) + '</span></span>'
@@ -1757,6 +1812,107 @@ async function loadAccounts() {
         '</span></div></article>';
     }).join('');
   } catch (e) { toast(t('加载账号失败: ') + e.message, 'error'); }
+}
+
+// 分页器：页码按钮 + 总数（total 为缓存列表长度）
+function renderAccountPager(total) {
+  const pager = _('accountPager');
+  if (!pager) return;
+  const totalPages = Math.max(1, Math.ceil(total / _accPageSize));
+  if (totalPages <= 1 && total <= _accPageSize) { pager.style.display = 'none'; return; }
+  pager.style.display = 'flex';
+  pager.innerHTML =
+    '<span style="font-size:12px;color:var(--text2)">' + t('共') + ' ' + total + ' ' + t('个账号 · 每页') + ' ' + _accPageSize + '</span>' +
+    '<div style="display:flex;gap:6px;align-items:center">' +
+      '<button class="btn btn-sm" ' + (_accPage <= 1 ? 'disabled' : '') + ' onclick="accGotoPage(' + (_accPage - 1) + ')">‹</button>' +
+      '<span style="font-size:12px" class="mono">' + _accPage + ' / ' + totalPages + '</span>' +
+      '<button class="btn btn-sm" ' + (_accPage >= totalPages ? 'disabled' : '') + ' onclick="accGotoPage(' + (_accPage + 1) + ')">›</button>' +
+    '</div>';
+}
+
+function accGotoPage(p) {
+  _accPage = p;
+  loadAccounts();
+}
+
+// 勾选单个账号（跨页保持）
+function onSelAccount(id, checked) {
+  if (checked) _checkedAccounts.add(id);
+  else _checkedAccounts.delete(id);
+  updateSelCount();
+}
+
+// 全选/全不选当前页
+function toggleAllAccountSel(box) {
+  const list = _lastAccountList || [];
+  const totalPages = Math.max(1, Math.ceil(list.length / _accPageSize));
+  const p = Math.min(_accPage, totalPages);
+  list.slice((p - 1) * _accPageSize, p * _accPageSize).forEach(a => {
+    if (box.checked) _checkedAccounts.add(a.accountId);
+    else _checkedAccounts.delete(a.accountId);
+  });
+  loadAccounts();
+}
+
+// 勾选计数徽标
+function updateSelCount() {
+  const n = _checkedAccounts.size;
+  const sel = _('selCount'), del = _('delCount'), all = _('accSelAll');
+  if (sel) sel.textContent = n ? ' (' + n + ')' : '';
+  if (del) del.textContent = n ? ' (' + n + ')' : '';
+  if (all) all.checked = false;
+}
+
+// 导出勾选的账号（POST /accounts/export {ids}，未勾选时提示）
+async function exportSelectedAccounts() {
+  const ids = [..._checkedAccounts];
+  if (!ids.length) { toast(t('请先勾选要导出的账号'), 'info'); return; }
+  try {
+    const res = await fetch(API + '/accounts/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cline-accounts-export.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast(t('已导出 ') + ids.length + t(' 个账号'), 'success');
+  } catch (e) { toast(t('导出失败: ') + e.message, 'error'); }
+}
+
+// 删除勾选的账号（逐个调用现有删除接口，带确认）
+async function deleteSelectedAccounts(btn) {
+  const ids = [..._checkedAccounts];
+  if (!ids.length) { toast(t('请先勾选要删除的账号'), 'info'); return; }
+  if (!confirm(t('确认删除选中的 ') + ids.length + t(' 个账号？此操作不可恢复'))) return;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try { await api('POST', '/accounts/delete', { accountId: id }); ok++; }
+    catch (e) { fail++; }
+  }
+  _checkedAccounts.clear();
+  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  if (fail) toast(t('已删除 ') + ok + t(' 个，失败 ') + fail + t(' 个失败'), 'error');
+  else toast(t('已删除 ') + ok + t(' 个账号'), 'success');
+  await loadAccounts();
+  await loadStats();
+}
+
+// 表格时间列：日期一行、时间灰色小字一行，固定不折行
+function fmtDateTime2(v) {
+  if (!v) return '<span style="color:var(--text3)">-</span>';
+  const d = new Date(v);
+  return '<div style="white-space:nowrap">' + d.toLocaleDateString(LC()) + '</div>' +
+    '<div style="white-space:nowrap;font-size:10px;color:var(--text3)">' + d.toLocaleTimeString(LC()) + '</div>';
 }
 
 // 展开/收起账号的模型统计子行（表格视图）
@@ -2323,15 +2479,16 @@ let _modelGroupOpen = {}; // 模型分组展开状态（跨刷新保持，付费
 function isOcModel(m) { return m.source === 'zen' || m.provider === 'opencode'; }
 
 function renderModelChip(m) {
-  let item = '<span class="model-tag ' + (m.cost || 'free') + '">' + esc(m.id) + '</span>';
+  let item = '<span class="model-tag ' + (m.cost || 'free') + '">' + esc(m.id) +
+    (m.delisted ? '<span class="delisted-badge" title="' + t('已从上游官方列表移除，实测可能仍可用；同步只标记不删除，上游报模型不存在时自动清理') + '">' + t('已下架') + '</span>' : '') + '</span>';
   if (m.context) {
     item += '<span style="font-size:11px;color:var(--text3);margin-left:4px" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">ctx ' + fmtTokens(m.context) + '</span>';
   }
-  if (isOcModel(m) || m.custom) {
-    item += '<button class="btn btn-sm" style="padding:2px 6px" onclick="editModelMeta(\'' + esc(m.id) + '\',' + (m.context || 0) + ',' + (m.output || 0) + ')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
-  }
-  if (m.custom) {
-    item += '<button class="btn btn-sm btn-danger" style="padding:2px 6px" onclick="deleteModel(\'' + esc(m.id) + '\')" title="' + t('删除') + '">✕</button>';
+  // 所有模型都开放上下文/最大输出编辑：Cline 模型不在已知硬限制表时，
+  // 手动设置的 Output 会作为 modelMaxOutputLimit 的封顶值生效
+  item += '<button class="btn btn-sm" style="padding:2px 6px" onclick="editModelMeta(\'' + esc(m.id) + '\',' + (m.context || 0) + ',' + (m.output || 0) + ')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
+  if (m.custom || m.delisted) {
+    item += '<button class="btn btn-sm btn-danger" style="padding:2px 6px" onclick="deleteModel(\'' + esc(m.id) + '\')" title="' + (m.delisted ? t('移除（已下架模型支持手动移除）') : t('删除')) + '">✕</button>';
   }
   return '<span class="model-item">' + item + '</span>';
 }
@@ -2344,7 +2501,7 @@ function fmtTokens(n) {
 
 // 修改模型上下文/最大输出：压缩阈值按此计算，设置后 zen 同步保留该值
 async function editModelMeta(id, ctx, out) {
-  const c = prompt(t('上下文窗口 (token)') + ' - ' + id, ctx || 200000);
+  const c = prompt(t('上下文窗口 (token)') + ' - ' + id, ctx || 1048576);
   if (c === null) return;
   const o = prompt(t('最大输出 (token)'), out || 32768);
   if (o === null) return;
@@ -2551,7 +2708,7 @@ function showModelSyncModal(res) {
   const rem = (res.removed || []).map(m => '<div style="padding:3px 0;color:var(--text3)">- <span class="mono">' + esc(m) + '</span></div>').join('');
   let body = '';
   if (add) body += '<div style="color:var(--green);font-weight:600;margin-bottom:6px">' + t('新增模型') + '</div>' + add;
-  if (rem) body += '<div style="color:var(--text2);font-weight:600;margin:10px 0 6px">' + t('移除模型') + '</div>' + rem;
+  if (rem) body += '<div style="color:var(--text2);font-weight:600;margin:10px 0 6px">' + t('已下架（保留在列表，标记显示）') + '</div>' + rem;
   if (!body) body = '<div style="color:var(--text2)">' + t('模型无变化') + '</div>';
   box.innerHTML =
     '<h2 style="margin:0 0 10px;font-size:18px">' + t('模型同步') + '</h2>' +
@@ -2605,10 +2762,21 @@ async function loadConfig() {
     if (c.poolPath) _('settingPoolPath').value = c.poolPath;
     if (c.defaultModel !== undefined) {
       const sel = _('settingDefModel');
-      // 先用缓存模型填充下拉，再选中当前默认值
-      const opts = (_cachedModels || []).map(m =>
-        '<option value="' + esc(m.id) + '"' + (m.id === c.defaultModel ? ' selected' : '') + '>' + esc(m.id) + '</option>'
-      ).join('');
+      // 免费一组、付费一组（optgroup 分类 + 选项标注计费）；
+      // 当前默认值不在可用列表时补在开头，避免选中值丢失
+      const has = id => (_cachedModels || []).some(m => m.id === id);
+      let opts = '';
+      if (c.defaultModel && !has(c.defaultModel)) {
+        opts += '<option value="' + esc(c.defaultModel) + '" selected>' + esc(c.defaultModel) + esc(t('（当前）')) + '</option>';
+      }
+      [{ key: 'free', label: t('免费模型'), tag: t('（免费）') },
+       { key: 'pass', label: t('付费模型'), tag: t('（付费）') }].forEach(g => {
+        const items = (_cachedModels || []).filter(m => (m.cost === 'free') === (g.key === 'free'));
+        if (!items.length) return;
+        opts += '<optgroup label="' + esc(g.label) + ' (' + items.length + ')">' +
+          items.map(m => '<option value="' + esc(m.id) + '"' + (m.id === c.defaultModel ? ' selected' : '') + '>' + esc(m.id) + esc(g.tag) + '</option>').join('') +
+          '</optgroup>';
+      });
       sel.innerHTML = opts || '<option value="">' + t('（无可用模型）') + '</option>';
     }
     // 本机 IP 展示（监听 0.0.0.0 时局域网访问地址）

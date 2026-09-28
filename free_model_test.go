@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -15,6 +17,24 @@ type freeModelRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f freeModelRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+type flushSignalRecorder struct {
+	*httptest.ResponseRecorder
+	flushed chan struct{}
+	once    sync.Once
+}
+
+func newFlushSignalRecorder() *flushSignalRecorder {
+	return &flushSignalRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		flushed:          make(chan struct{}),
+	}
+}
+
+func (r *flushSignalRecorder) Flush() {
+	r.ResponseRecorder.Flush()
+	r.once.Do(func() { close(r.flushed) })
 }
 
 func TestCallClineAPIRefreshRetryReplaysRequestBody(t *testing.T) {
@@ -187,8 +207,8 @@ func TestCallClineAPIFreeRetriesNextGLMAccountAfterTokenRefreshFailure(t *testin
 	if got, want := strings.Join(models, ","), freeModelPrimary; got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
-	if first.Status != "expired" {
-		t.Fatalf("first account status = %q, want expired", first.Status)
+	if first.Status != "cooldown" {
+		t.Fatalf("first account status = %q, want cooldown (a 500 from /auth/refresh is transient)", first.Status)
 	}
 }
 
@@ -1076,6 +1096,121 @@ func TestSortModelsByAvailabilityPrefersAvailableThenLeastUsed(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Fatalf("chain length = %d, want 2", len(got))
+	}
+}
+
+// 信封提前发送架构下 message_start.model 取 reqLog.Model（fetch 成功时已从别名
+// 更新为实际请求上游的模型），不再发空串 —— 客户端不丢失流式消息的模型身份。
+// Anthropic 协议 message_start 每条消息只发一次，上游 payload 的 model 不会回写。
+func TestHandleAnthropicStreamPreservesUpstreamModel(t *testing.T) {
+	requestLogsMu.Lock()
+	oldLogs := requestLogs
+	requestLogs = nil
+	requestLogsMu.Unlock()
+	t.Cleanup(func() {
+		requestLogsMu.Lock()
+		requestLogs = oldLogs
+		requestLogsMu.Unlock()
+	})
+
+	recorder := httptest.NewRecorder()
+	upstream := &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(
+			"data: {\"model\":\"google/gemini-3.8-flash\",\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n" +
+				"data: [DONE]\n\n",
+		)),
+	}
+	// 模拟别名 cline-free/gemini-3.8-flash 在 fetch 时解析为实际上游模型后的 reqLog
+	reqLog := RequestLog{ID: "anthropic-stream-model", Model: "google/gemini-3.8-flash", StartedAt: time.Now()}
+
+	sw := newSSEWriter(recorder)
+	handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second)
+
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"model":"google/gemini-3.8-flash"`) {
+		t.Fatalf("response body missing upstream model: %s", body)
+	}
+}
+
+// message_start 只发一次、先于内容块，且携带请求的服务模型（reqLog.Model），
+// 后续上游 payload 的 model 元数据不回写已发出的信封。
+func TestHandleAnthropicStreamFallsBackOnFirstPayloadWithoutModel(t *testing.T) {
+	requestLogsMu.Lock()
+	oldLogs := requestLogs
+	requestLogs = nil
+	requestLogsMu.Unlock()
+	t.Cleanup(func() {
+		requestLogsMu.Lock()
+		requestLogs = oldLogs
+		requestLogsMu.Unlock()
+	})
+
+	recorder := httptest.NewRecorder()
+	upstream := &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(
+			"data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" +
+				"data: {\"model\":\"actual-model\",\"choices\":[{\"delta\":{\"content\":\"more\"},\"finish_reason\":\"stop\"}]}\n\n" +
+				"data: [DONE]\n\n",
+		)),
+	}
+	reqLog := RequestLog{ID: "anthropic-stream-fallback", Model: "requested-model", StartedAt: time.Now()}
+
+	sw := newSSEWriter(recorder)
+	handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second)
+
+	body := recorder.Body.String()
+	if strings.Count(body, "event: message_start") != 1 {
+		t.Fatalf("message_start count = %d, want 1: %s", strings.Count(body, "event: message_start"), body)
+	}
+	if !strings.Contains(body, `"model":"requested-model"`) {
+		t.Fatalf("response body missing requested-model fallback: %s", body)
+	}
+	if start, content := strings.Index(body, "event: message_start"), strings.Index(body, "event: content_block_start"); start < 0 || content < 0 || start > content {
+		t.Fatalf("message_start must precede content blocks: %s", body)
+	}
+}
+
+// 上游首条 payload 迟迟不来时，响应头（含信封 + ping）必须先于等待刷出去。
+func TestHandleAnthropicStreamFlushesHeadersBeforeFirstPayload(t *testing.T) {
+	requestLogsMu.Lock()
+	oldLogs := requestLogs
+	requestLogs = nil
+	requestLogsMu.Unlock()
+	t.Cleanup(func() {
+		requestLogsMu.Lock()
+		requestLogs = oldLogs
+		requestLogsMu.Unlock()
+	})
+
+	reader, writer := io.Pipe()
+	recorder := newFlushSignalRecorder()
+	upstream := &http.Response{StatusCode: http.StatusOK, Body: reader}
+	reqLog := RequestLog{ID: "anthropic-slow-first-payload", Model: "requested-model", StartedAt: time.Now()}
+	done := make(chan struct{})
+	go func() {
+		sw := newSSEWriter(recorder)
+		handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second)
+		close(done)
+	}()
+
+	select {
+	case <-recorder.flushed:
+	case <-time.After(250 * time.Millisecond):
+		writer.Close()
+		<-done
+		t.Fatal("response headers were not flushed before the first upstream payload")
+	}
+
+	if _, err := writer.Write([]byte("data: {\"model\":\"actual-model\",\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n")); err != nil {
+		t.Fatalf("write upstream payload: %v", err)
+	}
+	writer.Close()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stream handler did not finish after upstream closed")
 	}
 }
 

@@ -4,6 +4,8 @@
 .cline-request-logs.json
 .cline-zen.json
 .cline-config.json
+.cline-providers.json
+.cline-proxy.json
 cline-proxy
 cline-go-proxy
 cline-proxy.exe

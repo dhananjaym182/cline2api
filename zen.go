@@ -799,6 +799,11 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 		resp.Body.Close()
 		reason := fmt.Sprintf("zen API %d: %s", resp.StatusCode, truncate(string(bodyBytes), 500))
 
+		// 上游明确报「模型不存在」时清理下架残留（同步标记 Delisted 保留的模型）
+		if model := bodyParamsModel(params); model != "" && isModelGoneError(resp.StatusCode, string(bodyBytes)) {
+			markModelGone(model)
+		}
+
 		// 上游 500/502/504 多为瞬时故障，退避重试（503 走限流分支）
 		if resp.StatusCode == 500 || resp.StatusCode == 502 || resp.StatusCode == 504 {
 			if attempt < retries {
@@ -1172,9 +1177,17 @@ func syncZenModels() modelSyncResult {
 			res.Added = append(res.Added, m.ID)
 		}
 	}
-	for id := range oldIDs {
-		if !seen[id] {
-			res.Removed = append(res.Removed, id)
+	// 官方列表里消失的旧模型不删除：实测列表移除后模型往往仍可继续用
+	// （如 z-ai/glm-5.3-flash），只打上 Delisted 标记（管理页显示「已下架」，
+	// 支持手动移除）；重新出现时新条目天然无标记，标记自动清除。
+	// res.Removed 只记录新下架的。
+	for _, m := range p.Models {
+		if m.Source == "zen" && !seen[m.ID] {
+			if !m.Delisted {
+				res.Removed = append(res.Removed, m.ID)
+			}
+			m.Delisted = true
+			kept = append(kept, m)
 		}
 	}
 	kept = append(kept, remote...)

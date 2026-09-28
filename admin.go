@@ -699,20 +699,43 @@ func handleBatchImport(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /admin/api/accounts/export — 导出账号为批量导入兼容格式
+// POST body: { ids: [accountId...] } — 仅导出勾选的账号（管理页勾选导出）
 func handleExportAccounts(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
+	if r.Method != "GET" && r.Method != "POST" {
 		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
 		return
 	}
 
 	p := loadPool()
+	want := map[string]bool{}
+	if r.Method == "POST" {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
+			return
+		}
+		defer r.Body.Close()
+		var req struct {
+			IDs []string `json:"ids"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
+			return
+		}
+		for _, id := range req.IDs {
+			if id != "" {
+				want[id] = true
+			}
+		}
+	}
+
 	type exportToken struct {
 		RefreshToken string `json:"refreshToken"`
 		Email        string `json:"email"`
 	}
 	tokens := make([]exportToken, 0, len(p.Accounts))
 	for _, acc := range p.Accounts {
-		if acc.RefreshToken != "" {
+		if acc.RefreshToken != "" && (len(want) == 0 || want[acc.AccountID]) {
 			tokens = append(tokens, exportToken{
 				RefreshToken: acc.RefreshToken,
 				Email:        acc.Email,
@@ -1263,8 +1286,8 @@ func handleAdminModelDelete(w http.ResponseWriter, r *http.Request) {
 		found := false
 		for i, m := range p.Models {
 			if m.ID == req.ID {
-				// 仅允许删除自定义模型
-				if !m.Custom {
+				// 自定义模型可删；同步打上 Delisted 标记的下架模型支持手动移除
+				if !m.Custom && !m.Delisted {
 					poolMu.Unlock()
 					writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "cannot_delete_builtin")})
 					return
