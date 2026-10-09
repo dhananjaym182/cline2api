@@ -669,7 +669,8 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
           </select>
           <div style="font-size:12px;color:var(--text3);margin-top:4px">影响 /models、/v1/models 对客户端返回的模型列表，不影响管理页模型管理</div>
         </div>
-        <div class="field"><label>回退模型链</label><input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0" oninput="this.dataset.dirty='1'" onchange="updateConfig()"></div>
+        <div class="field"><label>回退模型链</label><input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()"></div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">逗号分隔模型 ID，可用 <code>free</code> 表示内置免费回退链；留空则自动回退到内置免费链。</div>
       </div>
       <div class="form-row">
         <div class="field"><label>账号文件</label><input type="text" id="settingPoolPath" disabled></div>
@@ -731,41 +732,42 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
       <div class="form-row">
         <div class="field" style="max-width:220px">
           <label>启用 opencode</label>
-          <select id="ocEnabled">
+          <select id="ocEnabled" onchange="saveOcConfig()">
             <option value="true">启用</option>
             <option value="false">停用</option>
           </select>
         </div>
-        <div class="field" style="flex:1"><label>API Key</label><input type="text" id="ocKey" placeholder="public"></div>
-        <div class="field" style="flex:1.4"><label>Base URL</label><input type="text" id="ocBaseURL" placeholder="https://opencode.ai/zen/v1" style="font-family:ui-monospace,monospace"></div>
+        <div class="field" style="flex:1"><label>API Key</label><input type="text" id="ocKey" placeholder="public" onchange="saveOcConfig()"></div>
+        <div class="field" style="flex:1.4"><label>Base URL</label><input type="text" id="ocBaseURL" placeholder="https://opencode.ai/zen/v1" style="font-family:ui-monospace,monospace" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-row" style="margin-top:12px">
-        <div class="field"><label>最大并发</label><input type="number" id="ocMaxConcurrency" min="1" max="64"></div>
-        <div class="field"><label>重试次数</label><input type="number" id="ocRetries" min="0" max="10"></div>
+        <div class="field"><label>最大并发</label><input type="number" id="ocMaxConcurrency" min="1" max="64" onchange="saveOcConfig()"></div>
+        <div class="field"><label>重试次数</label><input type="number" id="ocRetries" min="0" max="10" onchange="saveOcConfig()"></div>
         <div class="field"><label>故障转移</label>
-          <select id="ocFailover">
+          <select id="ocFailover" onchange="saveOcConfig()">
             <option value="true">开启（连续失败后暂走 Cline 池）</option>
             <option value="false">关闭</option>
           </select>
         </div>
-        <div class="field"><label>失败阈值（次）</label><input type="number" id="ocFailoverCount" min="1" max="20"></div>
-        <div class="field"><label>转移窗口（分钟）</label><input type="number" id="ocFailoverMinutes" min="1" max="120"></div>
+        <div class="field"><label>失败阈值（次）</label><input type="number" id="ocFailoverCount" min="1" max="20" onchange="saveOcConfig()"></div>
+        <div class="field"><label>转移窗口（分钟）</label><input type="number" id="ocFailoverMinutes" min="1" max="120" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-row" style="margin-top:12px">
         <div class="field"><label>自动上下文压缩</label>
-          <select id="ocCompactAuto">
+          <select id="ocCompactAuto" onchange="saveOcConfig()">
             <option value="true">开启（超限自动摘要）</option>
             <option value="false">关闭</option>
           </select>
         </div>
-        <div class="field"><label>压缩缓冲 Token</label><input type="number" id="ocCompactBuffer" min="0"></div>
-        <div class="field"><label>尾部保留 Token</label><input type="number" id="ocCompactKeepTokens" min="0"></div>
-        <div class="field"><label>摘要最大 Token</label><input type="number" id="ocCompactMaxSummary" min="0"></div>
+        <div class="field"><label>压缩缓冲 Token</label><input type="number" id="ocCompactBuffer" min="0" onchange="saveOcConfig()"></div>
+        <div class="field"><label>尾部保留 Token</label><input type="number" id="ocCompactKeepTokens" min="0" onchange="saveOcConfig()"></div>
+        <div class="field"><label>摘要最大 Token</label><input type="number" id="ocCompactMaxSummary" min="0" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-actions" style="margin-top:14px">
-        <button class="btn btn-primary" onclick="saveOcConfig()">保存 opencode 配置</button>
+        <button class="btn btn-primary" onclick="saveOcConfig()">手动保存 opencode 配置</button>
       </div>
       <div id="ocSaveResult" style="margin-top:8px"></div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px">上述字段改动后会自动保存，也可点按钮手动触发。</div>
     </div>
   </div>
 
@@ -776,7 +778,7 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
       <div class="form-row">
         <div class="field" style="max-width:260px">
           <label>代理策略</label>
-          <select id="ocProxyStrategy">
+          <select id="ocProxyStrategy" onchange="saveOcConfig()">
             <option value="round_robin">轮询 (round_robin)</option>
             <option value="random">随机 (random)</option>
             <option value="fill">填满 (fill)</option>
@@ -786,7 +788,7 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
       </div>
       <div class="field" style="margin-top:10px">
         <label>代理列表</label>
-        <textarea id="ocProxies" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080"></textarea>
+        <textarea id="ocProxies" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080" onchange="saveOcConfig()"></textarea>
       </div>
     </div>
   </div>
@@ -1112,6 +1114,8 @@ const I18N = {
   '默认模型': 'Default Model',
   '轮询策略': 'Rotation Strategy',
   '回退模型链': 'Fallback Model Chain',
+  '逗号分隔模型 ID，可用': 'Comma-separated model IDs; you can use ',
+  '表示内置免费回退链；留空则自动回退到内置免费链。': ' for the built-in free fallback chain. Leave blank to use it automatically.',
   '轮询 (round_robin)': 'Round robin',
   '填满 (fill)': 'Fill',
   '随机 (random)': 'Random',
@@ -1320,6 +1324,8 @@ const I18N = {
   '尾部保留 Token': 'Tail keep tokens',
   '摘要最大 Token': 'Max summary tokens',
   '保存 opencode 配置': 'Save opencode Config',
+  '手动保存 opencode 配置': 'Manually save opencode Config',
+  '上述字段改动后会自动保存，也可点按钮手动触发。': 'Fields above are auto-saved on change; you can also trigger a save manually with the button.',
   'opencode 配置已保存': 'OpenCode config saved',
   'opencode 出口代理': 'OpenCode Egress Proxies',
   '发往 opencode 的请求可经代理池轮询出口；命中限流时冷却当前出口并自动跳过。支持 http / https / socks5 / socks5h，每行一个，如 ': 'Requests to opencode can egress through a rotating proxy pool; the current proxy is cooled down and skipped on rate limits. Supports http / https / socks5 / socks5h, one per line, e.g. ',
@@ -1462,6 +1468,17 @@ const API = '/admin/api';
 
 const _ = id => document.getElementById(id);
 const esc = s => { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; };
+
+const ACTIVE_TAB_KEY = 'cline_admin_tab';
+
+function getActiveTab(){
+  try { const h = location.hash.replace(/^#/,''); if (h) return h; } catch(e){}
+  try { const v = sessionStorage.getItem(ACTIVE_TAB_KEY); if (v) return v; } catch(e){}
+  return 'dashboard';
+}
+function setActiveTab(name){
+  try { sessionStorage.setItem(ACTIVE_TAB_KEY, name); } catch(e){}
+}
 const formatNumber = n => new Intl.NumberFormat(LC()).format(n || 0);
 const formatTokenCount = n => {
   const value = Number(n) || 0;
@@ -1491,36 +1508,33 @@ function formatCooldown(isoTime) {
 }
 
 // ========== 导航 ==========
+function applyTab(name){
+  // 非法/未知标签页（如手改 URL）回退到 dashboard，避免空白页
+  if (!name || !_('tab-' + name)) name = 'dashboard';
+  document.querySelectorAll('.nav-item').forEach(e => e.classList.toggle('active', e.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(e => e.style.display = 'none');
+  const panel = _('tab-' + name);
+  if (panel) panel.style.display = 'block';
+  try { history.replaceState(null, '', '#' + name); } catch(e){}
+  setActiveTab(name);
+  if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); }
+  else if (name === 'accounts') loadAccounts();
+  else if (name === 'logs') loadRequestLogs(true);
+  else if (name === 'routing') { loadModels().then(() => loadConfig()); }
+  else if (name === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); loadProviders(); }
+  else if (name === 'security') { loadKeys(); loadConfig(); }
+}
+
+function switchTab(name) { applyTab(name); }
+
 document.querySelectorAll('.nav-item').forEach(el => {
   el.addEventListener('click', () => {
     if (el.classList.contains('active')) return;
-    document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
-    el.classList.add('active');
-    document.querySelectorAll('.tab-panel').forEach(e => e.style.display = 'none');
-    _('tab-' + el.dataset.tab).style.display = 'block';
-    if (el.dataset.tab === 'dashboard') { applyLang();
-loadStats(); loadAccounts(); }
-    if (el.dataset.tab === 'accounts') loadAccounts();
-    if (el.dataset.tab === 'logs') loadRequestLogs(true);
-    if (el.dataset.tab === 'routing') { loadModels().then(() => loadConfig()); }
-    if (el.dataset.tab === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); loadProviders(); }
-    if (el.dataset.tab === 'security') { loadKeys(); loadConfig(); }
+    applyTab(el.dataset.tab);
   });
 });
 
-function switchTab(name) {
-  document.querySelectorAll('.nav-item').forEach(e => {
-    e.classList.toggle('active', e.dataset.tab === name);
-  });
-  document.querySelectorAll('.tab-panel').forEach(e => e.style.display = 'none');
-  _('tab-' + name).style.display = 'block';
-  if (name === 'dashboard') { loadStats(); loadAccounts(); }
-  if (name === 'accounts') loadAccounts();
-  if (name === 'logs') loadRequestLogs(true);
-  if (name === 'routing') { loadModels().then(() => loadConfig()); }
-  if (name === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); loadProviders(); }
-  if (name === 'security') { loadKeys(); loadConfig(); }
-}
+// 从 URL/SessionStorage 恢复上次打开的标签页（统一在底部初始化时执行）
 
 // ========== 侧栏排序（拖拽） ==========
 const NAV_ORDER_KEY = 'cline_admin_nav_order';
@@ -1842,25 +1856,47 @@ function onSelAccount(id, checked) {
   updateSelCount();
 }
 
-// 全选/全不选当前页
+// 全选/全不选当前页：优先用缓存列表；缓存为空（刚删除/导出后尚未刷新）时
+// 退回当前渲染行上的勾选框（从 onchange="onSelAccount('id',...)" 解析账号 ID）。
 function toggleAllAccountSel(box) {
   const list = _lastAccountList || [];
   const totalPages = Math.max(1, Math.ceil(list.length / _accPageSize));
   const p = Math.min(_accPage, totalPages);
-  list.slice((p - 1) * _accPageSize, p * _accPageSize).forEach(a => {
-    if (box.checked) _checkedAccounts.add(a.accountId);
-    else _checkedAccounts.delete(a.accountId);
+  const chunk = list.slice((p - 1) * _accPageSize, p * _accPageSize);
+  if (chunk.length) {
+    chunk.forEach(a => {
+      if (box.checked) _checkedAccounts.add(a.accountId);
+      else _checkedAccounts.delete(a.accountId);
+    });
+    updateSelCount();
+    loadAccounts();
+    return;
+  }
+  const boxes = document.querySelectorAll('#accountTableBody input[type="checkbox"][onchange*="onSelAccount"]');
+  if (!boxes.length) { loadAccounts(); return; }
+  boxes.forEach(cb => {
+    const m = (cb.getAttribute('onchange') || '').match(/onSelAccount\('([^']+)'/);
+    if (!m) return;
+    cb.checked = box.checked;
+    if (box.checked) _checkedAccounts.add(m[1]);
+    else _checkedAccounts.delete(m[1]);
   });
-  loadAccounts();
+  updateSelCount();
 }
 
-// 勾选计数徽标
+// 勾选计数徽标：同时根据当前页是否全部勾选来同步“全选”框，避免勾上后被强制重置
 function updateSelCount() {
   const n = _checkedAccounts.size;
   const sel = _('selCount'), del = _('delCount'), all = _('accSelAll');
   if (sel) sel.textContent = n ? ' (' + n + ')' : '';
   if (del) del.textContent = n ? ' (' + n + ')' : '';
-  if (all) all.checked = false;
+  if (all) {
+    const list = _lastAccountList || [];
+    const totalPages = Math.max(1, Math.ceil(list.length / _accPageSize));
+    const p = Math.min(_accPage, totalPages);
+    const chunk = list.slice((p - 1) * _accPageSize, p * _accPageSize);
+    all.checked = chunk.length > 0 && chunk.every(a => _checkedAccounts.has(a.accountId));
+  }
 }
 
 // 导出勾选的账号（POST /accounts/export {ids}，未勾选时提示）
@@ -2901,11 +2937,15 @@ async function loadRequestLogs(reset) {
 
 // ========== 初始化 ==========
 applyLang();
-loadStats();
-loadAccounts();
+// 恢复上次打开的标签页（URL hash 优先，其次 sessionStorage），并加载该页数据
+const bootTab = getActiveTab();
+applyTab(bootTab);
+// 与标签页无关的全局预热：密钥列表、模型列表 + 配置
 loadKeys();
 loadModels().then(() => loadConfig());
 setInterval(() => { loadStats(); }, 10000);
+// 手动改 hash / 浏览器前进后退时同步切换标签页
+window.addEventListener('hashchange', () => applyTab(getActiveTab()));
 </script>
 </body>
 </html>`

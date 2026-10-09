@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -1890,9 +1891,13 @@ type anthropicReq struct {
 func loadOverrideContent() string {
 	data, err := os.ReadFile("override.md")
 	if err != nil {
-		log.Printf("  override.md not found: %v", err)
+		// 每个请求都会调用本函数；“文件不存在”只在首次打印一次，避免刷屏
+		if overrideMissLogged.CompareAndSwap(false, true) {
+			log.Printf("  override.md not found: %v", err)
+		}
 		return ""
 	}
+	overrideMissLogged.Store(false) // 文件出现了，重新允许日后删除时再提示一次
 	content := strings.TrimSpace(string(data))
 	if content != "" {
 		log.Printf("  using override.md as system prompt (%d bytes)", len(content))
@@ -1901,6 +1906,9 @@ func loadOverrideContent() string {
 	}
 	return content
 }
+
+// overrideMissLogged override.md 缺失日志的去重标记（详见 loadOverrideContent）。
+var overrideMissLogged atomic.Bool
 
 func extractStringContent(raw json.RawMessage) string {
 	if len(raw) == 0 {
@@ -1995,11 +2003,15 @@ func anthropicToOpenAI(req anthropicReq) map[string]any {
 
 	// System prompt: use override.md if it exists, otherwise use Anthropic's system field
 	sysContent := loadOverrideContent()
-	if sysContent == "" && req.System != nil {
-		sysContent = extractStringContent(req.System)
+	sysSource := "override.md"
+	if sysContent == "" {
+		sysSource = "client"
+		if req.System != nil {
+			sysContent = extractStringContent(req.System)
+		}
 	}
 	if sysContent != "" {
-		log.Printf("  system prompt: %d bytes (from override.md)", len(sysContent))
+		log.Printf("  system prompt: %d bytes (from %s)", len(sysContent), sysSource)
 		msgs = append(msgs, map[string]any{"role": "system", "content": sysContent})
 	}
 

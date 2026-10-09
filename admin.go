@@ -1464,6 +1464,7 @@ func handleOpenCodeConfig(w http.ResponseWriter, r *http.Request) {
 		"failover":        cfg.Failover,
 		"failoverCount":   cfg.FailoverCount,
 		"failoverMinutes": cfg.FailoverMinutes,
+		"zenHeaders":      cfg.ZenHeaders,
 		"compaction":      cfg.Compaction,
 		"runtime": map[string]any{
 			"failoverActive": zenFailedNow(),

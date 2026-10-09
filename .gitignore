@@ -13,6 +13,7 @@ cline-proxy.exe
 # local secrets & runtime logs
 credentials.txt
 proxy.log
+cline-proxy.log
 cline-proxy.exe~
 cline-go-proxy.exe
 .zcode/

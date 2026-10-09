@@ -338,6 +338,14 @@ func setZenConfig(c *zenConfigData) {
 	if err := os.WriteFile(resolveDataPath(".cline-zen.json"), data, 0600); err != nil {
 		log.Printf("zen config save failed: %v", err)
 	}
+	// 关闭故障转移时立即解除已武装的窗口：否则 UI 仍显示“故障转移中”，
+	// 反向降级 clineFailoverToZen 也会被旧窗口挡住直到超时。
+	if !c.Failover {
+		zenStateMu.Lock()
+		zenFailCount = 0
+		zenFailUntil = time.Time{}
+		zenStateMu.Unlock()
+	}
 	rebuildZenTransport()
 	rebuildZenSem()
 }
@@ -370,6 +378,16 @@ func markZenSuccess() {
 
 func markZenFail() {
 	cfg := getZenConfig()
+	// 故障转移关闭时不计数也不报警：否则会打出 “routing to cline pool” 的
+	// 误导性日志，而实际路由（routeModel）与降级（zenFailoverToCline）都会跳过。
+	// 同时清掉已武装的窗口，确保 UI 的 “故障转移中” 状态立即消失。
+	if !cfg.Failover {
+		zenStateMu.Lock()
+		zenFailCount = 0
+		zenFailUntil = time.Time{}
+		zenStateMu.Unlock()
+		return
+	}
 	thr := cfg.FailoverCount
 	if thr <= 0 {
 		thr = 3
