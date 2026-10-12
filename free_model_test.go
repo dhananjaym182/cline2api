@@ -905,6 +905,7 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 	oldPool := pool
 	oldConfig := getProxyConfig()
 	oldTransport := httpClient.Transport
+	oldZenCfg := getZenConfig()
 	requestLogsMu.Lock()
 	oldLogs := requestLogs
 	requestLogs = nil
@@ -913,10 +914,21 @@ func TestHandleResponsesFreeReturnsTooManyRequestsWhenBothPoolsUnavailable(t *te
 		pool = oldPool
 		setProxyConfig(oldConfig)
 		httpClient.Transport = oldTransport
+		zenConfigMu.Lock()
+		zenConfig = oldZenCfg
+		zenConfigMu.Unlock()
 		requestLogsMu.Lock()
 		requestLogs = oldLogs
 		requestLogsMu.Unlock()
 	})
+	// zen 池指向死端口：本测试只验证「双池不可用 → 429」，
+	// zen 走独立 uTLS 客户端不受 httpClient.Transport mock 拦截，
+	// 不隔离会真实打到 opencode（免费层补齐核心工具后请求会成功）
+	deadZen := *oldZenCfg
+	deadZen.BaseURL = "http://127.0.0.1:1"
+	zenConfigMu.Lock()
+	zenConfig = &deadZen
+	zenConfigMu.Unlock()
 
 	account := &Account{
 		AccountID:   "quota-account",

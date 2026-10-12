@@ -64,7 +64,7 @@ func loadProviders() {
 	}
 	var list []*CustomProvider
 	if err := json.Unmarshal(data, &list); err != nil {
-		log.Printf("providers parse failed: %v", err)
+		backupCorruptFile(providersFilePath, err)
 		return
 	}
 	customProviders = list
@@ -75,7 +75,7 @@ func saveProvidersLocked() {
 	if err != nil {
 		return
 	}
-	if err := os.WriteFile(providersFilePath, data, 0600); err != nil {
+	if err := writeFileAtomic(providersFilePath, data, 0600); err != nil {
 		log.Printf("providers save failed: %v", err)
 	}
 }

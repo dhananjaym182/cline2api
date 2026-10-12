@@ -104,3 +104,56 @@ func TestCallClineAPIWithAccountDoesNotExpireWhenRefreshAfter401HitsNetworkError
 		t.Fatalf("status = %q, want a recoverable state after a transient refresh failure", acc.Status)
 	}
 }
+
+// cline 自家 refresh 400 时，WorkOS 通道兜底：refreshed via workos →
+// registerWithCline 换正式令牌 → 账号复活，无需重新授权。
+func TestRefreshAccountTokenRecoversViaWorkOSFallback(t *testing.T) {
+	var sawRegister bool
+	isolateRefreshState(t, func(req *http.Request) (*http.Response, error) {
+		switch {
+		case strings.HasSuffix(req.URL.Path, "/auth/refresh"):
+			return refreshStatusResponse(req, http.StatusBadRequest, `{"error":"invalid_grant"}`), nil
+		case strings.HasSuffix(req.URL.Path, "/user_management/authenticate"):
+			return refreshStatusResponse(req, http.StatusOK, `{"access_token":"workos-new-access","refresh_token":"workos-new-refresh","expires_in":3600}`), nil
+		case strings.HasSuffix(req.URL.Path, "/auth/register"):
+			sawRegister = true
+			return refreshStatusResponse(req, http.StatusOK, `{"data":{"accessToken":"cline-new-access","refreshToken":"cline-new-refresh","expiresAt":4102444800000}}`), nil
+		}
+		t.Fatalf("unexpected request: %s %s", req.Method, req.URL)
+		return nil, nil
+	})
+	acc := &Account{AccountID: "wos", Email: "wos@example.com", RefreshToken: "rt", Status: "active"}
+	pool = &AccountPool{Accounts: []*Account{acc}}
+
+	if err := refreshAccountToken(acc); err != nil {
+		t.Fatalf("refreshAccountToken should recover via WorkOS fallback, got: %v", err)
+	}
+	if !sawRegister {
+		t.Error("expected re-registration with Cline after WorkOS refresh")
+	}
+	if acc.Status != "active" {
+		t.Errorf("status = %q, want active", acc.Status)
+	}
+	if acc.AccessToken != "workos:cline-new-access" {
+		t.Errorf("AccessToken = %q, want workos:cline-new-access", acc.AccessToken)
+	}
+	if acc.RefreshToken != "cline-new-refresh" {
+		t.Errorf("RefreshToken = %q, want cline-new-refresh", acc.RefreshToken)
+	}
+}
+
+// cline refresh 400 且 WorkOS 也拒绝（invalid_grant，token 真被吊销）→ expired。
+func TestRefreshAccountTokenExpiresWhenWorkOSAlsoRejects(t *testing.T) {
+	isolateRefreshState(t, func(req *http.Request) (*http.Response, error) {
+		return refreshStatusResponse(req, http.StatusBadRequest, `{"error":"invalid_grant"}`), nil
+	})
+	acc := &Account{AccountID: "dead", Email: "dead@example.com", RefreshToken: "rt", Status: "active"}
+	pool = &AccountPool{Accounts: []*Account{acc}}
+
+	if err := refreshAccountToken(acc); err == nil {
+		t.Fatal("refreshAccountToken should fail when both channels reject")
+	}
+	if acc.Status != "expired" {
+		t.Fatalf("status = %q, want expired when the token is truly revoked", acc.Status)
+	}
+}

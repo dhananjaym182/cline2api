@@ -69,6 +69,26 @@ docker compose down        # 停止
 
 容器内已配置监听 `0.0.0.0:3457`（`-p 3457:3457` 映射对外可达），管理后台同样无鉴权，请勿将端口暴露到公网。
 
+**数据持久化**：所有数据（账号、API Key、配置、请求日志等）都存放在容器的 `/app/data` 目录，
+compose 已挂载到宿主机 `./data`，**重建容器（不删除 `./data`）数据不丢**。不用 compose 时请自行挂载：
+`docker run -v ./data:/app/data ...`。
+
+<details>
+<summary>老部署升级到本版本（一次性迁移）</summary>
+
+早期版本把数据写在容器可写层（`/app/.cline-*.json`），挂载卷也不会被读取，重建容器即丢失。
+升级到本版本后数据统一存放在 `CLINE2API_DATA_DIR`（默认 `/app/data`），并支持一次性自动迁移：
+
+- **docker compose 部署**：把宿主机上旧的 `.cline-accounts.json`（在 docker-compose.yml 同目录）复制进 `./data/` 再启动：
+  `mkdir -p data && cp .cline-accounts.json data/`
+- **旧容器还在运行**：先把可写层里的数据拷出来再删容器：
+  `docker cp cline-proxy:/app/.cline-accounts.json ./data/`（其他 `.cline-*.json` 同理）
+- 程序启动时也会自动把可执行文件目录/工作目录下已有的旧数据文件迁移到数据目录（仅当目标不存在时）。
+
+</details>
+
+> 可选环境变量 `CLINE2API_DATA_DIR`：指定数据目录，默认在 Docker 内为 `/app/data`，其他环境为可执行文件所在目录。
+
 ## 使用指南
 
 ### 1. 添加 Cline 账号

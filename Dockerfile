@@ -19,6 +19,8 @@ VOLUME ["/app/data"]
 
 ENV PORT=3457
 ENV CLINE_PROXY_HOST=0.0.0.0
+# 数据目录指向 VOLUME 挂载点，重建容器（不删卷）数据不丢
+ENV CLINE2API_DATA_DIR=/app/data
 
 ENTRYPOINT ["/app/cline-proxy"]
 # 容器内必须监听 0.0.0.0，否则 -p 端口映射对外不可达

@@ -22,10 +22,48 @@ func init() {
 	poolPath = resolveDataPath(".cline-accounts.json")
 }
 
-// resolveDataPath 按优先级查找数据文件：exe 目录 → 工作目录 → 用户主目录。
-// 找到则用该路径（兼容旧版本在项目根目录存储的文件）；
-// 都找不到则回退到 exe 目录（首次运行会在该位置创建）。
+// dataDirEnv 数据目录环境变量。设置后所有数据文件固定存放在该目录（最高优先级），
+// Docker 部署依赖它把数据落到挂载卷（Dockerfile 中 ENV CLINE2API_DATA_DIR=/app/data），
+// 否则数据会写进容器可写层、重建容器即丢失。
+const dataDirEnv = "CLINE2API_DATA_DIR"
+
+// knownDataFiles 全部已知数据文件名，切换数据目录时用于旧数据的一次性迁移。
+var knownDataFiles = []string{
+	".cline-accounts.json",
+	".cline-config.json",
+	".cline-providers.json",
+	".cline-request-logs.json",
+	".cline-zen.json",
+	".cline-proxy.json",
+	".cline-credentials.json",
+}
+
+// migrateOnce 保证旧数据迁移在进程生命周期内只执行一次。
+var migrateOnce sync.Once
+
+// envDataDir 返回环境变量指定的数据目录（未设置返回空串），并确保目录存在。
+func envDataDir() string {
+	dir := strings.TrimSpace(os.Getenv(dataDirEnv))
+	if dir == "" {
+		return ""
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		log.Printf("Failed to create data dir %s: %v", dir, err)
+	}
+	return dir
+}
+
+// resolveDataPath 解析数据文件路径：
+//  1. 设置了 CLINE2API_DATA_DIR 时固定使用该目录（首次调用会把旧位置的已有数据迁移过来）；
+//  2. 未设置时按优先级查找：exe 目录 → 工作目录 → 用户主目录。
+//     找到则用该路径（兼容旧版本在项目根目录存储的文件）；
+//     都找不到则回退到 exe 目录（首次运行在该位置创建）。
 func resolveDataPath(filename string) string {
+	// 0. 环境变量指定的数据目录（Docker 卷挂载点）
+	if dir := envDataDir(); dir != "" {
+		migrateOnce.Do(func() { migrateLegacyDataFiles(dir) })
+		return filepath.Join(dir, filename)
+	}
 	// 1. exe 所在目录
 	if exe, err := os.Executable(); err == nil {
 		p := filepath.Join(filepath.Dir(exe), filename)
@@ -55,6 +93,108 @@ func resolveDataPath(filename string) string {
 	return filepath.Join(pwd, filename)
 }
 
+// currentDataDir 返回当前生效的数据目录（新文件将创建的位置），用于启动日志与排查。
+func currentDataDir() string {
+	if dir := envDataDir(); dir != "" {
+		return dir
+	}
+	if exe, err := os.Executable(); err == nil {
+		return filepath.Dir(exe)
+	}
+	pwd, _ := os.Getwd()
+	return pwd
+}
+
+// legacyDataDirsOverride 仅供测试替换旧目录探测逻辑（nil 时使用默认探测）。
+var legacyDataDirsOverride func() []string
+
+// legacyDataCandidates 返回旧版本可能存放数据文件的目录（去重后的绝对路径）。
+func legacyDataCandidates() []string {
+	if legacyDataDirsOverride != nil {
+		return legacyDataDirsOverride()
+	}
+	var dirs []string
+	if exe, err := os.Executable(); err == nil {
+		dirs = append(dirs, filepath.Dir(exe))
+	}
+	if pwd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, pwd)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs, filepath.Join(home, ".cline2api"))
+	}
+	seen := make(map[string]bool, len(dirs))
+	out := dirs[:0]
+	for _, d := range dirs {
+		abs, err := filepath.Abs(d)
+		if err != nil {
+			abs = d
+		}
+		if !seen[abs] {
+			seen[abs] = true
+			out = append(out, abs)
+		}
+	}
+	return out
+}
+
+// migrateLegacyDataFiles 把旧位置已有的数据文件拷贝到数据目录（仅当目标不存在时）。
+// 设置 CLINE2API_DATA_DIR 后升级部署时自动接管历史数据；幂等，可重复调用。
+func migrateLegacyDataFiles(dir string) {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		log.Printf("Failed to create data dir %s for migration: %v", dir, err)
+		return
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		absDir = dir
+	}
+	for _, name := range knownDataFiles {
+		dst := filepath.Join(dir, name)
+		if fileExists(dst) {
+			continue
+		}
+		for _, d := range legacyDataCandidates() {
+			if d == absDir {
+				continue
+			}
+			src := filepath.Join(d, name)
+			data, err := os.ReadFile(src)
+			if err != nil {
+				continue
+			}
+			if err := writeFileAtomic(dst, data, 0600); err != nil {
+				log.Printf("Failed to migrate %s from %s to %s: %v", name, d, dst, err)
+				break
+			}
+			log.Printf("Migrated %s from %s to %s", name, d, dst)
+			break
+		}
+	}
+}
+
+// writeFileAtomic 原子写文件：先写临时文件再 rename 覆盖。
+// 直接 WriteFile 会截断原文件，进程写一半被杀（如 docker stop）会留下损坏的 JSON，
+// 下次启动加载失败被当作空数据，再被空数据写回覆盖，造成数据永久丢失。
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// backupCorruptFile 把解析失败的数据文件改名备份（.corrupt-<unix 秒>），
+// 保留原始内容供人工恢复，避免后续保存把损坏文件静默覆盖。
+func backupCorruptFile(path string, cause error) {
+	backup := fmt.Sprintf("%s.corrupt-%d", path, time.Now().Unix())
+	if err := os.Rename(path, backup); err != nil {
+		log.Printf("CORRUPT data file %s (%v); rename to backup failed: %v", path, cause, err)
+		return
+	}
+	log.Printf("CORRUPT data file %s (%v); backed up to %s", path, cause, backup)
+}
+
 func loadPool() *AccountPool {
 	poolMu.Lock()
 	defer poolMu.Unlock()
@@ -71,6 +211,7 @@ func loadPool() *AccountPool {
 
 	var p AccountPool
 	if err := json.Unmarshal(data, &p); err != nil {
+		backupCorruptFile(poolPath, err)
 		pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{}}
 		return pool
 	}
@@ -90,15 +231,63 @@ func loadPool() *AccountPool {
 
 func savePool() {
 	data, _ := json.MarshalIndent(pool, "", "  ")
-	if err := os.WriteFile(poolPath, data, 0600); err != nil {
-		log.Printf("Failed to save accounts: %v", err)
+	if err := writeFileAtomic(poolPath, data, 0600); err != nil {
+		log.Printf("Failed to save accounts to %s: %v", poolPath, err)
 	}
 }
 
+// addAccount 添加账号。同一邮箱（不区分大小写，来自 Cline userInfo，即同一
+// Cline 账号）已存在时**原地更新凭据**：重新授权/重复导入不该产生重复条目 ——
+// 保留原 AccountID、创建时间与用量统计，只更新令牌并置回 active。
+// 已存在的同邮箱重复条目（历史遗留）一并合并进首个条目后移除（用量计数求和）。
 func addAccount(acc *Account) {
 	p := loadPool()
 	poolMu.Lock()
-	p.Accounts = append(p.Accounts, acc)
+	newEmail := strings.TrimSpace(acc.Email)
+	var kept *Account
+	var dups []*Account
+	for _, a := range p.Accounts {
+		if newEmail != "" && strings.EqualFold(strings.TrimSpace(a.Email), newEmail) {
+			if kept == nil {
+				kept = a
+			} else {
+				dups = append(dups, a)
+			}
+		}
+	}
+	if kept != nil {
+		kept.RefreshToken = acc.RefreshToken
+		kept.AccessToken = acc.AccessToken
+		kept.ExpiresAt = acc.ExpiresAt
+		kept.Status = "active"
+		if len(dups) > 0 {
+			for _, d := range dups {
+				kept.UsageCount += d.UsageCount
+				kept.PromptTokens += d.PromptTokens
+				kept.CompletionTokens += d.CompletionTokens
+				kept.TotalTokens += d.TotalTokens
+				kept.CachedTokens += d.CachedTokens
+			}
+			out := p.Accounts[:0]
+			for _, a := range p.Accounts {
+				isDup := false
+				for _, d := range dups {
+					if a == d {
+						isDup = true
+						break
+					}
+				}
+				if !isDup {
+					out = append(out, a)
+				}
+			}
+			p.Accounts = out
+			log.Printf("Account %s: merged %d duplicate entr(y/ies), stats preserved", acc.Email, len(dups))
+		}
+		log.Printf("Account re-authorized in place: %s (AccountID/stats preserved)", acc.Email)
+	} else {
+		p.Accounts = append(p.Accounts, acc)
+	}
 	poolMu.Unlock()
 	savePool()
 }
@@ -170,13 +359,22 @@ func refreshAccountToken(acc *Account) error {
 	resp, err := refreshClineToken(acc.RefreshToken)
 	if err != nil {
 		if isRefreshRejected(err) {
+			// cline 自家 refresh 端点拒绝 ≠ 账号真失效：refresh token 本质是
+			// WorkOS token，走 WorkOS authenticate 端点仍可能自愈，不必重新授权。
+			if wos := refreshViaWorkOS(acc.RefreshToken); wos != nil {
+				applyWorkOSTokens(acc, wos)
+				return nil
+			}
 			acc.Status = "expired"
-		} else {
-			acc.Status = "cooldown"
-			acc.CooldownUntil = time.Now().Add(5 * time.Minute)
+			savePool()
+			// 双通道都拒绝 = WorkOS 会话已被服务端终结（invalid_grant: Session
+			// has already ended / token revoked），刷新救不回，必须重新授权
+			return fmt.Errorf("refresh token rejected by both Cline and WorkOS (session ended or revoked) — account requires re-authorization: 管理页「导入账号」→ OAuth 登录")
 		}
+		acc.Status = "cooldown"
+		acc.CooldownUntil = time.Now().Add(5 * time.Minute)
 		savePool()
-		return fmt.Errorf("token refresh failed: %w", err)
+		return fmt.Errorf("token refresh failed (transient): %w", err)
 	}
 
 	acc.AccessToken = "workos:" + resp.Data.AccessToken
@@ -187,6 +385,28 @@ func refreshAccountToken(acc *Account) error {
 	acc.Status = "active"
 	savePool()
 	return nil
+}
+
+// applyWorkOSTokens 用 WorkOS 直接刷新到的令牌续命账号：优先回 cline
+// /auth/register 换正式 cline 令牌；注册也失败时直接用 workos 前缀令牌
+// （Cline 上游接受），轮换出的新 refresh token 一并落盘。
+func applyWorkOSTokens(acc *Account, wos *authenticateResp) {
+	if cline, err := registerWithCline(wos.AccessToken, wos.RefreshToken); err == nil && cline.Data.AccessToken != "" {
+		acc.AccessToken = "workos:" + cline.Data.AccessToken
+		if cline.Data.RefreshToken != "" {
+			acc.RefreshToken = cline.Data.RefreshToken
+		}
+		acc.ExpiresAt = parseExpiry(cline.Data.ExpiresAt) - 60000
+	} else {
+		acc.AccessToken = "workos:" + wos.AccessToken
+		if wos.RefreshToken != "" {
+			acc.RefreshToken = wos.RefreshToken
+		}
+		acc.ExpiresAt = time.Now().Add(time.Hour).UnixMilli() - 60000
+	}
+	acc.Status = "active"
+	savePool()
+	log.Printf("  account %s: token refreshed via WorkOS fallback (no re-auth needed)", acc.Email)
 }
 
 func pickAccount() *Account {

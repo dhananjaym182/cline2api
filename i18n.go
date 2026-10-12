@@ -169,6 +169,14 @@ var apiMessages = map[string]map[locale]string{
 		localeZH: "模型已删除",
 		localeEN: "model deleted",
 	},
+	"model_disabled": {
+		localeZH: "模型已停用",
+		localeEN: "model is disabled",
+	},
+	"model_status_saved": {
+		localeZH: "模型状态已更新",
+		localeEN: "model status updated",
+	},
 	"invalid_limit": {
 		localeZH: "无效的 limit",
 		localeEN: "invalid limit",

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"strings"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // isModelGoneError：仅 400/404 且响应体含「模型不存在」类文案才算，
@@ -144,5 +146,78 @@ func TestSyncClineModelsMarksDelisted(t *testing.T) {
 	}
 	if len(res2.Removed) != 0 {
 		t.Errorf("res2.Removed = %v, want empty (model revived)", res2.Removed)
+	}
+}
+
+// 用户显式配置的回退链不做列表过滤：列表外但实测仍可用的模型允许配置；
+// 动态派生的免费链仍按 liveModelSet 过滤下架条目。
+func TestModelFallbackChainKeepsUserConfiguredOutOfList(t *testing.T) {
+	oldPool, oldPath := pool, poolPath
+	oldCfg := getProxyConfig()
+	t.Cleanup(func() {
+		pool, poolPath = oldPool, oldPath
+		setProxyConfig(oldCfg)
+	})
+	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{
+		{ID: "cline-free/gemini-3.8-flash", Source: "remote", Cost: "free", Status: "active"},
+	}}
+	setProxyConfig(&proxyConfigData{ModelChain: []string{"out-of-list/still-works", "cline-free/gemini-3.8-flash", "out-of-list/still-works"}})
+
+	chain := modelFallbackChain("requested-model")
+	got := strings.Join(chain, ",")
+	if !strings.Contains(got, "out-of-list/still-works") {
+		t.Errorf("user-configured out-of-list model must be kept in the chain, got: %s", got)
+	}
+	if strings.Count(got, "out-of-list/still-works") != 1 {
+		t.Errorf("chain should be deduped, got: %s", got)
+	}
+	if chain[0] != "requested-model" {
+		t.Errorf("requested model must stay first, got: %s", got)
+	}
+}
+
+// addAccount 按邮箱去重：同邮箱原地更新凭据（保留 AccountID/统计），不产生
+// 重复条目；已存在的同邮箱重复条目合并移除。
+func TestAddAccountUpsertsByEmail(t *testing.T) {
+	oldPool, oldPath := pool, poolPath
+	t.Cleanup(func() { pool, poolPath = oldPool, oldPath })
+	poolPath = filepath.Join(t.TempDir(), ".cline-accounts.json")
+	oldAcc := &Account{AccountID: "acc_old", Email: "user@example.com", RefreshToken: "old-rt", Status: "expired", UsageCount: 100, TotalTokens: 5000, CreatedAt: time.Now().Add(-72 * time.Hour)}
+	pool = &AccountPool{Accounts: []*Account{oldAcc}, Keys: []string{}}
+
+	// 同邮箱重新授权：原地更新，不新增
+	addAccount(&Account{AccountID: "acc_new", Email: "user@example.com", RefreshToken: "new-rt", Status: "active", UsageCount: 5})
+
+	p := loadPool()
+	if len(p.Accounts) != 1 {
+		t.Fatalf("accounts = %d, want 1 (in-place re-auth, no duplicate)", len(p.Accounts))
+	}
+	got := p.Accounts[0]
+	if got.AccountID != "acc_old" {
+		t.Errorf("AccountID = %q, want original preserved", got.AccountID)
+	}
+	if got.Status != "active" || got.RefreshToken != "new-rt" {
+		t.Errorf("credentials not updated: status=%s rt=%s", got.Status, got.RefreshToken)
+	}
+	if got.UsageCount != 100 {
+		t.Errorf("UsageCount = %d, want original 100 preserved", got.UsageCount)
+	}
+
+	// 已存在的重复条目：addAccount 合并移除
+	dup := &Account{AccountID: "acc_dup", Email: "USER@example.com", RefreshToken: "dup-rt", Status: "active", UsageCount: 7}
+	pool.Accounts = append(pool.Accounts, dup)
+	addAccount(&Account{AccountID: "acc_x", Email: "user@example.com", RefreshToken: "latest-rt", Status: "active"})
+
+	p = loadPool()
+	if len(p.Accounts) != 1 {
+		t.Fatalf("accounts = %d, want 1 (duplicates merged)", len(p.Accounts))
+	}
+	got = p.Accounts[0]
+	if got.UsageCount != 107 {
+		t.Errorf("UsageCount = %d, want 107 (100 + 7 merged)", got.UsageCount)
+	}
+	if got.RefreshToken != "latest-rt" {
+		t.Errorf("RefreshToken = %q, want latest-rt", got.RefreshToken)
 	}
 }

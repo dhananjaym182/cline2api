@@ -6,6 +6,11 @@
 .cline-config.json
 .cline-providers.json
 .cline-proxy.json
+
+# 运行时数据目录（docker compose 挂载）与原子写/损坏备份产物
+data/
+.cline-*.json.tmp
+.cline-*.json.corrupt-*
 cline-proxy
 cline-go-proxy
 cline-proxy.exe

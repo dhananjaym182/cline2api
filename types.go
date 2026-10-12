@@ -40,6 +40,9 @@ type Model struct {
 	// 模型往往仍可继续用（如 z-ai/glm-5.3-flash）。同步只做标记，管理页显示
 	// 「已下架」徽标并支持手动移除；上游明确报模型不存在时自动清理。
 	Delisted bool `json:"delisted,omitempty"`
+	// Disabled 用户在管理页手动停用：不进客户端模型列表（/v1/models）、
+	// 直接请求返回 400、默认模型与回退链自动跳过；同步保留该标记。
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // ModelStat 是单个模型在某账号下的用量统计（仅统计 free 模型）。

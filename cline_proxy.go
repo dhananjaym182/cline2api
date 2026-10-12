@@ -46,9 +46,10 @@ func getClineProxyConfig() *clineProxyConfigData {
 	defer clineProxyCfgMu.Unlock()
 	if clineProxyCfg == nil {
 		cfg := defaultClineProxyConfig()
-		if data, err := os.ReadFile(resolveDataPath(".cline-proxy.json")); err == nil {
+		proxyPath := resolveDataPath(".cline-proxy.json")
+		if data, err := os.ReadFile(proxyPath); err == nil {
 			if err := json.Unmarshal(data, cfg); err != nil {
-				log.Printf("cline proxy config parse failed: %v", err)
+				backupCorruptFile(proxyPath, err)
 			}
 		}
 		normalizeClineProxyConfig(cfg)
@@ -83,7 +84,7 @@ func setClineProxyConfig(c *clineProxyConfigData) {
 	clineProxyCfgMu.Unlock()
 
 	data, _ := json.MarshalIndent(c, "", "  ")
-	if err := os.WriteFile(resolveDataPath(".cline-proxy.json"), data, 0600); err != nil {
+	if err := writeFileAtomic(resolveDataPath(".cline-proxy.json"), data, 0600); err != nil {
 		log.Printf("cline proxy config save failed: %v", err)
 		setClineProxyPersistErr(err)
 		return

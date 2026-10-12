@@ -6,8 +6,16 @@ services:
     ports:
       - "3457:3457"
     volumes:
-      - ./.cline-accounts.json:/app/.cline-accounts.json
+      # 数据目录整体挂载（账号/配置/用量统计等全部持久化），重建容器不丢数据
+      - ./data:/app/data
       - ./override.md:/app/override.md:ro
     environment:
       - PORT=3457
       - CLINE_PROXY_HOST=0.0.0.0
+      - CLINE2API_DATA_DIR=/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3457/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

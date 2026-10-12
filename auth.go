@@ -71,6 +71,11 @@ func init() {
 }
 
 func findCredentialsFile() string {
+	// CLINE2API_DATA_DIR 设置时固定使用该目录（与 resolveDataPath 保持一致）
+	if dir := envDataDir(); dir != "" {
+		migrateOnce.Do(func() { migrateLegacyDataFiles(dir) })
+		return filepath.Join(dir, ".cline-credentials.json")
+	}
 	// First, try next to the executable
 	exe, err := os.Executable()
 	if err == nil {
@@ -115,7 +120,7 @@ func loadCredentials() *credentials {
 func saveCredentials(rt string) {
 	c := credentials{RefreshToken: rt}
 	data, _ := json.MarshalIndent(c, "", "  ")
-	if err := os.WriteFile(credentialsPath, data, 0600); err != nil {
+	if err := writeFileAtomic(credentialsPath, data, 0600); err != nil {
 		log.Printf("Failed to save credentials: %v", err)
 		return
 	}
@@ -255,6 +260,37 @@ func refreshClineToken(refreshToken string) (*clineRefreshResp, error) {
 	return &c, nil
 }
 
+// refreshViaWorkOS 用 WorkOS 的 authenticate 端点直接刷新：cline 的 refresh
+// token 本质就是 WorkOS refresh token（/auth/register 只是换皮封装），cline
+// 自家 /auth/refresh 端点调整或 rotate 残留时可能 400，但 WorkOS 通道仍可
+// 自愈 —— 无需重新走设备授权（用户不必再登录一次）。成功返回新的 workos
+// access/refresh token，失败（含 invalid_grant：token 真的被吊销）返回 nil。
+func refreshViaWorkOS(refreshToken string) *authenticateResp {
+	body := map[string]any{
+		"grant_type":    "refresh_token",
+		"client_id":     workosClientID,
+		"refresh_token": refreshToken,
+	}
+	resp, err := httpPostJSON(workosAuthenticateURL, body)
+	if err != nil {
+		log.Printf("  WorkOS refresh fallback failed: %v", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		// 失败原因要可见：invalid_grant（Session has already ended / token revoked）
+		// = 会话已被服务端终结，只能重新授权；其余为瞬时/格式问题
+		log.Printf("  WorkOS refresh fallback rejected: %d %s", resp.StatusCode, truncate(readBody(resp), 200))
+		return nil
+	}
+	var a authenticateResp
+	if err := json.NewDecoder(resp.Body).Decode(&a); err != nil || a.AccessToken == "" {
+		return nil
+	}
+	return &a
+}
+
 func getToken() (string, error) {
 	if cachedToken != "" && time.Now().UnixMilli() < cachedExpiry {
 		return cachedToken, nil
@@ -272,6 +308,20 @@ func getToken() (string, error) {
 			cachedExpiry = parseExpiry(resp.Data.ExpiresAt) - 60000
 			saveCredentials(cachedRefreshTok)
 			return cachedToken, nil
+		}
+		// cline 端点拒绝时走 WorkOS 通道自愈（refresh token 即 WorkOS token）
+		if isRefreshRejected(err) {
+			if wos := refreshViaWorkOS(creds.RefreshToken); wos != nil {
+				cachedToken = "workos:" + wos.AccessToken
+				cachedRefreshTok = wos.RefreshToken
+				if cachedRefreshTok == "" {
+					cachedRefreshTok = creds.RefreshToken
+				}
+				cachedExpiry = time.Now().Add(time.Hour).UnixMilli() - 60000
+				saveCredentials(cachedRefreshTok)
+				log.Printf("Token refreshed via WorkOS fallback")
+				return cachedToken, nil
+			}
 		}
 		log.Printf("Token refresh failed: %v", err)
 	}

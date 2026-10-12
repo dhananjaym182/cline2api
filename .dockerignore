@@ -1,0 +1,16 @@
+# 版本管理与 CI
+.git
+.github
+
+# 数据文件：严禁把账号凭据（含明文 refreshToken）烤进镜像
+.cline-*.json
+.cline-*.json.tmp
+.cline-*.json.corrupt-*
+data/
+
+# 本地构建产物与无关目录
+*.exe
+cline-proxy
+frontend/
+desktop/
+*.md

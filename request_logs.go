@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"sync"
@@ -39,6 +40,9 @@ type RequestLog struct {
 	OutputTPS    float64   `json:"outputTokensPerSecond"`
 	Completed    bool      `json:"completed"`
 	Error        string    `json:"error,omitempty"`
+	// toolNames Cline 通道出站截短的工具名映射（短→原始），回程还原用；
+	// 未导出字段不落请求日志
+	toolNames map[string]string
 }
 
 var (
@@ -58,6 +62,7 @@ func loadRequestLogs() {
 	}
 	var entries []RequestLog
 	if err := json.Unmarshal(data, &entries); err != nil {
+		backupCorruptFile(requestLogsPath, err)
 		return
 	}
 	requestLogsMu.Lock()
@@ -95,11 +100,9 @@ func saveRequestLogsLocked() {
 	if err != nil {
 		return
 	}
-	tmp := requestLogsPath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
-		return
+	if err := writeFileAtomic(requestLogsPath, data, 0600); err != nil {
+		log.Printf("request logs save failed: %v", err)
 	}
-	_ = os.Rename(tmp, requestLogsPath)
 }
 
 func appendRequestLog(entry RequestLog) {

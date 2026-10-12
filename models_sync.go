@@ -210,6 +210,11 @@ func syncClineModels() modelSyncResult {
 				Custom:   false,
 				Source:   "remote",
 			}
+			// 用户手动停用的模型（Disabled）在重建条目时保留标记，
+			// 避免周期同步把停用状态冲掉（与 MetaLocked 同思路）。
+			if old, ok := oldRemote[m.ID]; ok && old.Disabled {
+				entry.Disabled = true
+			}
 			// 远程接口不带 context/maxTokens：按已知硬限制表补全，
 			// 用户锁定过的值（MetaLocked）优先于表；未收录的模型默认 1M
 			// 上下文（主流模型现状，与 zen 同步的默认一致，仅展示与编辑

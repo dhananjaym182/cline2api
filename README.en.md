@@ -68,6 +68,21 @@ docker compose down       # stop
 
 The container listens on `0.0.0.0:3457` (`-p 3457:3457` maps it externally). The admin panel has no auth by default — do **not** expose the port to the public internet.
 
+**Data persistence**: all data (accounts, API keys, settings, request logs) lives in the container's `/app/data` directory, which compose mounts to `./data` on the host. **Recreating the container (without deleting `./data`) keeps all data**. Without compose, mount it yourself: `docker run -v ./data:/app/data ...`.
+
+<details>
+<summary>Upgrading an old deployment to this version (one-time migration)</summary>
+
+Older versions wrote data to the container's writable layer (`/app/.cline-*.json`), so mounted volumes were never read and data was lost on container recreation. This version stores everything in `CLINE2API_DATA_DIR` (`/app/data` by default in Docker):
+
+- **docker compose deployments**: copy the old host-side `.cline-accounts.json` (next to docker-compose.yml) into `./data/` before starting: `mkdir -p data && cp .cline-accounts.json data/`
+- **Old container still running**: salvage the data before removing it: `docker cp cline-proxy:/app/.cline-accounts.json ./data/` (repeat for other `.cline-*.json` files)
+- On startup the program also automatically migrates legacy data files found next to the executable or in the working directory into the data directory (only when the target does not exist yet).
+
+</details>
+
+> Optional environment variable `CLINE2API_DATA_DIR`: sets the data directory. Defaults to `/app/data` in Docker, or the executable's directory elsewhere.
+
 ## Usage Guide
 
 ### 1. Add a Cline account
