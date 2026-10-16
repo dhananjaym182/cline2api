@@ -42,7 +42,9 @@ const (
 const zenModelSyncInterval = 10 * time.Minute
 
 // zenHeaderWatchdogTimeout 限制 zen 上游"发出请求 → 收到响应头"的最长等待。
-const zenHeaderWatchdogTimeout = 60 * time.Second
+// 看门狗 30s：黑洞连接（抖动代理节点）最多挂 30s 即掐，重试/故障转移更快启动。
+// 更长的真实 TTFT（免费层排队 4~11s）不受影响 —— 看门狗只管响应头之前。
+const zenHeaderWatchdogTimeout = 30 * time.Second
 
 // zenMaxRetryWait 单次重试的最大等待（上游 Retry-After 可达 13h，绝不能在请求里睡数小时）。
 const zenMaxRetryWait = 60 * time.Second
