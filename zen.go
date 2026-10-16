@@ -11,12 +11,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/big"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +28,9 @@ import (
 // 同步采用全量替换：官方下架的模型自动移除，不会残留僵尸条目。
 // ============================================================================
 
-const zenAPIBase = "https://opencode.ai/zen/v1"
+// zenAPIBase 自 2026-10 中旬起免费模型只在 inference API 应答：
+// /zen/v1 上的同款请求直接 403 FreeTierError（magpie zen-free 插件 0.1.6 实测）。
+const zenAPIBase = "https://opencode.ai/inference/v1"
 
 // 请求日志中的上游标记
 const (
@@ -302,7 +302,8 @@ func getZenConfig() *zenConfigData {
 		if cfg.Key == "" {
 			cfg.Key = "public"
 		}
-		if cfg.BaseURL == "" {
+		if cfg.BaseURL == "" || cfg.BaseURL == "https://opencode.ai/zen/v1" {
+			// 旧默认端点迁移：免费模型自 2026-10 中旬起只在 inference API 应答
 			cfg.BaseURL = zenAPIBase
 		}
 		if cfg.ProxyStrategy != "random" && cfg.ProxyStrategy != "fill" {
@@ -495,26 +496,45 @@ func validateProxyList(proxies []string) error {
 //   x-opencode-client:   "cli"
 
 // zenClientVersion 跟随 opencode 最新发布版本（packages/opencode/package.json）。
-const zenClientVersion = "1.18.31"
+const zenClientVersion = "1.19.0"
+
+// zenProviderUtilsVersions 各协议的 ai-sdk provider-utils 版本（随发布二进制实测，
+// 参考 magpie zen-free 插件）：chat/responses/anthropic 各不相同。
+var zenProviderUtilsVersions = map[string]string{"chat": "4.0.23", "responses": "4.0.40", "anthropic": "4.0.46"}
 
 const zenBase62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-// zenIdentifier 生成官方 identifier 风格的 26 位串：前 12 位为时间排序 hex，
-// 后 14 位随机 base62。与官方 descending() 的可见格式一致。
-func zenIdentifier() string {
-	nano := uint64(time.Now().UnixNano())
-	prefix := make([]byte, 12)
-	for i := 0; i < 6; i++ {
-		b := byte(nano >> (40 - 8*i))
-		prefix[i*2] = hexDigits[b>>4]
-		prefix[i*2+1] = hexDigits[b&0x0f]
+var (
+	zenIDMu        sync.Mutex
+	zenIDLastStamp int64
+	zenIDCounter   uint64
+)
+
+// opencodeIdentifier 生成 OpenCode 自己形态的 identifier（packages/schema
+// identifier.ts）：12 hex 的 (Date.now()*0x1000 + 每毫秒计数)（session 取反，
+// 新的排前）+ 14 位随机 base62。免费层校验会话 ID 必须是该形态且计数位
+// （hex [9:12] 反解）<16（magpie zen-free 插件 #100）—— 哈希伪造的形状
+// 只有 ~16/4096 概率通过，其余 403 FreeTierError。
+func opencodeIdentifier(prefix string, descending bool) string {
+	zenIDMu.Lock()
+	now := time.Now().UnixMilli()
+	if now != zenIDLastStamp {
+		zenIDLastStamp = now
+		zenIDCounter = 0
+	}
+	zenIDCounter++
+	zenIDMu.Unlock()
+	current := uint64(now)*0x1000 + zenIDCounter
+	value := current & 0xffffffffffff
+	if descending {
+		value = ^current & 0xffffffffffff
 	}
 	random := make([]byte, 14)
 	rand.Read(random)
 	for i, b := range random {
 		random[i] = zenBase62[int(b)%len(zenBase62)]
 	}
-	return string(prefix) + string(random)
+	return fmt.Sprintf("%s_%012x%s", prefix, value, string(random))
 }
 
 const hexDigits = "0123456789abcdef"
@@ -546,21 +566,6 @@ func withRetryJitter(delay time.Duration) time.Duration {
 	return delay + time.Duration(float64(delay)*float64(randIntn(26))/100)
 }
 
-// canonicalZenSession 把种子确定性地哈希进规范会话形态。
-func canonicalZenSession(seed []byte) string {
-	sum := sha256.Sum256(seed)
-	timePart := hex.EncodeToString(sum[:6])
-	rest := make([]byte, 14)
-	n := new(big.Int).SetBytes(sum[6:16])
-	base := big.NewInt(62)
-	remainder := new(big.Int)
-	for i := 13; i >= 0; i-- {
-		n.DivMod(n, base, remainder)
-		rest[i] = zenBase62[remainder.Int64()]
-	}
-	return "ses_" + timePart + string(rest)
-}
-
 // zenConversationSeed 提取对话稳定种子：客户端会话信号优先，其次首条用户消息内容。
 func zenConversationSeed(params map[string]any) string {
 	if meta, ok := params["metadata"].(map[string]any); ok {
@@ -585,19 +590,47 @@ func zenConversationSeed(params map[string]any) string {
 	return ""
 }
 
-// zenSessionID 返回本次上游请求的会话 ID（规范形态，按对话稳定）。
+// zenSessionID 返回本次上游请求的会话 ID：OpenCode 自己形态（免费层校验会话
+// ID 的计数位），一个对话一个会话（对话种子映射到固定 shaped session，容量
+// 封顶 1000 超限重建），无对话信号时随机。
 func zenSessionID(params map[string]any) string {
 	if signal := zenConversationSeed(params); signal != "" {
-		return canonicalZenSession([]byte("ses\x00" + signal))
+		return zenSessionLookup([]byte("ses\x00" + signal))
 	}
-	b := make([]byte, 16)
-	rand.Read(b)
-	return canonicalZenSession(b)
+	return opencodeIdentifier("ses", true)
 }
 
-// zenUserAgent 真实客户端经 AI SDK 发出的 UA 形态（实测可通过免费层校验）。
-func zenUserAgent() string {
-	return fmt.Sprintf("opencode/%s (%s %s; %s)", zenClientVersion, runtime.GOOS, runtime.GOARCH, runtime.Version())
+// zenSessionLookup 对话种子 → 固定的 OpenCode 形态会话（每种子一次生成，
+// 表封顶 1000，超限整体重建 —— 重建代价只是会话换新）。
+var (
+	zenSessionMu     sync.Mutex
+	zenSessionBySeed = map[string]string{}
+)
+
+func zenSessionLookup(seed []byte) string {
+	key := sha256.Sum256(seed)
+	keyStr := hex.EncodeToString(key[:8])
+	zenSessionMu.Lock()
+	defer zenSessionMu.Unlock()
+	sess, ok := zenSessionBySeed[keyStr]
+	if !ok {
+		sess = opencodeIdentifier("ses", true)
+		if len(zenSessionBySeed) >= 1000 {
+			zenSessionBySeed = map[string]string{}
+		}
+		zenSessionBySeed[keyStr] = sess
+	}
+	return sess
+}
+
+// zenUserAgent OpenCode 1.19.0 经 AI SDK 发出的 UA 形态（按协议，provider-utils
+// 版本各不相同；magpie zen-free 插件从发布二进制的实际请求捕获）。
+func zenUserAgent(proto string) string {
+	pu := zenProviderUtilsVersions[proto]
+	if pu == "" {
+		pu = "4.0.23"
+	}
+	return fmt.Sprintf("opencode/%s ai-sdk/provider-utils/%s runtime/bun/1.3.14", zenClientVersion, pu)
 }
 
 // ============ zen 上游调用 ============
@@ -756,18 +789,19 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 			return nil, fmt.Errorf("create zen request: %w", err)
 		}
 		sess := zenSessionID(params)
-		user := "req_" + randHex(8)
-		ua := zenUserAgent()
+		user := opencodeIdentifier("msg", false)
+		ua := zenUserAgent(protoName)
+		// 只发 OpenCode 1.19.0 自己发给网关的头（magpie zen-free 0.1.6 实测配方），
+		// 多余的头（x-session-affinity / X-Session-Id）不再发送
 		req.Header.Set("Authorization", "Bearer "+cfg.Key)
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Accept", "*/*")
 		req.Header.Set("User-Agent", ua)
 		req.Header.Set("x-opencode-project", "global")
 		req.Header.Set("x-opencode-session", sess)
 		req.Header.Set("x-opencode-request", user)
 		req.Header.Set("x-opencode-client", "cli")
-		req.Header.Set("x-session-affinity", sess)
-		req.Header.Set("X-Session-Id", sess)
+		req.Header.Set("x-opencode-session-id", sess)
 		// 管理员自定义头：支持 $session/$request/$project/$client 动态占位符，其余原样覆盖
 		for k, v := range cfg.ZenHeaders {
 			switch v {
@@ -1122,7 +1156,7 @@ func syncZenModels() modelSyncResult {
 	req.Header.Set("Authorization", "Bearer "+cfg.Key)
 	req.Header.Set("User-Agent", "opencode/"+zenClientVersion)
 	req.Header.Set("x-opencode-project", "global")
-	req.Header.Set("x-opencode-session", "ses_"+zenIdentifier())
+	req.Header.Set("x-opencode-session", opencodeIdentifier("ses", true))
 	req.Header.Set("x-opencode-client", "cli")
 	// 与 chat 同路：zen 代理池 + uTLS 指纹传输层，25s 超时
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
