@@ -255,6 +255,7 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .model-source-badge{display:inline-block;padding:1px 7px;border-radius:6px;font-size:10px;font-weight:500;background:var(--surface2);color:var(--text2);border:1px solid var(--border2);white-space:nowrap}
 .model-source-badge.zen{background:var(--accent-soft);color:var(--accent);border-color:transparent}
 .model-source-badge.custom{background:var(--green-soft);color:var(--green);border-color:transparent}
+.model-source-badge.provider{background:var(--yellow-soft);color:var(--yellow);border-color:transparent}
 .model-source-badge.remote{background:var(--surface2);color:var(--text2)}
 
 /* ===== Toggle 开关 ===== */
@@ -730,6 +731,7 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
             <option value="round_robin">轮询 (round_robin)</option>
             <option value="fill">填满 (fill)</option>
             <option value="random">随机 (random)</option>
+            <option value="quality">质量优先 (quality)</option>
           </select>
         </div>
         <div class="field"><label>引擎版本</label><input type="text" id="settingVersion" disabled></div>
@@ -977,6 +979,11 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
           <div class="field"><label>超时(秒)</label><input type="number" id="provTimeout" value="300" min="5" max="600"></div>
         </div>
         <div class="form-row">
+          <div class="field"><label>分钟请求上限（0=不限）</label><input type="number" id="provRpmLimit" value="0" min="0" max="100000"></div>
+          <div class="field"><label>每日请求上限（0=不限）</label><input type="number" id="provDailyLimit" value="0" min="0" max="1000000"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">配额提示：填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
+        <div class="form-row">
           <div class="field" style="flex:1"><label>模型 ID（逗号分隔，如 z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash）</label><input type="text" id="provModels" style="font-family:ui-monospace,monospace"></div>
         </div>
         <div class="form-row">
@@ -1216,6 +1223,7 @@ const I18N = {
   '轮询 (round_robin)': 'Round robin',
   '填满 (fill)': 'Fill',
   '随机 (random)': 'Random',
+  '质量优先 (quality)': 'Quality-first (quality)',
   '引擎版本': 'Engine Version',
   '账号文件': 'Account File',
   '请求头配置（模拟 Cline CLI 发出）': 'Request Headers (mimic Cline CLI)',
@@ -1455,6 +1463,9 @@ const I18N = {
   '本地服务器可留空）': 'leave empty on local server)',
   '超时(秒)': 'Timeout (s)',
   '优先级（小=优先）': 'Priority (lower = first)',
+  '分钟请求上限（0=不限）': 'RPM limit (0 = unlimited)',
+  '每日请求上限（0=不限）': 'Daily request limit (0 = unlimited)',
+  '配额提示：填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错': 'Quota hint: set the free-tier cap and routing avoids exhausted upstreams before dispatch, failing over to other providers in the group instead of discovering 429s by trial',
   '免费来源（供统计）': 'Free source (for stats)',
   '模型 ID（逗号分隔，如 z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash）': 'Model IDs (comma-separated, e.g. z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash)',
   '自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）': 'Custom headers (one Key: Value per line, e.g. HTTP-Referer: https://mysite.com)',
@@ -2566,7 +2577,7 @@ async function loadProviders() {
     const list = d.data.providers || [];
     const box = _('providersList');
     if (!list.length) { box.innerHTML = '<div class="empty" style="padding:10px;color:var(--text3)">' + t('暂无自定义 Provider') + '</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th>优先级</th><th>状态</th><th style="width:150px"></th></tr></thead><tbody>' +
+    box.innerHTML = '<table><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th>优先级</th><th>状态</th><th style="width:220px"></th></tr></thead><tbody>' +
       list.map(p =>
         '<tr>' +
           '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + '</td>' +
@@ -2576,10 +2587,26 @@ async function loadProviders() {
           '<td>' + (p.enabled ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--text3)">停用</span>') + '</td>' +
           '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">编辑</button> ' +
               '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '")\'>测试</button> ' +
+              '<button class="btn btn-sm" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ')\'>' + (p.enabled ? t('停用') : t('启用')) + '</button> ' +
               '<button class="btn btn-sm btn-danger" onclick=\'deleteProvider("' + p.id + '")\'>✕</button></td>' +
         '</tr>'
       ).join('') + '</tbody></table>';
   } catch (e) { /* ignore */ }
+}
+
+// toggleProvider 快速切换 provider 启停（不打开编辑表单）：拉取最新配置，
+// 翻转 enabled 后原样回存，其余字段不动。停用即时退出路由与模型同步。
+async function toggleProvider(id, enable) {
+  try {
+    const d = await api('GET', '/providers');
+    const p = (d.data.providers || []).find(x => x.id === id);
+    if (!p) { toast(t('Provider 未找到'), 'error'); return; }
+    p.enabled = !!enable;
+    p.modelIds = p.modelIds || [];
+    await api('POST', '/providers/save', p);
+    toast(t(enable ? '已启用' : '已停用') + ': ' + p.name, 'success');
+    loadProviders();
+  } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
 }
 
 function showProviderEditor(p) {
@@ -2589,6 +2616,8 @@ function showProviderEditor(p) {
   _('provKey').value = p ? (p.apiKey || '') : '';
   _('provPriority').value = p ? p.priority : 10;
   _('provTimeout').value = p ? (p.timeoutSec || 300) : 300;
+  _('provRpmLimit').value = p ? (p.rpmLimit || 0) : 0;
+  _('provDailyLimit').value = p ? (p.dailyRequestLimit || 0) : 0;
   _('provModels').value = p ? (p.modelIds || []).join(', ') : '';
   _('provHeaders').value = p ? Object.entries(p.headers || {}).map(([k, v]) => k + ': ' + v).join('\n') : '';
   _('provEnabled').value = p ? String(p.enabled !== false) : 'true';
@@ -2606,6 +2635,8 @@ async function saveProvider() {
     apiKey: _('provKey').value.trim(),
     priority: parseInt(_('provPriority').value, 10) || 10,
     timeoutSec: parseInt(_('provTimeout').value, 10) || 300,
+    rpmLimit: parseInt(_('provRpmLimit').value, 10) || 0,
+    dailyRequestLimit: parseInt(_('provDailyLimit').value, 10) || 0,
     modelIds: _('provModels').value.split(',').map(s => s.trim()).filter(Boolean),
     headers: parseHeaderText(_('provHeaders').value),
     enabled: _('provEnabled').value === 'true',
@@ -2730,6 +2761,8 @@ try {
 // z-ai / deepseek / google）；无前缀时回退 provider 字段。
 function modelProviderKey(m) {
   if (m.custom) return '__custom';
+  // 自定义 Provider 的模型按 Provider 名字分组（而非模型 ID 前缀）
+  if (m.source === 'provider') return 'prov:' + (m.provider || 'Provider');
   const idx = (m.id || '').indexOf('/');
   if (idx > 0) return m.id.slice(0, idx);
   return m.provider || '__other';
@@ -2738,6 +2771,7 @@ function modelProviderKey(m) {
 function modelProviderLabel(key) {
   if (key === '__custom') return t('用户自定义');
   if (key === '__other') return t('其他');
+  if (key.indexOf('prov:') === 0) return key.slice(5) + ' (' + t('自定义 Provider') + ')';
   return key;
 }
 
@@ -2749,10 +2783,11 @@ function providerSortKey(a, b) {
 
 function modelSource(m) {
   if (m.custom) return 'custom';
+  if (m.source === 'provider') return 'provider';
   if (m.source === 'zen' || m.provider === 'opencode') return 'zen';
   return 'remote';
 }
-const MODEL_SOURCE_LABEL = { zen: 'opencode', remote: 'Cline' };
+const MODEL_SOURCE_LABEL = { zen: 'opencode', remote: 'Cline', provider: 'Provider' };
 
 // mergeModelsById 同一模型 ID 可能同时被 Cline 与 opencode 同步（池内多条目）：
 // 合并为一行展示 —— 来源/计费取并集；delisted 区分「任一下架/全部下架」
@@ -2766,6 +2801,7 @@ function mergeModelsById(models) {
         id: m.id, provider: m.provider || '', context: m.context || 0, output: m.output || 0,
         _sources: [modelSource(m)],
         _costs: [m.cost || 'free'],
+        _provNames: (modelSource(m) === 'provider' && m.provider) ? [m.provider] : [],
         _delistedAny: !!m.delisted,
         _delistedAll: !!m.delisted,
         _customAny: !!m.custom,
@@ -2776,6 +2812,9 @@ function mergeModelsById(models) {
     const src = modelSource(m);
     if (prev._sources.indexOf(src) === -1) prev._sources.push(src);
     if (prev._costs.indexOf(m.cost || 'free') === -1) prev._costs.push(m.cost || 'free');
+    // 同一模型 ID 可被多个自定义 Provider 同步进来（同名不同源）：
+    // 全部来源名字都亮出来，肉眼即可分辨同一模型的两个上游
+    if (src === 'provider' && m.provider && prev._provNames.indexOf(m.provider) === -1) prev._provNames.push(m.provider);
     prev._delistedAny = prev._delistedAny || !!m.delisted;
     prev._delistedAll = prev._delistedAll && !!m.delisted;
     prev._customAny = prev._customAny || !!m.custom;
@@ -2839,6 +2878,11 @@ function renderModelRow(m) {
   }
   for (const s of m._sources) {
     if (s === 'custom') tags += '<span class="model-source-badge custom">' + t('自定义') + '</span>';
+    else if (s === 'provider') {
+      // 别名标识： Provider 来源的 badge 显示真实名称（多源同名模型全部列出）
+      const n = (m._provNames && m._provNames.length) ? m._provNames.join(' · ') : (m.provider || MODEL_SOURCE_LABEL[s]);
+      tags += '<span class="model-source-badge provider" title="' + esc(m.id) + '">' + esc(n) + '</span>';
+    }
     else tags += '<span class="model-source-badge ' + s + '">' + MODEL_SOURCE_LABEL[s] + '</span>';
   }
   let meta = '';
