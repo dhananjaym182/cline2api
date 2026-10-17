@@ -54,8 +54,8 @@ frontend/wailsjs/
 *.test
 
 # local planning docs: keep locally, never commit
-#PLAN-*.md
-#*.plan.md
+PLAN-*.md
+*.plan.md
 docs/
 .omc/
 .freebuff/
