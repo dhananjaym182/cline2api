@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +36,21 @@ func protocolTestServer(t *testing.T) string {
 	oldZenConfig := zenConfig
 	zenConfig = &zenConfigData{BaseURL: zenAPIBase, Key: "public"}
 	zenConfigMu.Unlock()
+
+	// startProxy 启动时会把自定义 provider 的模型同步进池（syncProviderModels）。
+	// 测试在仓库工作目录运行，那里可能躺着真实的 .cline-providers.json —— 指向
+	// 空临时文件，避免真实 provider 泄漏进测试池劫持 free 回退链。
+	oldProvidersPath := providersFilePath
+	oldProviders := customProviders
+	oldProvidersLoaded := providersLoaded
+	providersFilePath = filepath.Join(t.TempDir(), ".cline-providers.json")
+	customProviders = nil
+	providersLoaded = true // 阻止 loadProviders 重读真实文件
+	t.Cleanup(func() {
+		providersFilePath = oldProvidersPath
+		customProviders = oldProviders
+		providersLoaded = oldProvidersLoaded
+	})
 
 	oldServerMux := serverMux
 	serverMu.Lock()

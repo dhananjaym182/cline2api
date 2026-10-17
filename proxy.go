@@ -344,6 +344,8 @@ func startProxy(host string, port int) error {
 	log.Printf("Data directory: %s (set %s to override)", currentDataDir(), dataDirEnv)
 	p := loadPool()
 	loadRequestLogs()
+	// 自定义 provider 声明的模型同步进池：模型管理页可见、可启停、参与自动回退
+	syncProviderModels()
 	activeCount := 0
 	for _, a := range p.Accounts {
 		if a.Status == "active" {
@@ -1169,7 +1171,7 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 				params[servedByParam] = upstreamProvider
 				return pResp, nil, nil
 			}
-			log.Printf("  provider attempt failed for %q: %v", m, pErr)
+			// callCustomProviderAPI 已逐个记录 provider 失败原因，链上不重复打日志
 		}
 
 		// 点名模型保持原有轮询语义；链上的降级模型改用「最久未用优先」，
@@ -1282,6 +1284,11 @@ func defaultFreeChain() []string {
 		if remote && m.Source == "remote" && m.Cost == "free" && m.Status == "active" {
 			remoteFree = append(remoteFree, m.ID)
 		}
+		// 启用中自定义 provider 的免费模型参与自动回退（provider 失败时也会被
+		// callFreeClineAPI 内的 callCustomProviderAPI 尝试，其次才是账号池）
+		if m.Source == "provider" && m.Cost == "free" && m.Status == "active" && !m.Disabled {
+			remoteFree = append(remoteFree, m.ID)
+		}
 	}
 	chain := make([]string, 0, len(remoteFree)+len(freeModelChain))
 	seen := make(map[string]bool, len(remoteFree)+len(freeModelChain))
@@ -1310,17 +1317,23 @@ func defaultFreeChain() []string {
 // 调用方须持有 poolMu；providers 走独立的 providersMu，仓库内不存在反向持锁路径。
 func liveModelSet(p *AccountPool) map[string]bool {
 	live := make(map[string]bool, len(p.Models))
+	disabled := make(map[string]bool)
 	for _, m := range p.Models {
 		if m.Disabled {
+			disabled[m.ID] = true
 			continue
 		}
 		live[m.ID] = true
 	}
+	// provider 声明的模型（已同步进池的直接生效；池内被停用的一致排除）
 	for _, sp := range listProviders() {
 		if !sp.Enabled {
 			continue
 		}
 		for _, id := range sp.ModelIDs {
+			if disabled[id] {
+				continue
+			}
 			live[id] = true
 		}
 	}
@@ -1452,7 +1465,7 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 				params[servedByParam] = upstreamProvider
 				return pResp, nil, nil
 			}
-			log.Printf("  provider attempt failed for %q: %v", model, pErr)
+			// callCustomProviderAPI 已逐个记录 provider 失败原因，链上不重复打日志
 		}
 		// "free" 链是纯降级路径：全部用「最久未用优先」挑账号，摊平用量。
 		for {

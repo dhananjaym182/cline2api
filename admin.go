@@ -927,7 +927,7 @@ func loadProxyConfigFromDisk() *proxyConfigData {
 		}
 	}
 	switch cfg.Strategy {
-	case "round_robin", "fill", "random":
+	case "round_robin", "fill", "random", "quality":
 	default:
 		cfg.Strategy = "round_robin"
 	}
@@ -1064,7 +1064,7 @@ func handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	if req.Strategy != "" {
 		switch req.Strategy {
-		case "round_robin", "fill", "random":
+		case "round_robin", "fill", "random", "quality":
 			cfg.Strategy = req.Strategy
 			changed = true
 		default:
