@@ -556,7 +556,9 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 					writeJSON(w, http.StatusOK, chatToResponses(out2))
 					return
 				}
-				err = fbErr
+				// 兜底也失败：zen 的真实失败原因不能被吞 —— 最终错误带上两段，
+				// 日志/UI 能直接看到 zen 为什么挂、Cline 兜底为什么也没接住
+				err = fmt.Errorf("zen: %v; cline free chain: %w", err, fbErr)
 			}
 			log.Printf("  responses api error: %v", err)
 			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, err.Error())
