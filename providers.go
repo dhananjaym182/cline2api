@@ -153,7 +153,14 @@ func deleteProvider(id string) bool {
 		if p.ID == id {
 			customProviders = append(customProviders[:i], customProviders[i+1:]...)
 			saveProvidersLocked()
+			// 冷却键是 "<providerID>:<model>"，删除 provider 时要连同全部
+			// 模型冷却一起清掉；同时保留裸 id 删除以兼容历史残留键。
 			delete(providerCooldowns, id)
+			for k := range providerCooldowns {
+				if strings.HasPrefix(k, id+":") {
+					delete(providerCooldowns, k)
+				}
+			}
 			// 领到的粘贴会话不要再粘到已删除的 provider 上
 			stickyClearForProvider(id)
 			saveProviderCooldownsLocked()
@@ -987,6 +994,91 @@ func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, 
 			return resp, nil, true
 		}
 		log.Printf("  provider attempt failed name=%s model=%q: %v", p.Name, model, err)
+		lastErr = err
+	}
+	return nil, lastErr, true
+}
+
+// providerNameServesModel 判断是否存在**启用中**的 provider，其 Name 匹配（去空白、
+// 大小写不敏感）且模型列表包含该模型。校验用：不关心冷却/预算（那是运行时的事）。
+func providerNameServesModel(name, model string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	for _, p := range listProviders() {
+		if !p.Enabled || !strings.EqualFold(strings.TrimSpace(p.Name), name) {
+			continue
+		}
+		for _, id := range p.ModelIDs {
+			if id == model {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// resolveProvidersNamedForModel 与 resolveProvidersForModel 同规则（启用、未冷却、
+// 未超预算、服务该模型），但只保留 Name 匹配给定名称（去空白、大小写不敏感）的
+// provider。用于组合条目把模型钉到某一家上游。
+func resolveProvidersNamedForModel(model, name string) []*CustomProvider {
+	loadProviders()
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	var cs []providerCand
+	now := time.Now()
+	for _, p := range customProviders {
+		if !p.Enabled || !strings.EqualFold(strings.TrimSpace(p.Name), name) {
+			continue
+		}
+		for _, m := range p.ModelIDs {
+			if m != model {
+				continue
+			}
+			if until, cool := providerCooldowns[p.ID+":"+model]; cool && now.Before(until) {
+				break // 该 provider 的该模型冷却中
+			}
+			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit) {
+				break
+			}
+			cs = append(cs, providerCand{p: *p})
+			break
+		}
+	}
+	sortProviderCands(cs, model)
+	out := make([]*CustomProvider, 0, len(cs))
+	for i := range cs {
+		out = append(out, &cs[i].p)
+	}
+	return out
+}
+
+// callCustomProviderAPINamed 与 callCustomProviderAPI 类似，但只考虑 Name 匹配的
+// provider（模型固定到某一家上游）：失败时**不**回退到组内其他 provider。
+// 故意不读取/写入粘性会话——显式固定应当压过自动粘贴，且固定到 A 家的调用不应
+// 污染另一家的粘贴状态。无匹配候选时 attempted=false（调用方决定是否兜底）。
+func callCustomProviderAPINamed(params map[string]any, stream bool, name string) (*http.Response, error, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, nil, false
+	}
+	model, _ := params["model"].(string)
+	provs := resolveProvidersNamedForModel(model, name)
+	if len(provs) == 0 {
+		return nil, nil, false
+	}
+	var lastErr error
+	for _, p := range provs {
+		resp, err := callProvider(p, params, stream)
+		if err == nil {
+			return resp, nil, true
+		}
+		log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
 		lastErr = err
 	}
 	return nil, lastErr, true
