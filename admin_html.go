@@ -465,7 +465,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     </div>
   </div>
   <div class="nav-section">
-    <div class="nav-section-label">账号</div>
+    <div class="nav-section-label">账户</div>
     <div class="nav-item" data-tab="accounts">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       <span class="nav-label">账号管理</span>
@@ -973,7 +973,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
   <div class="subtabs page-subtabs" data-page="upstreams">
     <div class="subtab active" data-sub="zen">opencode Zen</div>
     <div class="subtab" data-sub="cline">Cline 出口代理</div>
-    <div class="subtab" data-sub="headers">请求头</div>
+    <div class="subtab" data-sub="headers">请求头配置</div>
     <div class="subtab" data-sub="providers">自定义 Provider</div>
   </div>
 
@@ -1561,7 +1561,6 @@ const I18N = {
   '暂无模型': 'No models',
   '模型统计': 'Model Usage',
   '按模型统计（仅免费模型）': 'Per-model usage (free models)',
-  '免费模型': 'Free models',
   '展开': 'Expand',
   '收起': 'Collapse',
   '模型冷却中': 'Model cooling',
@@ -1577,8 +1576,8 @@ const I18N = {
   '今日输出 Token': 'Output tokens today',
   '今日总 Token': 'Total tokens today',
   '启用 opencode': 'Enable opencode',
-  '启用': 'Enabled',
-  '停用': 'Disabled',
+  '启用': 'Enable',
+  '停用': 'Disable',
   'API Key': 'API Key',
   'Base URL': 'Base URL',
   '最大并发': 'Max concurrency',
@@ -1605,7 +1604,6 @@ const I18N = {
   '名称 *': 'Name *',
   '免费': 'Free',
   '付费': 'Paid',
-  '版本 ': 'Version ',
   '版本 dev': 'Version dev',
   'JSON 数组格式：[{"refreshToken":"...","email":"..."}]': 'JSON array format: [{"refreshToken":"...","email":"..."}]',
   'API Key: <生成的密钥>': 'API Key: <generated key>',
@@ -1647,7 +1645,7 @@ const I18N = {
   '跨平台桌面端（Win/Mac/Linux）': 'Cross-platform desktop (Win/Mac/Linux)',
   '⚠️ 当前监听非本机回环地址（0.0.0.0 或局域网 IP），管理后台无鉴权，局域网内任何设备都可访问。请确认网络环境安全，或配合防火墙限制端口。': '⚠️ Listening on a non-loopback address (0.0.0.0 or LAN IP) exposes the admin panel without authentication to the whole network. Ensure the network is trusted or restrict the port via firewall.',
   '概览': 'Overview',
-  '账号': 'Accounts',
+  '账户': 'Accounts',
   '配置': 'Configuration',
   '系统': 'System',
   '路由与模型': 'Routing & Models',
@@ -1657,7 +1655,7 @@ const I18N = {
   'opencode zen、Cline 出口代理、请求头与自定义 Provider': 'opencode zen, Cline egress proxies, headers & custom providers',
   'Cline 请求头': 'Cline Request Headers',
   'opencode 请求头': 'OpenCode Request Headers',
-  '请求头': 'Headers',
+  '请求头配置': 'Headers',
   '自定义 Provider': 'Providers',
   'API 密钥、访问控制与危险操作': 'API keys, access control & danger zone',
   '从预设添加（免费源）': 'Add from presets (free tiers)',
