@@ -1778,6 +1778,8 @@ const I18N = {
   '（无可用模型）': '(no models available)',
   '上一页': 'Previous page',
   '下一页': 'Next page',
+  ' Tok · ': ' tok · ',
+  ' 次': ' req',
 };
 let LANG = 'zh';
 const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
@@ -2247,7 +2249,7 @@ async function loadAccounts() {
         items += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--border2);font-size:12px">' +
           '<span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(st.modelId) +
             (cd ? ' <span style="color:var(--yellow)">⏳' + formatCooldown(cd) + '</span>' : '') + '</span>' +
-          '<span style="white-space:nowrap">' + formatTokenCount(st.totalTokens) + ' tok · ' + formatNumber(st.usageCount) + ' req</span></div>';
+          '<span style="white-space:nowrap">' + formatTokenCount(st.totalTokens) + t(' Tok · ') + formatNumber(st.usageCount) + t(' 次') + '</span></div>';
       });
       Object.keys(cools).filter(m => !(a.modelStats || {})[m]).forEach(m => {
         items += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--border2);font-size:12px">' +
@@ -3548,8 +3550,8 @@ function renderModelRow(m) {
     else tags += '<span class="model-source-badge ' + s + '">' + MODEL_SOURCE_LABEL[s] + '</span>';
   }
   let meta = '';
-  if (m.context) meta += 'ctx ' + fmtTokens(m.context);
-  if (m.output) meta += (meta ? ' · ' : '') + 'out ' + fmtTokens(m.output);
+  if (m.context) meta += 'ctx ' + formatTokenCount(m.context);
+  if (m.output) meta += (meta ? ' · ' : '') + 'out ' + formatTokenCount(m.output);
   // 所有模型都开放上下文/最大输出编辑：Cline 模型不在已知硬限制表时，
   // 手动设置的 Output 会作为 modelMaxOutputLimit 的封顶值生效
   let actions = '<button class="btn btn-sm" style="padding:2px 6px" onclick="editModelMeta(\'' + esc(m.id) + '\',' + m.context + ',' + m.output + ')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
@@ -3717,12 +3719,6 @@ function toggleAddModelRow() {
   if (row.style.display === 'flex') _('newModelId').focus();
 }
 
-function fmtTokens(n) {
-  if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 ? 1 : 0) + 'M';
-  if (n >= 1000) return Math.round(n / 1000) + 'K';
-  return String(n);
-}
-
 // 修改模型上下文/最大输出：压缩阈值按此计算，设置后 zen 同步保留该值
 async function editModelMeta(id, ctx, out) {
   const c = prompt(t('上下文窗口 (token)') + ' - ' + id, ctx || 1048576);
@@ -3731,7 +3727,7 @@ async function editModelMeta(id, ctx, out) {
   if (o === null) return;
   try {
     await api('POST', '/models/context', { id: id, context: parseInt(c, 10) || 0, output: parseInt(o, 10) || 0 });
-    toast(t('已保存') + ': ' + id + ' ctx=' + fmtTokens(parseInt(c, 10) || 0), 'success');
+    toast(t('已保存') + ': ' + id + ' ctx=' + formatTokenCount(parseInt(c, 10) || 0), 'success');
     await loadModels();
   } catch (e) { toast(t('保存失败') + ': ' + e.message, 'error'); }
 }
