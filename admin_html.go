@@ -1757,6 +1757,8 @@ const I18N = {
   '停用全部付费': 'Disable all paid',
   '确定启用全部免费模型？': 'Enable all free models?',
   '确定停用全部付费模型？': 'Disable all paid models?',
+  '确定启用该分组全部模型？': 'Enable all models in this group?',
+  '确定停用该分组全部模型？': 'Disable all models in this group?',
   '没有符合条件的模型': 'No matching models',
   // 补齐缺失的 t() 文案（此前 EN 模式回落为中文）
   ' 个': ' failed',
@@ -3672,6 +3674,8 @@ function toggleModelsBatchEl(btn, disabled) {
 async function toggleModelsBatch(groupKey, disabled) {
   const ids = mergedRowsForGroupKey(groupKey).map(m => m.id);
   if (!ids.length) return;
+  const confirmMsg = disabled ? t('确定停用该分组全部模型？') : t('确定启用该分组全部模型？');
+  if (!window.confirm(confirmMsg + ' (' + ids.length + ')')) return;
   try {
     await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
     toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
