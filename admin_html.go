@@ -113,6 +113,8 @@ table{width:100%;border-collapse:collapse;table-layout:fixed}
 .model-subtable{table-layout:auto}
 .model-subtable td{padding:7px 12px;text-align:left;white-space:nowrap}
 .model-subtable td:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
+/* 数字列统一右对齐 + 等宽数字（Provider 优先级 / 组合条目数等） */
+.num-col,th.num-col,td.num-col{text-align:right;font-variant-numeric:tabular-nums}
 th,td{text-align:left;padding:10px var(--sp-3);border-bottom:1px solid var(--border2);font-size:var(--fs-base);vertical-align:middle;overflow-wrap:break-word}
 .section-body.flush{overflow-x:auto;-webkit-overflow-scrolling:touch}
 th{color:var(--text2);font-weight:600;font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap;background:var(--surface)}
@@ -130,6 +132,8 @@ tbody tr:hover{background:var(--surface2)}
 .account-table th:last-child,.account-table td:last-child{width:172px;min-width:172px;text-align:right;white-space:nowrap}
 .account-table input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;vertical-align:middle}
 .account-table td:last-child .btn{width:32px;padding-left:0;padding-right:0;justify-content:center}
+/* 列表表格操作列统一：同一表头文案（操作）+ 同一列宽（容纳 4 个文字按钮不折行），右对齐 */
+.action-table th:last-child,.action-table td:last-child:not(.empty){width:280px;text-align:right;white-space:nowrap}
 .account-email{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:500}
 .account-cards{display:none}
 .log-cards{display:none}
@@ -864,7 +868,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/></svg><span>模型管理</span>
       <span style="margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px;font-weight:400;color:var(--text3)">
-        <span><span>上次同步</span>: <span id="modelSyncTime">从未同步</span></span>
+        <span><span>上次同步</span>: <span id="modelSyncTime">-</span></span>
       </span>
     </div>
     <div class="section-desc">管理从 Cline / opencode 同步的模型与自定义模型。停用的模型不会出现在客户端模型列表（/v1/models）中，直接请求也会被拒绝。</div>
@@ -1084,8 +1088,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>Cline 请求头</div>
     <div class="section-desc">这些请求头会附加到所有转发给 Cline API 的请求中，以模拟官方客户端行为。</div>
     <div class="section-body xscroll">
-      <table>
-        <thead><tr><th style="width:240px">请求头</th><th>值</th><th style="width:48px"></th></tr></thead>
+      <table class="action-table">
+        <thead><tr><th style="width:240px">请求头</th><th>值</th><th>操作</th></tr></thead>
         <tbody id="headersTableBody">
           <tr><td colspan="3" class="empty">加载中...</td></tr>
         </tbody>
@@ -2232,8 +2236,8 @@ async function loadAccounts() {
         '<td>' + formatTokenCount(a.completionTokens) + '</td>' +
         '<td>' + formatTokenCount(a.totalTokens) + '</td>' +
         '<td>' + formatTokenCount(a.cachedTokens) + '</td>' +
-        '<td>' + fmtDateTime2(a.lastUsed) + '</td>' +
-        '<td>' + fmtDateTime2(a.createdAt) + '</td>' +
+        '<td>' + formatDateTime(a.lastUsed, true) + '</td>' +
+        '<td>' + formatDateTime(a.createdAt, true) + '</td>' +
         '<td style="white-space:nowrap">' + expander +
           '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">⚡</button> ' +
           '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">↻</button> ' +
@@ -2243,7 +2247,7 @@ async function loadAccounts() {
           '<table class="model-subtable" style="width:100%">' + modelStatsRow(a) + '</table></td></tr>';
     }).join('');
     cards.innerHTML = pageList.map(a => {
-      const lu = a.lastUsed ? new Date(a.lastUsed).toLocaleString(LC()) : t('从未使用');
+      const lu = formatDateTime(a.lastUsed);
       const cardStatus = a.status === 'cooldown' && a.cooldownUntil
         ? '<span class="status cooldown status-cooldown" title="' + t('冷却 · 剩余 ') + formatCooldown(a.cooldownUntil) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(a.cooldownUntil) + '</span></span>'
         : '<span class="status ' + a.status + '"><span class="status-dot ' + a.status + '"></span>' + (sn[a.status] || a.status) + '</span>';
@@ -2422,12 +2426,18 @@ async function deleteSelectedAccounts(btn) {
   await loadStats();
 }
 
-// 表格时间列：日期一行、时间灰色小字一行，固定不折行
-function fmtDateTime2(v) {
-  if (!v) return '<span style="color:var(--text3)">-</span>';
+// 统一空值占位（缺失/未知）
+function emptyCell() { return '<span style="color:var(--text3)">-</span>'; }
+
+// 统一日期时间格式化：默认单行；twoLine 仅账号表窄列使用（10% 固定宽 + nowrap，单行会溢出/折行）
+function formatDateTime(v, twoLine) {
+  if (!v) return emptyCell();
   const d = new Date(v);
-  return '<div style="white-space:nowrap">' + d.toLocaleDateString(LC()) + '</div>' +
-    '<div style="white-space:nowrap;font-size:10px;color:var(--text3)">' + d.toLocaleTimeString(LC()) + '</div>';
+  if (twoLine) {
+    return '<div style="white-space:nowrap">' + d.toLocaleDateString(LC()) + '</div>' +
+      '<div style="white-space:nowrap;font-size:10px;color:var(--text3)">' + d.toLocaleTimeString(LC()) + '</div>';
+  }
+  return d.toLocaleString(LC());
 }
 
 // 展开/收起账号的模型统计子行（表格视图）
@@ -2865,13 +2875,13 @@ async function loadProviders() {
     const list = d.data.providers || [];
     const box = _('providersList');
     if (!list.length) { box.innerHTML = '<div class="empty" style="padding:10px;color:var(--text3)">' + t('暂无自定义 Provider') + '</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th>优先级</th><th>状态</th><th style="width:220px"></th></tr></thead><tbody>' +
+    box.innerHTML = '<table class="action-table"><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th class="num-col">优先级</th><th>状态</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
       list.map(p =>
         '<tr>' +
           '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + '</td>' +
           '<td class="mono" style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(p.baseURL) + '</td>' +
           '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc((p.modelIds || []).join(', ')) + '</td>' +
-          '<td>' + p.priority + '</td>' +
+          '<td class="num-col">' + p.priority + '</td>' +
           '<td>' + (p.enabled ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--text3)">停用</span>') + '</td>' +
           '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">编辑</button> ' +
               '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '")\'>测试</button> ' +
@@ -3089,9 +3099,9 @@ function renderCombosList() {
     box.innerHTML = '<div class="empty">' + t('暂无模型组合') + '</div>';
     return;
   }
-  box.innerHTML = '<div class="combos-list"><table><thead><tr>' +
+  box.innerHTML = '<div class="combos-list"><table class="action-table"><thead><tr>' +
     '<th>' + t('组合 ID') + '</th><th>' + t('名称') + '</th><th>' + t('分类') + '</th>' +
-    '<th>' + t('条目') + '</th><th>' + t('状态') + '</th><th style="width:280px"></th>' +
+    '<th class="num-col">' + t('条目') + '</th><th>' + t('状态') + '</th><th>' + t('操作') + '</th>' +
     '</tr></thead><tbody>' +
     _comboList.map(c => {
       const entries = c.entries || [];
@@ -3106,7 +3116,7 @@ function renderCombosList() {
         '<td class="mono" style="font-size:12px">' + esc(c.id) + '</td>' +
         '<td>' + esc(c.name || '') + fb + '</td>' +
         '<td>' + (c.category ? esc(c.category) : '<span style="color:var(--text3)">-</span>') + '</td>' +
-        '<td class="row-count">' + enabledEntries + ' / ' + entries.length + '</td>' +
+        '<td class="row-count num-col">' + enabledEntries + ' / ' + entries.length + '</td>' +
         '<td>' + badge + '</td>' +
         '<td><button class="btn btn-sm" onclick="editCombo(\'' + escAttr(c.id) + '\')">' + t('编辑') + '</button> ' +
             '<button class="btn btn-sm" onclick="cloneCombo(\'' + escAttr(c.id) + '\', this)">' + t('克隆') + '</button> ' +
@@ -3800,7 +3810,7 @@ async function loadModels() {
     renderModelList();
     const ls = d.data.lastSync || {};
     if (_('modelSyncTime')) {
-      _('modelSyncTime').textContent = ls.syncedAt ? new Date(ls.syncedAt).toLocaleString(LC()) : t('从未同步');
+      _('modelSyncTime').innerHTML = formatDateTime(ls.syncedAt);
     }
     // 启动自动同步的变更弹窗（仅提示一次）
     if (!_modelSyncSeen && ls.syncedAt && ls.changed) {
@@ -4157,7 +4167,7 @@ async function loadRequestLogs(reset) {
     }
 
     const renderRow = l => {
-      const ts = l.startedAt ? new Date(l.startedAt).toLocaleString(LC()) : '-';
+      const ts = formatDateTime(l.startedAt);
       const st = l.completed
         ? '<span class="log-status ok">' + t('完成') + '</span>'
         : '<span class="log-status fail" title="' + esc(l.error || '') + '">' + t('失败') + '</span>';
@@ -4186,7 +4196,7 @@ async function loadRequestLogs(reset) {
           : '');
     };
     const renderCard = l => {
-      const ts = l.startedAt ? new Date(l.startedAt).toLocaleString(LC()) : '-';
+      const ts = formatDateTime(l.startedAt);
       const st = l.completed ? t('完成') : t('失败');
       const tk = l.usageAvailable
         ? t('输入 ') + formatTokenCount(l.inputTokens) + t(' · 输出 ') + formatTokenCount(l.outputTokens) + t(' · 缓存 ') + formatTokenCount(l.cachedTokens) + t(' · 总 ') + formatTokenCount(l.totalTokens)
