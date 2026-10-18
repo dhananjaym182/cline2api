@@ -591,10 +591,10 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>快捷操作</div>
     <div class="section-body action-row">
       <button class="btn btn-primary" onclick="switchTab('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
-      <button class="btn" onclick="refreshAllTokens()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新全部 Token</button>
+      <button class="btn" onclick="refreshAllTokens(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新全部 Token</button>
       <button class="btn" onclick="document.getElementById('fileInput').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>从文件导入</button>
       <input type="file" id="fileInput" accept=".json,.txt" style="display:none" onchange="handleFileImport(event)">
-      <button class="btn" onclick="switchTab('security');switchPageSubTab('security','keys');generateKey()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>生成 API 密钥</button>
+      <button class="btn" onclick="switchTab('security');switchPageSubTab('security','keys');generateKey(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>生成 API 密钥</button>
     </div>
   </div>
 </div>
@@ -610,7 +610,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
       <button class="btn btn-sm" onclick="exportSelectedAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出选中<span id="selCount"></span></button>
       <button class="btn btn-sm" onclick="resetSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>重置选中<span id="resetCount"></span></button>
       <button class="btn btn-sm btn-danger" onclick="deleteSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除选中<span id="delCount"></span></button>
-      <button class="btn btn-sm" onclick="exportAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出全部</button>
+      <button class="btn btn-sm" onclick="exportAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出全部</button>
       <button class="btn btn-primary btn-sm" onclick="switchTab('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
       <button class="btn btn-sm" onclick="loadAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
     </div>
@@ -678,7 +678,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-primary" onclick="addByToken()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
+        <button class="btn btn-primary" onclick="addByToken(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
       </div>
       <div id="tokenResult" style="margin-top:8px"></div>
     </div>
@@ -692,7 +692,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-primary" onclick="batchImport()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导入全部</button>
+        <button class="btn btn-primary" onclick="batchImport(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导入全部</button>
         <button class="btn" onclick="document.getElementById('fileInput2').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>选择文件</button>
         <input type="file" id="fileInput2" accept=".json,.txt" style="display:none" onchange="handleFileImport(event)">
       </div>
@@ -749,7 +749,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     <div class="section-desc">生成的密钥可用于客户端访问代理 API（作为 x-api-key 或 Authorization 头）。</div>
     <div class="section-body">
       <div class="form-actions" style="margin-bottom:14px">
-        <button class="btn btn-success" onclick="generateKey()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>生成新密钥</button>
+        <button class="btn btn-success" onclick="generateKey(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>生成新密钥</button>
       </div>
       <div id="keysList"></div>
       <div id="keyGenResult" style="margin-top:8px"></div>
@@ -783,7 +783,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
           <label>管理后台密码（<span id="passwordStatus">未启用</span>）</label>
           <div style="display:flex;gap:8px">
             <input type="password" id="settingPassword" placeholder="留空保存 = 清除密码" autocomplete="new-password" style="flex:1">
-            <button class="btn btn-primary" onclick="savePassword()">保存</button>
+            <button class="btn btn-primary" onclick="savePassword(this)">保存</button>
           </div>
           <div style="font-size:12px;color:var(--text3);margin-top:4px">设置后访问管理后台需输入密码，默认无密码</div>
         </div>
@@ -901,7 +901,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
             <option value="free">免费 (free)</option>
           </select>
         </div>
-        <button class="btn btn-success" onclick="addModel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
+        <button class="btn btn-success" onclick="addModel(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
       </div>
       <div id="modelsList" class="model-list">加载中...</div>
     </div>
@@ -1021,7 +1021,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         <div class="field"><label>摘要最大 Token</label><input type="number" id="ocCompactMaxSummary" min="0" onchange="saveOcConfig()"></div>
       </div>
       <div class="form-actions" style="margin-top:14px">
-        <button class="btn btn-primary" onclick="saveOcConfig()">手动保存 opencode 配置</button>
+        <button class="btn btn-primary" onclick="saveOcConfig(this)">手动保存 opencode 配置</button>
       </div>
       <div id="ocSaveResult" style="margin-top:8px"></div>
       <div style="font-size:12px;color:var(--text3);margin-top:8px">上述字段改动后会自动保存，也可点按钮手动触发。</div>
@@ -1072,7 +1072,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         <textarea id="clineProxies" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080"></textarea>
       </div>
       <div class="form-actions" style="margin-top:14px">
-        <button class="btn btn-primary" onclick="saveClineProxyConfig()">保存 Cline 代理</button>
+        <button class="btn btn-primary" onclick="saveClineProxyConfig(this)">保存 Cline 代理</button>
       </div>
       <div id="clineProxySaveResult" style="margin-top:8px"></div>
     </div>
@@ -1092,7 +1092,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
       </table>
       <div class="form-actions" style="margin-top:14px">
         <button class="btn btn-sm" onclick="addHeaderRow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加请求头</button>
-        <button class="btn btn-sm btn-primary" onclick="saveHeaders()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存请求头</button>
+        <button class="btn btn-sm btn-primary" onclick="saveHeaders(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存请求头</button>
         <button class="btn btn-sm" onclick="bulkEditHeaders()">批量编辑</button>
       </div>
       <div id="headerSaveResult" style="margin-top:8px"></div>
@@ -1108,7 +1108,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         <textarea id="zenHeadersBulk" rows="6" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="User-Agent: opencode/1.18.31&#10;x-opencode-project: global&#10;x-custom-header: my-value"></textarea>
       </div>
       <div class="form-actions" style="margin-top:10px">
-        <button class="btn btn-sm btn-primary" onclick="saveZenHeaders()">保存 opencode 请求头</button>
+        <button class="btn btn-sm btn-primary" onclick="saveZenHeaders(this)">保存 opencode 请求头</button>
       </div>
       <div id="zenHeaderSaveResult" style="margin-top:8px"></div>
     </div>
@@ -1158,7 +1158,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
           </div>
         </div>
         <div class="form-actions" style="margin-top:10px">
-          <button class="btn btn-sm btn-primary" onclick="saveProvider()">保存 Provider</button>
+          <button class="btn btn-sm btn-primary" onclick="saveProvider(this)">保存 Provider</button>
           <button class="btn btn-sm" onclick="hideProviderEditor()">取消</button>
           <button class="btn btn-sm" onclick="testProvider()">测试连通性</button>
           <span id="provTestResult" style="font-size:12px;margin-left:8px"></span>
@@ -1558,6 +1558,12 @@ const I18N = {
   '已保存': 'Saved',
   '保存失败': 'Save failed',
   '同步中...': 'Syncing...',
+  '保存中...': 'Saving...',
+  '添加中...': 'Adding...',
+  '导入中...': 'Importing...',
+  '生成中...': 'Generating...',
+  '克隆中...': 'Cloning...',
+  '刷新中...': 'Refreshing...',
   '暂无模型': 'No models',
   '模型统计': 'Model Usage',
   '按模型统计（仅免费模型）': 'Per-model usage (free models)',
@@ -2231,7 +2237,7 @@ async function loadAccounts() {
         '<td style="white-space:nowrap">' + expander +
           '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">⚡</button> ' +
           '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">↻</button> ' +
-          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\')" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
         '</td></tr>' +
         '<tr id="modelRow-' + a.accountId + '" style="display:none"><td colspan="12" style="padding:0">' +
           '<table class="model-subtable" style="width:100%">' + modelStatsRow(a) + '</table></td></tr>';
@@ -2275,7 +2281,7 @@ async function loadAccounts() {
         '<div class="account-card-footer"><span>' + t('最后使用：') + lu + '</span><span class="account-card-actions">' +
           '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">⚡</button>' +
           '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">↻</button>' +
-          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\')" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
         '</span></div></article>';
     }).join('');
   } catch (e) { toast(t('加载账号失败: ') + e.message, 'error'); }
@@ -2471,13 +2477,16 @@ async function testAllAccounts(btn) {
   if (btn) { btn.disabled = false; btn.innerHTML = orig; }
 }
 
-async function deleteAccount(id) {
+async function deleteAccount(id, btn) {
   if (!confirm(t('确定删除此账号？'))) return;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
     await api('POST', '/accounts/delete', { accountId: id });
     toast(t('账号已删除'), 'success');
     loadAccounts(); loadStats();
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 async function resetAccount(id) {
@@ -2498,12 +2507,15 @@ async function deleteAllAccounts() {
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
 }
 
-async function refreshAllTokens() {
+async function refreshAllTokens(btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('刷新中...'); }
   try {
     await api('POST', '/accounts/refresh-all', {});
     toast(t('全部 Token 已刷新'), 'success');
     loadAccounts(); loadStats();
   } catch (e) { toast(t('刷新失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 // ========== OAuth 登录 ==========
@@ -2552,10 +2564,12 @@ async function startOAuth() {
 }
 
 // ========== Token 导入 ==========
-async function addByToken() {
+async function addByToken(btn) {
   const token = _('tokenInput').value.trim();
   if (!token) { toast(t('请输入 refreshToken'), 'error'); return; }
   const email = _('tokenEmail').value.trim();
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('添加中...'); }
   try {
     const d = await api('POST', '/accounts/add', { refreshToken: token, email: email || undefined });
     toast(t('账号添加成功: ') + (d.data.email || ''), 'success');
@@ -2563,10 +2577,13 @@ async function addByToken() {
     _('tokenEmail').value = '';
     loadAccounts(); loadStats();
   } catch (e) { toast(t('添加失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 // ========== 导出账号 ==========
-async function exportAccounts() {
+async function exportAccounts(btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
   try {
     const res = await fetch(API + '/accounts/export');
     const blob = await res.blob();
@@ -2580,6 +2597,7 @@ async function exportAccounts() {
     URL.revokeObjectURL(url);
     toast(t('账号已导出'), 'success');
   } catch (e) { toast(t('导出失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 // ========== 批量导入 ==========
@@ -2615,16 +2633,19 @@ function parseImportData(text) {
     });
 }
 
-async function batchImport() {
+async function batchImport(btn) {
   const raw = _('batchInput').value.trim();
   if (!raw) { toast(t('请输入账号数据'), 'error'); return; }
   const tokens = parseImportData(raw);
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('导入中...'); }
   try {
     const d = await api('POST', '/batch-import', { tokens });
     toast(d.message || t('导入完成'), 'success');
     _('batchInput').value = '';
     loadAccounts(); loadStats();
   } catch (e) { toast(t('导入失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 async function handleFileImport(event) {
@@ -2654,13 +2675,15 @@ async function loadKeys() {
     el.innerHTML = keys.map(k =>
       '<div class="flex" style="margin-bottom:8px">' +
         '<span class="key-display" style="flex:1" onclick="copyText(\'' + k + '\')" title="点击复制">' + esc(k) + '</span>' +
-        '<button class="btn btn-sm btn-danger" onclick="deleteKey(\'' + k + '\')" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteKey(\'' + k + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
       '</div>'
     ).join('');
   } catch (e) { _('keysList').innerHTML = '<div class="empty">' + t('加载失败') + '</div>'; }
 }
 
-async function generateKey() {
+async function generateKey(btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('生成中...'); }
   try {
     const d = await api('POST', '/keys/generate');
     const key = d.data.key;
@@ -2673,15 +2696,19 @@ async function generateKey() {
     toast(t('密钥已生成'), 'success');
     setTimeout(() => _('keyGenResult').innerHTML = '', 8000);
   } catch (e) { toast(t('生成失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
-async function deleteKey(key) {
+async function deleteKey(key, btn) {
   if (!confirm(t('确定删除此密钥？'))) return;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
     await api('POST', '/keys/delete', { key });
     toast(t('密钥已删除'), 'success');
     loadKeys();
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 async function deleteAllKeys() {
@@ -2735,15 +2762,18 @@ async function saveListenHost() {
 }
 
 // 保存/清除管理后台密码（留空 = 清除）
-async function savePassword() {
+async function savePassword(btn) {
   const pwd = _('settingPassword').value;
   if (pwd && pwd.length < 4) { toast(t('密码至少 4 位'), 'error'); return; }
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/password', { password: pwd });
     _('settingPassword').value = '';
     toast(pwd ? t('密码已设置，后台需要重新登录') : t('已清除密码'), 'success');
     await loadConfig();
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 function addHeaderRow() {
@@ -2814,13 +2844,16 @@ async function loadZenHeaders() {
   } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 
-async function saveZenHeaders() {
+async function saveZenHeaders(btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/opencode/config/update', { zenHeaders: parseHeaderText(_('zenHeadersBulk').value) });
     toast(t('opencode 请求头已保存'), 'success');
     _('zenHeaderSaveResult').innerHTML = '<div style="color:var(--green);font-size:13px">✓ ' + t('已保存') + '</div>';
     setTimeout(() => _('zenHeaderSaveResult').innerHTML = '', 4000);
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 // ========== 自定义 Provider ==========
@@ -2842,7 +2875,7 @@ async function loadProviders() {
           '<td>' + (p.enabled ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--text3)">停用</span>') + '</td>' +
           '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">编辑</button> ' +
               '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '")\'>测试</button> ' +
-              '<button class="btn btn-sm" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ')\'>' + (p.enabled ? t('停用') : t('启用')) + '</button> ' +
+              '<button class="btn btn-sm" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ', this)\'>' + (p.enabled ? t('停用') : t('启用')) + '</button> ' +
               '<button class="btn btn-sm btn-danger" onclick=\'deleteProvider("' + p.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
         '</tr>'
       ).join('') + '</tbody></table>';
@@ -2854,7 +2887,9 @@ async function loadProviders() {
 
 // toggleProvider 快速切换 provider 启停（不打开编辑表单）：拉取最新配置，
 // 翻转 enabled 后原样回存，其余字段不动。停用即时退出路由与模型同步。
-async function toggleProvider(id, enable) {
+async function toggleProvider(id, enable, btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     const d = await api('GET', '/providers');
     const p = (d.data.providers || []).find(x => x.id === id);
@@ -2865,6 +2900,7 @@ async function toggleProvider(id, enable) {
     toast(t(enable ? '已启用' : '已停用') + ': ' + p.name, 'success');
     loadProviders();
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 function showProviderEditor(p) {
@@ -2885,7 +2921,7 @@ function showProviderEditor(p) {
 
 function hideProviderEditor() { _('providerEditor').style.display = 'none'; }
 
-async function saveProvider() {
+async function saveProvider(btn) {
   const payload = {
     id: _editingProviderId,
     name: _('provName').value.trim(),
@@ -2900,12 +2936,15 @@ async function saveProvider() {
     enabled: _('provEnabled').value === 'true',
     free: _('provFree').value === 'true',
   };
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/providers/save', payload);
     toast(t('Provider 已保存'), 'success');
     hideProviderEditor();
     loadProviders();
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 function editProvider(id) {
@@ -2977,7 +3016,7 @@ function applyPreset(key) {
   toast(t('已填充预设，请补 API Key 和模型 ID'), 'info');
 }
 
-async function saveHeaders() {
+async function saveHeaders(btn) {
   const tbody = _('headersTableBody');
   const rows = tbody.querySelectorAll('tr');
   const headers = {};
@@ -2993,6 +3032,8 @@ async function saveHeaders() {
     }
   });
   if (hasEmpty) { toast(t('存在有值无键的行，已忽略'), 'info'); }
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     const d = await api('POST', '/config/update', { headers });
     toast(t('请求头已保存'), 'success');
@@ -3001,6 +3042,7 @@ async function saveHeaders() {
     setTimeout(() => _('headerSaveResult').innerHTML = '', 5000);
     loadConfig();
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 // ========== 模型组合（Combo） ==========
@@ -3067,9 +3109,9 @@ function renderCombosList() {
         '<td class="row-count">' + enabledEntries + ' / ' + entries.length + '</td>' +
         '<td>' + badge + '</td>' +
         '<td><button class="btn btn-sm" onclick="editCombo(\'' + escAttr(c.id) + '\')">' + t('编辑') + '</button> ' +
-            '<button class="btn btn-sm" onclick="cloneCombo(\'' + escAttr(c.id) + '\')">' + t('克隆') + '</button> ' +
-            '<button class="btn btn-sm" onclick="toggleCombo(\'' + escAttr(c.id) + '\', ' + !c.enabled + ')">' + t(c.enabled ? '停用' : '启用') + '</button> ' +
-            '<button class="btn btn-sm btn-danger" onclick="deleteCombo(\'' + escAttr(c.id) + '\')" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
+            '<button class="btn btn-sm" onclick="cloneCombo(\'' + escAttr(c.id) + '\', this)">' + t('克隆') + '</button> ' +
+            '<button class="btn btn-sm" onclick="toggleCombo(\'' + escAttr(c.id) + '\', ' + !c.enabled + ', this)">' + t(c.enabled ? '停用' : '启用') + '</button> ' +
+            '<button class="btn btn-sm btn-danger" onclick="deleteCombo(\'' + escAttr(c.id) + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
       '</tr>';
     }).join('') +
     '</tbody></table></div>';
@@ -3363,30 +3405,39 @@ function editCombo(id) {
   if (c) showComboEditor(c);
 }
 
-async function toggleCombo(id, enabled) {
+async function toggleCombo(id, enabled, btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/combos/toggle', { id: id, enabled: !!enabled });
     toast(t(enabled ? '已启用' : '已停用') + ': ' + id, 'success');
     await loadCombos();
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
-async function deleteCombo(id) {
+async function deleteCombo(id, btn) {
   if (!confirm(t('确定删除该组合？'))) return;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
     await api('POST', '/combos/delete', { id: id });
     toast(t('已删除'), 'success');
     if (_editingComboId === id) hideComboEditor();
     await loadCombos();
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
-async function cloneCombo(id) {
+async function cloneCombo(id, btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('克隆中...'); }
   try {
     await api('POST', '/combos/clone', { id: id });
     toast(t('已克隆'), 'success');
     await loadCombos();
   } catch (e) { toast(t('克隆失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 // ========== 模型列表 ==========
@@ -3840,7 +3891,7 @@ function maskProxyForDisplay(p) {
   return p.replace(/\/\/([^@/]+)@/, '//***@');
 }
 
-async function saveOcConfig() {
+async function saveOcConfig(btn) {
   const numOr = (id, def) => { const v = parseInt(_(id).value, 10); return isNaN(v) ? def : v; };
   const payload = {
     enabled: _('ocEnabled').value === 'true',
@@ -3860,6 +3911,8 @@ async function saveOcConfig() {
       maxSummary: numOr('ocCompactMaxSummary', 4096),
     },
   };
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/opencode/config/update', payload);
     _('ocSaveResult').innerHTML = '<span style="color:var(--green)">✓ ' + t('opencode 配置已保存') + '</span>';
@@ -3868,6 +3921,7 @@ async function saveOcConfig() {
   } catch (e) {
     toast(t('保存失败: ') + (e.message || ''), 'error');
   }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 async function loadClineProxyConfig() {
@@ -3879,11 +3933,13 @@ async function loadClineProxyConfig() {
   } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 
-async function saveClineProxyConfig() {
+async function saveClineProxyConfig(btn) {
   const payload = {
     proxyStrategy: _('clineProxyStrategy').value,
     proxies: _('clineProxies').value.split('\n').map(s => s.trim()).filter(Boolean),
   };
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/cline-proxy/config/update', payload);
     _('clineProxySaveResult').innerHTML = '<span style="color:var(--green)">✓ ' + t('Cline 代理配置已保存') + '</span>';
@@ -3892,6 +3948,7 @@ async function saveClineProxyConfig() {
   } catch (e) {
     toast(t('保存失败: ') + (e.message || ''), 'error');
   }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 function showModelSyncModal(res) {
@@ -3916,10 +3973,12 @@ function closeModelSyncModal() {
   if (ov) ov.style.display = 'none';
 }
 
-async function addModel() {
+async function addModel(btn) {
   const id = _('newModelId').value.trim();
   const cost = _('newModelCost').value;
   if (!id) { toast(t('请输入模型 ID'), 'error'); return; }
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('添加中...'); }
   try {
     await api('POST', '/models/add', { id, cost });
     toast(t('模型已添加: ') + id, 'success');
@@ -3927,6 +3986,7 @@ async function addModel() {
     await loadModels();
     await loadConfig();
   } catch (e) { toast(t('添加失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 async function deleteModel(id) {
