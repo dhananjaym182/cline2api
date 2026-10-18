@@ -2082,7 +2082,7 @@ async function loadStats() {
     const fillIfIdle = (id, val) => { const el = _(id); if (el && document.activeElement !== el && !el.dataset.dirty) el.value = val; };
     if (s.strategy) fillIfIdle('settingStrategy', s.strategy);
     fillIfIdle('settingModelChain', (s.modelChain || []).join(', '));
-  } catch (e) { /* ignore */ }
+  } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 
 // ========== 账号管理 ==========
@@ -2811,7 +2811,7 @@ async function loadZenHeaders() {
     const c = d.data || {};
     const hdrs = c.zenHeaders || {};
     _('zenHeadersBulk').value = Object.entries(hdrs).map(([k, v]) => k + ': ' + v).join('\n');
-  } catch (e) { /* ignore */ }
+  } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 
 async function saveZenHeaders() {
@@ -2846,7 +2846,10 @@ async function loadProviders() {
               '<button class="btn btn-sm btn-danger" onclick=\'deleteProvider("' + p.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
         '</tr>'
       ).join('') + '</tbody></table>';
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    const box = _('providersList');
+    if (box) box.innerHTML = '<div class="empty" style="padding:10px;color:var(--text3)">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
+  }
 }
 
 // toggleProvider 快速切换 provider 启停（不打开编辑表单）：拉取最新配置，
@@ -3830,7 +3833,7 @@ async function loadOcConfig() {
     _('ocProxyCooldowns').textContent = entries.length
       ? entries.map(([p, until]) => maskProxyForDisplay(p) + ' → ' + until).join('; ')
       : t('无冷却');
-  } catch (e) { /* ignore */ }
+  } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 
 function maskProxyForDisplay(p) {
@@ -3873,7 +3876,7 @@ async function loadClineProxyConfig() {
     const c = d.data;
     _('clineProxyStrategy').value = c.proxyStrategy || 'round_robin';
     _('clineProxies').value = (c.proxies || []).join('\n');
-  } catch (e) { /* ignore */ }
+  } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 
 async function saveClineProxyConfig() {
@@ -4009,7 +4012,7 @@ async function loadConfig() {
         '</tr>'
       ).join('');
     }
-  } catch (e) { /* ignore */ }
+  } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 
 // ========== 请求日志 ==========
