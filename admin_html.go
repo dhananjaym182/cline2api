@@ -2545,9 +2545,11 @@ async function startOAuth() {
     u.href = '#';
     u.onclick = async function(e) { e.preventDefault(); await openExternal(s.verificationUri); };
     _('oauthUserCode').textContent = s.userCode;
+    let pollFails = 0;
     const poll = setInterval(async () => {
       try {
         const r = await api('GET', '/oauth/status?sessionId=' + s.sessionId);
+        pollFails = 0;
         if (r.data.done) {
           clearInterval(poll);
           btn.disabled = false;
@@ -2563,7 +2565,17 @@ async function startOAuth() {
             toast(t('OAuth 失败'), 'error');
           }
         }
-      } catch(e) {}
+      } catch(e) {
+        // 连续 3 次轮询失败视为会话失效：停止轮询、恢复按钮并提示一次（不逐次 toast，避免刷屏）
+        pollFails++;
+        if (pollFails >= 3) {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>' + t('开始 OAuth 登录');
+          _('oauthStatus').textContent = t('错误: ') + e.message;
+          toast(t('OAuth 失败: ') + e.message, 'error');
+        }
+      }
     }, 2000);
   } catch (e) {
     btn.disabled = false;
@@ -2993,7 +3005,7 @@ async function testProvider() {
       const list = d.data.providers || [];
       const mine = list.filter(p => p.name === _('provName').value.trim());
       if (mine.length) testProviderById(mine[0].id);
-    } catch (e) {}
+    } catch (e) { _('provTestResult').innerHTML = '<span style="color:var(--red)">✗ ' + esc(e.message || '') + '</span>'; }
   }, 400);
 }
 
@@ -3011,7 +3023,10 @@ async function loadProviderPresets() {
       '<div style="font-size:11px;color:var(--text3);margin-top:8px">🆓 = 提供免费额度（需自行注册 API Key）</div>';
     box.style.display = '';
     box.dataset.presets = JSON.stringify(presets);
-  } catch (e) {}
+  } catch (e) {
+    box.innerHTML = '<div class="empty">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
+    box.style.display = '';
+  }
 }
 
 function applyPreset(key) {
