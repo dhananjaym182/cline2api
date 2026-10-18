@@ -1760,6 +1760,24 @@ const I18N = {
   '确定启用全部免费模型？': 'Enable all free models?',
   '确定停用全部付费模型？': 'Disable all paid models?',
   '没有符合条件的模型': 'No matching models',
+  // 补齐缺失的 t() 文案（此前 EN 模式回落为中文）
+  ' 个': ' failed',
+  ' 个请求头': ' headers',
+  'Provider 已保存': 'Provider saved',
+  'Provider 未找到': 'Provider not found',
+  '冷却 · 剩余 ': 'Cooldown · remaining ',
+  '已保存 ': 'Saved ',
+  '已删除': 'Deleted',
+  '已填充预设，请补 API Key 和模型 ID': 'Preset applied; add the API Key and model ID',
+  '新密钥已生成（点击复制）': 'New key generated (click to copy)',
+  '暂无 API 密钥': 'No API keys yet',
+  '暂无请求日志': 'No request logs yet',
+  '最后使用：': 'Last used: ',
+  '模型同步失败': 'Model sync failed',
+  '添加你的第一个 Cline 账号': 'Add your first Cline account',
+  '点击预设快速填充': 'Click a preset to fill these in',
+  '确定删除该 Provider？': 'Delete this Provider?',
+  '（无可用模型）': '(no models available)',
 };
 let LANG = 'zh';
 const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
