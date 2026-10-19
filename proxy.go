@@ -596,6 +596,15 @@ func startProxy(host string, port int) error {
 				log.Printf("  chat %s", out.note)
 			}
 			resp, err := callZenAPI(params, isStream)
+			// 上游返回「上下文超限」400：压缩后重试一次，避免 Claude Code 大上下文直接失败
+			if err != nil && isContextLengthError(err) {
+				log.Printf("  chat: context length exceeded, compacting and retrying")
+				out2 := fallbackTruncate(params, zm)
+				if out2.changed {
+					log.Printf("  chat %s", out2.note)
+					resp, err = callZenAPI(params, isStream)
+				}
+			}
 			if err != nil {
 				// zen 故障转移到 Cline 池：先截短超长工具名（Meta 后端硬限 ≤64）
 				reqLog.toolNames = clampParamsToolNames(params)
@@ -690,6 +699,17 @@ func startProxy(host string, port int) error {
 	})
 	mux.HandleFunc("/v1/messages", anthropicHandler)
 	mux.HandleFunc("/messages", anthropicHandler)
+
+	// Anthropic Messages API token counting (polyfilled)
+	countTokensHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		handleAnthropicCountTokens(w, r)
+	})
+	mux.HandleFunc("/v1/messages/count_tokens", countTokensHandler)
+	mux.HandleFunc("/messages/count_tokens", countTokensHandler)
 
 	// OpenAI Responses API support（所有上游：zen 免费模型 + Cline 账号池）
 	responsesHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
@@ -2178,8 +2198,9 @@ type anthropicReq struct {
 	Thinking    json.RawMessage `json:"thinking,omitempty"`
 	Tools       json.RawMessage `json:"tools,omitempty"`
 	ToolChoice  json.RawMessage `json:"tool_choice,omitempty"`
-	Metadata    json.RawMessage `json:"metadata,omitempty"`
-	Extra       map[string]any  `json:"-"`
+	Metadata           json.RawMessage `json:"metadata,omitempty"`
+	ContextManagement  json.RawMessage `json:"context_management,omitempty"`
+	Extra              map[string]any  `json:"-"`
 }
 
 func loadOverrideContent() string {
@@ -2353,6 +2374,15 @@ func anthropicToOpenAI(req anthropicReq) map[string]any {
 							},
 						}
 						toolCalls = append(toolCalls, tc)
+					case "compaction":
+						// Preserve prior compaction blocks as a summary system message
+						// so findExistingSummary / compaction recognition works.
+						if c, ok := b["content"].(string); ok && c != "" {
+							msgs = append(msgs, map[string]any{
+								"role":    "system",
+								"content": "[Conversation Summary]\n" + c,
+							})
+						}
 					case "tool_result":
 						trContent := b["content"]
 						if _, isStr := trContent.(string); !isStr && trContent != nil {
@@ -2584,6 +2614,83 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 
 	reqLog := RequestLog{StartedAt: time.Now(), Protocol: "anthropic", Model: req.Model, Stream: req.Stream}
 
+	// Context management (Anthropic context_management edits) — polyfill.
+	// Inspected before routing so compaction can rewrite openAIReq["messages"].
+	var cmResult *CMResult
+	cmPaused := false
+	var cmCompactionSummary string
+	var cmApplied []CMAppliedEdit
+	if len(req.ContextManagement) > 0 {
+		res, err := applyContextManagement(r.Context(), req, openAIReq)
+		if err != nil {
+			msg := err.Error()
+			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"message": msg, "type": "invalid_request_error"}})
+			return
+		}
+		cmResult = res
+		if res != nil {
+			if res.AppliedEdits != nil {
+				cmApplied = res.AppliedEdits
+			} else {
+				cmApplied = []CMAppliedEdit{}
+			}
+			if res.Compacted {
+				cmCompactionSummary = res.Summary
+				cmPaused = res.Paused
+			}
+		}
+	}
+
+	// Paused compaction: return compaction-only response, no upstream call.
+	if cmPaused {
+		if req.Stream {
+			sw := newSSEWriter(w)
+			sw.start()
+			msgID := "msg_" + fmt.Sprintf("%x", reqLog.StartedAt.UnixMilli())
+			emit := func(event string, data any) {
+				d, _ := json.Marshal(data)
+				sw.write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(d))))
+			}
+			if !sw.envelope {
+				sw.envelope = true
+				emit("message_start", map[string]any{
+					"type": "message_start",
+					"message": map[string]any{
+						"id": msgID, "type": "message", "role": "assistant",
+						"content": []any{}, "model": req.Model, "stop_reason": nil,
+					},
+				})
+			}
+			sw.write([]byte(": ping\n\n"))
+			if !sw.compactionEmitted {
+				sw.compactionEmitted = true
+				emitCompactionBlock(sw, cmCompactionSummary)
+			}
+			emit("message_delta", map[string]any{
+				"type": "message_delta",
+				"delta": map[string]any{"stop_reason": "compaction", "stop_sequence": nil},
+				"usage": map[string]any{"output_tokens": 0},
+				"context_management": cmContextManagementResponse(cmApplied),
+			})
+			emit("message_stop", map[string]any{"type": "message_stop"})
+			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":      "msg_" + fmt.Sprintf("%x", reqLog.StartedAt.UnixMilli()),
+			"type":    "message",
+			"role":    "assistant",
+			"content": []any{map[string]any{"type": "compaction", "content": cmCompactionSummary}},
+			"model":   req.Model,
+			"stop_reason": "compaction",
+			"usage": map[string]any{"input_tokens": 0, "output_tokens": 0},
+			"context_management": cmContextManagementResponse(cmApplied),
+		})
+		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
+		return
+	}
+
 	// 管理员手动停用的模型在入口直接拒绝（不进列表，也不可点名调用）
 	if req.Model != "" && isModelDisabled(req.Model) {
 		msg := fmt.Sprintf("model %q is disabled", req.Model)
@@ -2644,6 +2751,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		restoreToolCallsInResponse(out, reqLog.toolNames)
 		anthropicResp := openAIToAnthropic(out)
+		applyCMToResponse(anthropicResp, cmResult)
 		if hasToolUseBlocks(anthropicResp["content"]) {
 			anthropicResp["stop_reason"] = "tool_use"
 		}
@@ -2668,6 +2776,15 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			log.Printf("  anthropic %s", out.note)
 		}
 		resp, err := callZenAPI(openAIReq, req.Stream)
+		// 上游返回「上下文超限」400：压缩后重试一次
+		if err != nil && isContextLengthError(err) {
+			log.Printf("  anthropic: context length exceeded, compacting and retrying")
+			out2 := fallbackTruncate(openAIReq, zm)
+			if out2.changed {
+				log.Printf("  anthropic %s", out2.note)
+				resp, err = callZenAPI(openAIReq, req.Stream)
+			}
+		}
 		if err != nil {
 			// zen 故障转移到 Cline 池：先截短超长工具名（Meta 后端硬限 ≤64）
 			reqLog.toolNames = clampParamsToolNames(openAIReq)
@@ -2686,7 +2803,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 					if req.Stream {
 						sw := newSSEWriter(w)
 						// 这条降级路径没有重试，所以用宽容的上限，尽量把慢但能出的流交给客户端。
-						if !handleAnthropicStream(r.Context(), sw, fbResp, fbAcc, &reqLog, lastAttemptFirstContentTimeout) {
+						if !handleAnthropicStream(r.Context(), sw, fbResp, fbAcc, &reqLog, lastAttemptFirstContentTimeout, cmCompactionSummary, cmApplied) {
 							log.Printf("  anthropic stream: failover upstream failed before any content")
 							finishAnthropicStreamFailure(sw, w, &reqLog, http.StatusBadGateway,
 								"stream failed before first token", "upstream stream failed before first token")
@@ -2706,6 +2823,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 						finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 						restoreToolCallsInResponse(out2, reqLog.toolNames)
 						anthropicResp := openAIToAnthropic(out2)
+						applyCMToResponse(anthropicResp, cmResult)
 						if hasToolUseBlocks(anthropicResp["content"]) {
 							anthropicResp["stop_reason"] = "tool_use"
 						}
@@ -2728,7 +2846,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		if req.Stream {
 			sw := newSSEWriter(w)
 			// 同样是单次尝试（无重试），用宽容的上限。
-			if !handleAnthropicStream(r.Context(), sw, resp, nil, &reqLog, lastAttemptFirstContentTimeout) {
+			if !handleAnthropicStream(r.Context(), sw, resp, nil, &reqLog, lastAttemptFirstContentTimeout, cmCompactionSummary, cmApplied) {
 				log.Printf("  anthropic stream: zen upstream failed before any content")
 				finishAnthropicStreamFailure(sw, w, &reqLog, http.StatusBadGateway,
 					"stream failed before first token", "zen stream failed before first token")
@@ -2746,6 +2864,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			usage := parseTokenUsage(out2["usage"])
 			finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 			anthropicResp := openAIToAnthropic(out2)
+			applyCMToResponse(anthropicResp, cmResult)
 			if hasToolUseBlocks(anthropicResp["content"]) {
 				anthropicResp["stop_reason"] = "tool_use"
 			}
@@ -2782,7 +2901,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 				stampUpstream(&reqLog, openAIReq) // 归因实际服务方（provider / opencode / cline）
 			}
 			return resp, acc, err
-		}, &reqLog)
+		}, &reqLog, cmCompactionSummary, cmApplied)
 		return
 	}
 
@@ -2833,6 +2952,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		restoreToolCallsInResponse(out, reqLog.toolNames)
 		anthropicResp := openAIToAnthropic(out)
 
+		applyCMToResponse(anthropicResp, cmResult)
 		if hasToolUseBlocks(anthropicResp["content"]) {
 			anthropicResp["stop_reason"] = "tool_use"
 		}
@@ -2874,10 +2994,11 @@ const streamFailoverCooldown = 2 * time.Minute
 //
 // 同时用 started 记录「是否已有字节发出」，供调用方决定重试用 JSON 还是带内 error。
 type sseWriter struct {
-	w        http.ResponseWriter
-	flusher  http.Flusher
-	started  bool // 响应头已发出
-	envelope bool // message_start 已发出（跨预提交重试只发一次）
+	w                http.ResponseWriter
+	flusher          http.Flusher
+	started          bool // 响应头已发出
+	envelope         bool // message_start 已发出（跨预提交重试只发一次）
+	compactionEmitted bool // compaction block already emitted (avoid duplicate on retry)
 }
 
 func newSSEWriter(w http.ResponseWriter) *sseWriter {
@@ -3013,7 +3134,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 			Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider)})
 		applyComboLog(reqLog, combo, trace, c.model)
 
-		if handleAnthropicStream(ctx, sw, resp, acc, reqLog, firstContentTimeoutForAttempt(idx+1, len(cands))) {
+		if handleAnthropicStream(ctx, sw, resp, acc, reqLog, firstContentTimeoutForAttempt(idx+1, len(cands)), "", nil) {
 			return // 已交付内容 / 已完整收尾（含带内 error）
 		}
 		resp.Body.Close()
@@ -3041,7 +3162,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		"combo stream failed before first token", "upstream stream failed before first token")
 }
 
-func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch func() (*http.Response, *Account, error), reqLog *RequestLog) {
+func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch func() (*http.Response, *Account, error), reqLog *RequestLog, compactionSummary string, compactionApplied []CMAppliedEdit) {
 	sw := newSSEWriter(w)
 	// 尝试次数不超过降级链上的模型数：每个模型只给一次机会。
 	maxAttempts := maxStreamAttempts
@@ -3062,7 +3183,7 @@ func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch 
 			reqLog.AccountID = acc.AccountID
 			reqLog.AccountEmail = acc.Email
 		}
-		if handleAnthropicStream(ctx, sw, resp, acc, reqLog, firstContentTimeoutForAttempt(attempt, maxAttempts)) {
+		if handleAnthropicStream(ctx, sw, resp, acc, reqLog, firstContentTimeoutForAttempt(attempt, maxAttempts), compactionSummary, compactionApplied) {
 			return
 		}
 		resp.Body.Close()
@@ -3116,7 +3237,7 @@ func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch 
 //
 // 返回 true 表示客户端响应已完整处理（正常收尾或已发出 error 事件）；
 // 返回 false 表示上游尚未产出任何内容 —— 调用方重试，或用 sw.started 判断后发带内 error。
-func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Response, acc *Account, reqLog *RequestLog, firstContentTimeout time.Duration) bool {
+func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Response, acc *Account, reqLog *RequestLog, firstContentTimeout time.Duration, compactionSummary string, compactionApplied []CMAppliedEdit) bool {
 	if upstream.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(upstream.Body, 2048))
 		upstream.Body.Close()
@@ -3165,6 +3286,9 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 	stopReason := "end_turn"
 	textIndex := new(int)
 	*textIndex = -1
+	if compactionSummary != "" {
+		*textIndex = 0
+	}
 	hasText := false
 	sawNamedTool := false
 	sawThinking := false
@@ -3201,6 +3325,11 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 	// 接通即写一个注释行：从第 0 秒起就有字节流出（Cloudflare 不会 524），
 	// 但客户端的事件级看门狗不受影响 —— 这段等待若是白等，客户端会按自己的节奏超时重连。
 	sw.write([]byte(": ping\n\n"))
+
+	if compactionSummary != "" && !sw.compactionEmitted {
+		sw.compactionEmitted = true
+		emitCompactionBlock(sw, compactionSummary)
+	}
 
 	// commit：上游首条有效数据行到达，开始实时转发（信封已提前发送）。
 	// committed=true 后本次尝试不再重试，只能实时转发或发带内 error。
@@ -3535,7 +3664,7 @@ L:
 		}
 	}
 
-	emit("message_delta", map[string]any{
+	msgDelta := map[string]any{
 		"type": "message_delta",
 		"delta": map[string]any{
 			"stop_reason":   stopReason,
@@ -3544,7 +3673,11 @@ L:
 		"usage": map[string]any{
 			"output_tokens": latestUsage.Completion,
 		},
-	})
+	}
+	if compactionApplied != nil {
+		msgDelta["context_management"] = cmContextManagementResponse(compactionApplied)
+	}
+	emit("message_delta", msgDelta)
 	recordTokenUsage(acc, reqLog.Model, latestUsage)
 	finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, true, "")
 

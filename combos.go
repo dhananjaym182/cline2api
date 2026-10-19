@@ -690,6 +690,16 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 			}
 		}
 		resp, err := callZenAPI(ep, stream)
+		// 上游返回「上下文超限」400：压缩后重试一次
+		if err != nil && isContextLengthError(err) {
+			if zm, ok := resolveZenInfo(model); ok {
+				log.Printf("  combo: context length exceeded, compacting and retrying")
+				if out := fallbackTruncate(ep, zm); out.changed {
+					log.Printf("  combo %s", out.note)
+					resp, err = callZenAPI(ep, stream)
+				}
+			}
+		}
 		if err != nil {
 			return nil, nil, upstreamOpenCode, err
 		}

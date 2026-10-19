@@ -494,3 +494,17 @@ func fallbackTruncate(params map[string]any, zm Model) compactOutcome {
 	params["messages"] = out
 	return compactOutcome{changed: true, note: "[compacted via truncation]"}
 }
+
+// isContextLengthError reports whether err is an upstream 400 indicating the
+// request exceeded the model's maximum context window.
+func isContextLengthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "context length") ||
+		strings.Contains(msg, "maximum context") ||
+		strings.Contains(msg, "context window") ||
+		strings.Contains(msg, "too many tokens") ||
+		strings.Contains(msg, "token limit")
+}

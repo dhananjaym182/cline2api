@@ -1137,7 +1137,7 @@ func TestHandleAnthropicStreamPreservesUpstreamModel(t *testing.T) {
 	reqLog := RequestLog{ID: "anthropic-stream-model", Model: "google/gemini-3.8-flash", StartedAt: time.Now()}
 
 	sw := newSSEWriter(recorder)
-	handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second)
+	handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second, "", nil)
 
 	body := recorder.Body.String()
 	if !strings.Contains(body, `"model":"google/gemini-3.8-flash"`) {
@@ -1170,7 +1170,7 @@ func TestHandleAnthropicStreamFallsBackOnFirstPayloadWithoutModel(t *testing.T) 
 	reqLog := RequestLog{ID: "anthropic-stream-fallback", Model: "requested-model", StartedAt: time.Now()}
 
 	sw := newSSEWriter(recorder)
-	handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second)
+	handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second, "", nil)
 
 	body := recorder.Body.String()
 	if strings.Count(body, "event: message_start") != 1 {
@@ -1203,7 +1203,7 @@ func TestHandleAnthropicStreamFlushesHeadersBeforeFirstPayload(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		sw := newSSEWriter(recorder)
-		handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second)
+		handleAnthropicStream(context.Background(), sw, upstream, nil, &reqLog, 5*time.Second, "", nil)
 		close(done)
 	}()
 

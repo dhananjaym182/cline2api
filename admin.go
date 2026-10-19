@@ -268,6 +268,9 @@ func handleAdminPassword(w http.ResponseWriter, r *http.Request) {
 func adminStaticHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/admin/" || r.URL.Path == "/admin" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// 管理页随二进制整版发布：禁止浏览器缓存，避免升级后停在旧版 UI
+		w.Header().Set("Cache-Control", "no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(adminHTML))
 		return

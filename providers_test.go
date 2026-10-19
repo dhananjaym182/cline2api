@@ -149,3 +149,21 @@ func TestProviderPrioritySelection(t *testing.T) {
 		t.Fatalf("after cooldown want Low, got %+v", p)
 	}
 }
+
+// resetRoutingState 清空粘贴会话 / 实测成绩 / 预算计数 / provider 冷却
+// 四张路由痕迹表。
+func resetRoutingState() {
+	stickyMu.Lock()
+	stickySessions = map[string]stickyPin{}
+	stickyMu.Unlock()
+	scoreMu.Lock()
+	providerScores = map[string]*providerScore{}
+	scoreMu.Unlock()
+	budgetMu.Lock()
+	providerRPM = map[string][]time.Time{}
+	providerDaily = map[string]map[string]int64{}
+	budgetMu.Unlock()
+	providersMu.Lock()
+	providerCooldowns = map[string]time.Time{}
+	providersMu.Unlock()
+}

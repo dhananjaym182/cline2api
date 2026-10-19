@@ -1289,6 +1289,28 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
   <div id="modelSyncModal" style="width:min(480px,calc(100vw - 40px));padding:24px;background:var(--surface);border-radius:14px;border:1px solid var(--border2);box-shadow:0 10px 40px rgba(15,23,42,0.2)"></div>
 </div>
 
+      <div id="modelMetaEditor" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center;padding:20px">
+        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:20px;max-width:500px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+        <div class="form-row">
+          <div class="field"><label>模型 ID</label><input type="text" id="mmId" disabled style="font-family:ui-monospace,monospace"></div>
+          <div class="field"><label>上下文窗口 (token)</label><input type="number" id="mmCtx" value="200000" min="1000" max="2000000"></div>
+          <div class="field"><label>最大输出 (token)</label><input type="number" id="mmOut" value="32768" min="256" max="200000"></div>
+        </div>
+        <div class="form-actions" style="margin-top:10px">
+          <button class="btn btn-sm btn-primary" onclick="saveModelMeta(this)">保存</button>
+          <button class="btn btn-sm" onclick="hideModelMetaEditor()">取消</button>
+        </div>
+        </div>
+      </div>
+      <div id="confirmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center">
+        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:20px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+          <div id="confirmMsg" style="font-size:14px;margin-bottom:16px;white-space:pre-wrap"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm" onclick="resolveConfirm(false)">取消</button>
+            <button class="btn btn-sm btn-danger" onclick="resolveConfirm(true)">确认</button>
+          </div>
+        </div>
+      </div>
 <script>
 
 // ===== i18n =====
@@ -2392,7 +2414,7 @@ async function exportSelectedAccounts() {
 async function resetSelectedAccounts(btn) {
   const ids = [..._checkedAccounts];
   if (!ids.length) { toast(t('请先勾选要重置的账号'), 'info'); return; }
-  if (!confirm(t('确认重置选中的 ') + ids.length + t(' 个账号？（清除冷却与失败计数）'))) return;
+  if (!(await showConfirm(t('确认重置选中的 ') + ids.length + t(' 个账号？（清除冷却与失败计数）')))) return;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('重置中...'); }
   let ok = 0, fail = 0;
@@ -2410,7 +2432,7 @@ async function resetSelectedAccounts(btn) {
 async function deleteSelectedAccounts(btn) {
   const ids = [..._checkedAccounts];
   if (!ids.length) { toast(t('请先勾选要删除的账号'), 'info'); return; }
-  if (!confirm(t('确认删除选中的 ') + ids.length + t(' 个账号？此操作不可恢复'))) return;
+  if (!(await showConfirm(t('确认删除选中的 ') + ids.length + t(' 个账号？此操作不可恢复')))) return;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   let ok = 0, fail = 0;
@@ -2488,7 +2510,7 @@ async function testAllAccounts(btn) {
 }
 
 async function deleteAccount(id, btn) {
-  if (!confirm(t('确定删除此账号？'))) return;
+  if (!(await showConfirm(t('确定删除此账号？')))) return;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
@@ -2500,7 +2522,7 @@ async function deleteAccount(id, btn) {
 }
 
 async function resetAccount(id) {
-  if (!confirm(t('确定重置此账号？将恢复为活跃状态并刷新 Token，保留历史统计。'))) return;
+  if (!(await showConfirm(t('确定重置此账号？将恢复为活跃状态并刷新 Token，保留历史统计。')))) return;
   try {
     await api('POST', '/accounts/reset', { accountId: id });
     toast(t('账号已重置'), 'success');
@@ -2509,7 +2531,7 @@ async function resetAccount(id) {
 }
 
 async function deleteAllAccounts() {
-  if (!confirm(t('⚠️ 确定删除所有账号？不可撤销！'))) return;
+  if (!(await showConfirm(t('⚠️ 确定删除所有账号？不可撤销！')))) return;
   try {
     await api('POST', '/accounts/delete-all', {});
     toast(t('全部账号已删除'), 'success');
@@ -2722,7 +2744,7 @@ async function generateKey(btn) {
 }
 
 async function deleteKey(key, btn) {
-  if (!confirm(t('确定删除此密钥？'))) return;
+  if (!(await showConfirm(t('确定删除此密钥？')))) return;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
@@ -2734,7 +2756,7 @@ async function deleteKey(key, btn) {
 }
 
 async function deleteAllKeys() {
-  if (!confirm(t('确定删除所有 API 密钥？'))) return;
+  if (!(await showConfirm(t('确定删除所有 API 密钥？')))) return;
   try {
     const d = await api('GET', '/keys');
     const keys = d.data.keys || [];
@@ -2977,7 +2999,7 @@ function editProvider(id) {
 }
 
 async function deleteProvider(id) {
-  if (!confirm(t('确定删除该 Provider？'))) return;
+  if (!(await showConfirm(t('确定删除该 Provider？')))) return;
   try {
     await api('POST', '/providers/delete', { id });
     toast(t('已删除'), 'success');
@@ -3442,7 +3464,7 @@ async function toggleCombo(id, enabled, btn) {
 }
 
 async function deleteCombo(id, btn) {
-  if (!confirm(t('确定删除该组合？'))) return;
+  if (!(await showConfirm(t('确定删除该组合？')))) return;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
@@ -3754,7 +3776,7 @@ async function toggleModelsBatch(groupKey, disabled) {
   const ids = mergedRowsForGroupKey(groupKey).map(m => m.id);
   if (!ids.length) return;
   const confirmMsg = disabled ? t('确定停用该分组全部模型？') : t('确定启用该分组全部模型？');
-  if (!window.confirm(confirmMsg + ' (' + ids.length + ')')) return;
+  if (!(await showConfirm(confirmMsg + ' (' + ids.length + ')'))) return;
   try {
     await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
     toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
@@ -3783,7 +3805,7 @@ async function bulkModelToggle(mode) {
   }
   const ids = rows.map(m => m.id);
   if (!ids.length) { toast(t('没有符合条件的模型'), 'info'); return; }
-  if (!window.confirm(confirmMsg + ' (' + ids.length + ')')) return;
+  if (!(await showConfirm(confirmMsg + ' (' + ids.length + ')'))) return;
   if (btn) btn.disabled = true;
   try {
     await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
@@ -3803,16 +3825,46 @@ function toggleAddModelRow() {
 }
 
 // 修改模型上下文/最大输出：压缩阈值按此计算，设置后 zen 同步保留该值
-async function editModelMeta(id, ctx, out) {
-  const c = prompt(t('上下文窗口 (token)') + ' - ' + id, ctx || 1048576);
-  if (c === null) return;
-  const o = prompt(t('最大输出 (token)'), out || 32768);
-  if (o === null) return;
+function showModelMetaEditor(id, ctx, out) {
+  _('mmId').value = id;
+  _('mmCtx').value = ctx || 200000;
+  _('mmOut').value = out || 32768;
+  _('modelMetaEditor').style.display = 'flex';
+  try { _('modelMetaEditor').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+}
+
+function hideModelMetaEditor() { _('modelMetaEditor').style.display = 'none'; }
+
+async function saveModelMeta(btn) {
+  const id = _('mmId').value;
+  const c = parseInt(_('mmCtx').value, 10) || 0;
+  const o = parseInt(_('mmOut').value, 10) || 0;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
-    await api('POST', '/models/context', { id: id, context: parseInt(c, 10) || 0, output: parseInt(o, 10) || 0 });
-    toast(t('已保存') + ': ' + id + ' ctx=' + formatTokenCount(parseInt(c, 10) || 0), 'success');
+    await api('POST', '/models/context', { id: id, context: c, output: o });
+    toast(t('已保存') + ': ' + id + ' ctx=' + formatTokenCount(c), 'success');
+    hideModelMetaEditor();
     await loadModels();
   } catch (e) { toast(t('保存失败') + ': ' + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
+}
+
+let _confirmResolve = null;
+function showConfirm(msg) {
+  return new Promise(resolve => {
+    _confirmResolve = resolve;
+    _('confirmMsg').textContent = msg;
+    _('confirmModal').style.display = 'flex';
+  });
+}
+function resolveConfirm(val) {
+  _('confirmModal').style.display = 'none';
+  if (_confirmResolve) { _confirmResolve(val); _confirmResolve = null; }
+}
+
+function editModelMeta(id, ctx, out) {
+  showModelMetaEditor(id, ctx, out);
 }
 
 // 模型分组渲染已迁移至 renderModelList（按提供商分组 + 筛选 + 批量启停）
@@ -4015,7 +4067,7 @@ async function addModel(btn) {
 }
 
 async function deleteModel(id) {
-  if (!confirm(t('确认删除模型 ') + id + ' ?')) return;
+  if (!(await showConfirm(t('确认删除模型 ') + id + ' ?'))) return;
   try {
     await api('POST', '/models/delete', { id });
     toast(t('模型已删除: ') + id, 'success');
