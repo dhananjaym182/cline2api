@@ -84,16 +84,16 @@ type zenSeedModel struct {
 // Context 默认 1M（2026-09 主流模型普遍 1M 上下文；压缩阈值按此计算，
 // 偏小会让压缩过早触发——曾导致 200K 默认值把 1M 模型压到几万 token）。
 var zenSeedModels = []zenSeedModel{
-	{ID: "deepseek-v4-flash-free", Aliases: []string{"deepseek-v4-flash", "deepseek-v4"}, Context: 1000000, Output: 128000},
-	{ID: "mimo-v2.6-flash-free", Aliases: []string{"mimo-v2.6-flash", "mimo-v2.6", "mimo"}, Context: 1000000, Output: 32000},
-	{ID: "mimo-v2.5-free", Aliases: []string{"mimo-v2.5"}, Context: 1000000, Output: 32000},
-	{ID: "ling-3.0-flash-fin-free", Aliases: []string{"ling-3.0-flash", "ling"}, Context: 1000000, Output: 32768},
-	{ID: "nemotron-3-ultra-free", Aliases: []string{"nemotron-3-ultra", "nemotron"}, Context: 1000000, Output: 128000},
-	{ID: "nemotron-3.5-lightning-free", Aliases: []string{"nemotron-3.5-lightning"}, Context: 1000000, Output: 32768},
-	{ID: "jev-1.13-free", Context: 1000000, Output: 32768},
-	{ID: "muse-spark-1.3-contributor-free", Context: 1000000, Output: 32768},
-	{ID: "muse-spark-1.2-contributor-free", Context: 1000000, Output: 32768},
-	{ID: "big-pickle", Context: 1000000, Output: 32000},
+	{ID: "deepseek-v4-flash-free", Aliases: []string{"deepseek-v4-flash", "deepseek-v4"}, Context: 200000, Output: 128000},
+	{ID: "mimo-v2.6-flash-free", Aliases: []string{"mimo-v2.6-flash", "mimo-v2.6", "mimo"}, Context: 200000, Output: 32000},
+	{ID: "mimo-v2.5-free", Aliases: []string{"mimo-v2.5"}, Context: 200000, Output: 32000},
+	{ID: "ling-3.0-flash-fin-free", Aliases: []string{"ling-3.0-flash", "ling"}, Context: 200000, Output: 32768},
+	{ID: "nemotron-3-ultra-free", Aliases: []string{"nemotron-3-ultra", "nemotron"}, Context: 200000, Output: 128000},
+	{ID: "nemotron-3.5-lightning-free", Aliases: []string{"nemotron-3.5-lightning"}, Context: 200000, Output: 32768},
+	{ID: "jev-1.13-free", Context: 200000, Output: 32768},
+	{ID: "muse-spark-1.3-contributor-free", Context: 200000, Output: 32768},
+	{ID: "muse-spark-1.2-contributor-free", Context: 200000, Output: 32768},
+	{ID: "big-pickle", Context: 200000, Output: 32000},
 }
 
 // builtinZenModels 把种子表转成 Model 条目（离线 fallback 用，Source="seed"）。
@@ -1239,7 +1239,7 @@ func syncZenModels() modelSyncResult {
 			}
 		}
 		if m.Context == 0 {
-			m.Context = 1000000
+			m.Context = 200000
 		}
 		if m.Output == 0 {
 			m.Output = 32768
