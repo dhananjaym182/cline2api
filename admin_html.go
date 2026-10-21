@@ -367,9 +367,14 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 .model-toolbar .field{min-width:0}
 /* 长文本稳健性：避免超长 URL / 模型 ID 撑破布局 */
 .section-desc,.combo-preview,.log-attempts li,.log-req-model{overflow-wrap:break-word}
-/* 弹层：统一遮罩模糊与阴影（登录 / 模型同步） */
+/* 弹层：统一遮罩模糊与阴影（登录 / 模型同步 / 确认 / 模型元信息 / 组合选择器） */
 #loginOverlay,#modelSyncOverlay{backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
+#modelMetaEditor,#confirmModal,#comboModelPicker{background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
 #modelSyncModal{border-radius:var(--radius);box-shadow:var(--shadow-lg)}
+
+/* 状态徽章：停用 = 中性灰（与 活跃/冷却/过期 同一视觉体系），不再借用日志红/绿 */
+.status.disabled{background:var(--surface2);color:var(--text3)}
+.status-dot.disabled{background:var(--text3)}
 /* 空 / 加载状态统一留白与行高 */
 .empty{padding:var(--sp-8) var(--sp-5);color:var(--text2);line-height:1.6}
 .empty-state{padding:var(--sp-8) var(--sp-6)}
@@ -494,6 +499,10 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span class="nav-label">仪表盘</span>
     </div>
+    <div class="nav-item" data-tab="logs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+      <span class="nav-label">请求日志</span>
+    </div>
   </div>
   <div class="nav-section">
     <div class="nav-section-label">账户</div>
@@ -504,10 +513,6 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     <div class="nav-item" data-tab="import">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <span class="nav-label">导入账号</span>
-    </div>
-    <div class="nav-item" data-tab="logs">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-      <span class="nav-label">请求日志</span>
     </div>
   </div>
   <div class="nav-section">
@@ -625,7 +630,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
       <button class="btn" onclick="refreshAllTokens(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新全部 Token</button>
       <button class="btn" onclick="document.getElementById('fileInput').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>从文件导入</button>
       <input type="file" id="fileInput" accept=".json,.txt" style="display:none" onchange="handleFileImport(event)">
-      <button class="btn" onclick="switchTab('security');switchPageSubTab('security','keys');generateKey(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>生成 API 密钥</button>
+      <button class="btn" onclick="switchTab('security');switchPageSubTab('security','keys')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>API 密钥</button>
     </div>
   </div>
 </div>
@@ -636,21 +641,24 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
       <div class="large-title">账号管理</div>
       <div class="large-subtitle">管理 Cline 账号池中的所有账号</div>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-sm" onclick="testAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>测试全部</button>
-      <button class="btn btn-sm" onclick="exportSelectedAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出选中<span id="selCount"></span></button>
-      <button class="btn btn-sm" onclick="resetSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>重置选中<span id="resetCount"></span></button>
-      <button class="btn btn-sm btn-danger" onclick="deleteSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除选中<span id="delCount"></span></button>
       <button class="btn btn-sm" onclick="exportAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出全部</button>
-      <button class="btn btn-primary btn-sm" onclick="switchTab('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
       <button class="btn btn-sm" onclick="loadAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+      <button class="btn btn-primary btn-sm" onclick="switchTab('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
     </div>
   </div>
   <div class="section">
     <div class="section-body flush">
-      <div style="display:flex;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border2)">
-        <input type="text" id="accSearch" placeholder="搜索邮箱..." oninput="onAccSearch(this.value)" style="flex:1;max-width:320px;padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border2)">
+        <input type="text" id="accSearch" placeholder="搜索邮箱..." oninput="onAccSearch(this.value)" style="flex:1;max-width:320px;min-width:0;padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px">
         <span id="accSearchCount" style="font-size:12px;color:var(--text3)"></span>
+        <!-- 勾选后可用的批量操作：集中在勾选区旁，表头只保留全局操作 -->
+        <span style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+          <button class="btn btn-sm" onclick="exportSelectedAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出选中<span id="selCount"></span></button>
+          <button class="btn btn-sm" onclick="resetSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>重置选中<span id="resetCount"></span></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除选中<span id="delCount"></span></button>
+        </span>
       </div>
       <table class="account-table">
         <thead>
@@ -934,7 +942,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         </div>
         <button class="btn btn-success" onclick="addModel(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
       </div>
-      <div id="modelsList" class="model-list">加载中...</div>
+      <div id="modelsList" class="model-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
     </div>
   </div>
   </div>
@@ -950,7 +958,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     <!-- 测试数据清理：暂无「清空全部组合」接口（/admin/api/combos/* 仅 list/save/delete/toggle/clone）。
          调试用组合请在列表中逐个 Delete 按钮删除；不影响的组合可先 toggle 停用保留配置。 -->
     <div class="section-body">
-      <div id="combosList">加载中...</div>
+      <div id="combosList"><div class="empty"><span class="loading"></span> 加载中...</div></div>
 
       <div id="comboEditor" style="display:none;margin-top:14px;border:1px solid var(--border2);border-radius:10px;padding:14px">
         <div class="form-row">
@@ -1321,8 +1329,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
   <div id="modelSyncModal" style="width:min(480px,calc(100vw - 40px));padding:24px;background:var(--surface);border-radius:14px;border:1px solid var(--border2);box-shadow:0 10px 40px rgba(15,23,42,0.2)"></div>
 </div>
 
-      <div id="modelMetaEditor" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center;padding:20px">
-        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:20px;max-width:500px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+      <div id="modelMetaEditor" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:500px;width:100%;box-shadow:var(--shadow-lg)">
         <div class="form-row">
           <div class="field"><label>模型 ID</label><input type="text" id="mmId" disabled style="font-family:ui-monospace,monospace"></div>
           <div class="field"><label>上下文窗口 (token)</label><input type="number" id="mmCtx" value="200000" min="1000" max="2000000"></div>
@@ -1334,8 +1342,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         </div>
         </div>
       </div>
-      <div id="confirmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center">
-        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:20px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+      <div id="confirmModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:420px;width:100%;box-shadow:var(--shadow-lg)">
           <div id="confirmMsg" style="font-size:14px;margin-bottom:16px;white-space:pre-wrap"></div>
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn btn-sm" onclick="resolveConfirm(false)">取消</button>
@@ -1344,8 +1352,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         </div>
       </div>
       <!-- 组合编辑：从模型目录多选并追加（也支持一键替换整组条目） -->
-      <div id="comboModelPicker" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeComboModelPicker()">
-        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:20px;max-width:560px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+      <div id="comboModelPicker" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeComboModelPicker()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:560px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
           <div style="font-size:15px;font-weight:600;color:var(--text)">选择模型</div>
           <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">勾选多个模型；确认后按勾选顺序追加到组合，勾选顺序即尝试优先级。</div>
           <div style="display:flex;gap:8px;align-items:center">
@@ -1353,7 +1361,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
             <button class="btn btn-sm" onclick="comboPickerSelectAllShown()">全选</button>
             <button class="btn btn-sm" onclick="comboPickerClear()">清空</button>
           </div>
-          <div id="comboPickerList" class="combo-picker-list">加载中...</div>
+          <div id="comboPickerList" class="combo-picker-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
           <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
             <span id="comboPickerCount" style="font-size:12px;color:var(--text2);margin-right:auto"></span>
             <button class="btn btn-sm" onclick="closeComboModelPicker()">取消</button>
@@ -1662,6 +1670,7 @@ const I18N = {
   '启用': 'Enable',
   '停用': 'Disable',
   'API Key': 'API Key',
+  'API 密钥': 'API Keys',
   'Base URL': 'Base URL',
   '最大并发': 'Max concurrency',
   '重试次数': 'Retries',
@@ -2524,6 +2533,19 @@ async function deleteSelectedAccounts(btn) {
 // 统一空值占位（缺失/未知）
 function emptyCell() { return '<span style="color:var(--text3)">-</span>'; }
 
+// 统一空状态：图标 + 文案（与密钥页 empty-state 同款视觉）
+function listEmptyState(icon, msg) {
+  return '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + icon + '</svg></div>' + msg + '</div>';
+}
+
+// 统一加载占位：spinner + 文案（模型/组合等块状列表与表格行统一）
+function listLoading() { return '<div class="empty"><span class="loading"></span> ' + t('加载中...') + '</div>'; }
+
+// 列表空状态图标（复用各区块标题图标）
+const ICON_COMBOS = '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>';
+const ICON_MODELS = '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/>';
+const ICON_PROVIDERS = '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>';
+
 // 统一日期时间格式化：默认单行；twoLine 仅账号表窄列使用（10% 固定宽 + nowrap，单行会溢出/折行）
 function formatDateTime(v, twoLine) {
   if (!v) return emptyCell();
@@ -2993,7 +3015,7 @@ async function loadProviders() {
     const d = await api('GET', '/providers');
     const list = d.data.providers || [];
     const box = _('providersList');
-    if (!list.length) { box.innerHTML = '<div class="empty" style="padding:10px;color:var(--text3)">' + t('暂无自定义 Provider') + '</div>'; return; }
+    if (!list.length) { box.innerHTML = listEmptyState(ICON_PROVIDERS, t('暂无自定义 Provider')); return; }
     box.innerHTML = '<table class="action-table"><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th class="num-col">优先级</th><th>状态</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
       list.map(p =>
         '<tr>' +
@@ -3001,7 +3023,9 @@ async function loadProviders() {
           '<td class="mono" style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(p.baseURL) + '</td>' +
           '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc((p.modelIds || []).join(', ')) + '</td>' +
           '<td class="num-col">' + p.priority + '</td>' +
-          '<td>' + (p.enabled ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--text3)">停用</span>') + '</td>' +
+          '<td>' + (p.enabled
+            ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
+            : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') + '</td>' +
           '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">编辑</button> ' +
               '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '")\'>测试</button> ' +
               '<button class="btn btn-sm" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ', this)\'>' + (p.enabled ? t('停用') : t('启用')) + '</button> ' +
@@ -3218,7 +3242,7 @@ function renderCombosList() {
   const box = _('combosList');
   if (!box) return;
   if (!_comboList.length) {
-    box.innerHTML = '<div class="empty">' + t('暂无模型组合') + '</div>';
+    box.innerHTML = listEmptyState(ICON_COMBOS, t('暂无模型组合'));
     return;
   }
   box.innerHTML = '<div class="combos-list"><table class="action-table"><thead><tr>' +
@@ -3229,8 +3253,8 @@ function renderCombosList() {
       const entries = c.entries || [];
       const enabledEntries = entries.filter(e => !e.disabled).length;
       const badge = c.enabled
-        ? '<span class="log-status ok">' + t('已启用') + '</span>'
-        : '<span class="log-status fail">' + t('已停用') + '</span>';
+        ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
+        : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>';
       const fb = c.emergencyFallback
         ? ' <span class="model-source-badge provider" title="' + t('允许跳出组合回退') + '">' + t('紧急回退') + '</span>'
         : '';
@@ -3979,12 +4003,12 @@ function renderModelList() {
   renderModelStats(merged);
   buildProviderOptions(merged);
   if (!merged.length) {
-    listEl.innerHTML = '<div class="empty">' + t('暂无模型') + '</div>';
+    listEl.innerHTML = listEmptyState(ICON_MODELS, t('暂无模型'));
     return;
   }
   const filtered = merged.filter(modelMatchesFilters);
   if (!filtered.length) {
-    listEl.innerHTML = '<div class="empty">' + t('无匹配模型') + '</div>';
+    listEl.innerHTML = listEmptyState(ICON_MODELS, t('无匹配模型'));
     return;
   }
   // 一级：来源；二级：厂商
@@ -4164,6 +4188,14 @@ function resolveConfirm(val) {
   _('confirmModal').style.display = 'none';
   if (_confirmResolve) { _confirmResolve(val); _confirmResolve = null; }
 }
+
+// Esc 逐层关闭弹层：确认 → 模型元信息 → 模型同步（组合选择器的搜索框自带 Esc 处理）
+document.addEventListener('keydown', e => {
+  if (!e || e.key !== 'Escape') return;
+  if (_('confirmModal') && _('confirmModal').style.display === 'flex') { resolveConfirm(false); return; }
+  if (_('modelMetaEditor') && _('modelMetaEditor').style.display === 'flex') { hideModelMetaEditor(); return; }
+  if (_('modelSyncOverlay') && _('modelSyncOverlay').style.display === 'flex') { closeModelSyncModal(); }
+});
 
 function editModelMeta(id, ctx, out) {
   showModelMetaEditor(id, ctx, out);
