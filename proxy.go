@@ -1121,7 +1121,55 @@ func buildUpstreamBody(params map[string]any, stream bool) map[string]any {
 		}
 	}
 
+	// 定稿前清洗 tools：null 可选字段会被部分上游网关硬拒 400（见函数注释）。
+	sanitizeToolsForUpstream(body)
+
 	return body
+}
+
+// sanitizeToolsForUpstream 在上游请求体最终定稿（发往任何网关）前清洗 tools 的
+// 可选字段：转换器曾把工具字段无条件拷贝，客户端缺省的可选字段会变成
+// "description": null，部分网关（Vercel/zen、Cline 免费链）对 null 硬拒
+// 400 "Invalid input: expected string, received null"。规则：
+//   - 嵌套 OpenAI 形态 {"function":{...}}：清洗 function 内的 description/parameters；
+//   - 扁平顶层形态（zen Responses）：同样清洗 description/parameters；
+//   - description 只保留非空字符串（null/空串一律删键）；
+//   - 仅当工具没有任何 name 时整条剔除。
+func sanitizeToolsForUpstream(body map[string]any) {
+	items, ok := body["tools"].([]any)
+	if !ok {
+		return
+	}
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		tm, ok := item.(map[string]any)
+		if !ok {
+			out = append(out, item)
+			continue
+		}
+		// 两种形态：嵌套 function（chat/completions）与扁平顶层（zen Responses）
+		target := tm
+		if fn, ok := tm["function"].(map[string]any); ok {
+			target = fn
+		}
+		if name, _ := target["name"].(string); name == "" {
+			continue // 无 name 的工具对任何上游都非法：整条剔除
+		}
+		sanitizeToolFields(target)
+		out = append(out, tm)
+	}
+	body["tools"] = out
+}
+
+// sanitizeToolFields 就地收敛单个工具定义的可选字段：description 只在非空字符串
+// 时保留（null/空串/缺席删键），parameters 只在为 null/缺席时删键（对象值原样下发）。
+func sanitizeToolFields(m map[string]any) {
+	if s, ok := m["description"].(string); !ok || s == "" {
+		delete(m, "description")
+	}
+	if m["parameters"] == nil {
+		delete(m, "parameters")
+	}
 }
 
 func clineHeaders(token, sessionID string) http.Header {
@@ -1172,6 +1220,25 @@ func clineErrorHTTPStatus(err error) int {
 		return http.StatusTooManyRequests
 	}
 	return http.StatusInternalServerError
+}
+
+// isDeterministicRequestError 判断 err 是否为「换账号/换模型重试也无法自愈」的
+// 上游确定性 400：invalid-request 语义（invalid_request_error 类型、invalid_request
+// 伪码、网关字段校验 "Invalid input"，如工具可选字段被序列化为 null）。
+// 上下文超限 400 显式排除（isContextLengthError）：那类错误有压缩+重试的自愈路径，
+// 必须保留现有的 truncate/retry 行为。限流 429/5xx 不在此列。
+func isDeterministicRequestError(err error) bool {
+	if err == nil || isContextLengthError(err) {
+		return false
+	}
+	var apiErr *clineAPIError
+	if !errors.As(err, &apiErr) || apiErr.statusCode != http.StatusBadRequest {
+		return false
+	}
+	msg := strings.ToLower(apiErr.message)
+	return strings.Contains(msg, "invalid_request_error") ||
+		strings.Contains(msg, "invalid_request") ||
+		strings.Contains(msg, "invalid input")
 }
 
 // servedByParam 是 callClineAPI 族回写在 params 上的「实际服务方」标记：
@@ -1590,6 +1657,11 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 				}
 				lastWas429 = true
 				continue
+			}
+			// 确定性 payload 400：链上其余模型会因同一非法请求体收到同一 400，
+			// 整条链直接放弃 —— 不再逐账号/逐模型空转注定失败的上游往返。
+			if isDeterministicRequestError(err) {
+				return nil, usedAcc, err
 			}
 			// 其他 API 错误（如上游 500）：换链内下一个模型降级
 			break
@@ -2277,14 +2349,19 @@ func anthropicToolsToOpenAI(tools []any) []any {
 				out = append(out, t)
 				continue
 			}
-			// Convert Anthropic format to OpenAI
+			// Convert Anthropic format to OpenAI. 客户端常缺省可选字段
+			// （如 websearch 无 description）：只拷贝存在的值，避免序列化成
+			// "description": null 被上游网关硬拒（400 Invalid input）。
+			fnMap := map[string]any{"name": tMap["name"]}
+			if d, _ := tMap["description"].(string); d != "" {
+				fnMap["description"] = d
+			}
+			if tMap["input_schema"] != nil {
+				fnMap["parameters"] = tMap["input_schema"]
+			}
 			oai := map[string]any{
-				"type": "function",
-				"function": map[string]any{
-					"name":        tMap["name"],
-					"description": tMap["description"],
-					"parameters":  tMap["input_schema"],
-				},
+				"type":     "function",
+				"function": fnMap,
 			}
 			out = append(out, oai)
 		}

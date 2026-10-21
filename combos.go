@@ -758,6 +758,12 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 		if errors.As(err, &accountErr) {
 			continue // token 失效等：换下一个账号
 		}
+		// 确定性 payload 400（invalid-request 语义，如工具可选字段 null 被网关硬拒）：
+		// 换账号不可能自愈，立即上抛 —— 不在账号池上空转注定失败的上游往返。
+		// （上下文超限 400 除外：runCombo 层有压缩+重试路径。）
+		if isDeterministicRequestError(err) {
+			return nil, usedAcc, upstreamCline, "", err
+		}
 		if apiErr, ok := err.(*clineAPIError); ok {
 			switch apiErr.statusCode {
 			case 402:

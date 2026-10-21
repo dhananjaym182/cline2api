@@ -738,6 +738,8 @@ func buildZenBody(params map[string]any, stream bool, anonymous bool) map[string
 	}
 	delete(body, "reasoning_effort")
 	delete(body, "reasoningEffort")
+	// 定稿前清洗 tools：null 可选字段会被上游网关硬拒 400（见 sanitizeToolsForUpstream）
+	sanitizeToolsForUpstream(body)
 	return body
 }
 
@@ -1440,12 +1442,16 @@ func buildZenResponsesBody(params map[string]any) map[string]any {
 			if fn == nil {
 				continue
 			}
-			flat = append(flat, map[string]any{
-				"type":        "function",
-				"name":        fn["name"],
-				"description": fn["description"],
-				"parameters":  fn["parameters"],
-			})
+			// description 仅在非空字符串时下发、parameters 仅在非 null 时下发：
+			// 上游网关对 "description": null / "parameters": null 硬拒 400
+			entry := map[string]any{"type": "function", "name": fn["name"]}
+			if d, _ := fn["description"].(string); d != "" {
+				entry["description"] = d
+			}
+			if fn["parameters"] != nil {
+				entry["parameters"] = fn["parameters"]
+			}
+			flat = append(flat, entry)
 		}
 		if len(flat) > 0 {
 			body["tools"] = flat
@@ -1524,6 +1530,8 @@ func buildZenResponsesBody(params map[string]any) map[string]any {
 		body["instructions"] = strings.Join(instr, "\n\n")
 	}
 	body["input"] = input
+	// 定稿前清洗 tools（扁平形态）：null 可选字段会被上游网关硬拒 400
+	sanitizeToolsForUpstream(body)
 	return body
 }
 

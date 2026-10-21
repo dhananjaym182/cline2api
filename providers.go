@@ -279,6 +279,9 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 		}
 	}
 
+	// 定稿前清洗 tools：null 可选字段会被部分网关硬拒 400（见 sanitizeToolsForUpstream）
+	sanitizeToolsForUpstream(body)
+
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal provider body: %w", err)
