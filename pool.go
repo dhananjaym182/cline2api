@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -41,6 +42,26 @@ var knownDataFiles = []string{
 // migrateOnce 保证旧数据迁移在进程生命周期内只执行一次。
 var migrateOnce sync.Once
 
+var (
+	testDataDirOnce sync.Once
+	// testDataDir 测试隔离的数据目录（惰性创建一次，进程内所有数据文件共用）。
+	testDataDir string
+)
+
+// testIsolatedDataDir 在 go test 运行时惰性创建一个全新的临时数据目录，
+// 所有数据文件统一重定向到这里，测试因此永远碰不到开发/生产环境的真实数据。
+func testIsolatedDataDir() string {
+	testDataDirOnce.Do(func() {
+		dir, err := os.MkdirTemp(os.TempDir(), "cline2api-test-data-")
+		if err != nil {
+			log.Printf("Failed to create isolated test data dir: %v", err)
+			return
+		}
+		testDataDir = dir
+	})
+	return testDataDir
+}
+
 // envDataDir 返回环境变量指定的数据目录（未设置返回空串），并确保目录存在。
 func envDataDir() string {
 	dir := strings.TrimSpace(os.Getenv(dataDirEnv))
@@ -59,10 +80,20 @@ func envDataDir() string {
 //     找到则用该路径（兼容旧版本在项目根目录存储的文件）；
 //     都找不到则回退到 exe 目录（首次运行在该位置创建）。
 func resolveDataPath(filename string) string {
-	// 0. 环境变量指定的数据目录（Docker 卷挂载点）
+	// 0. 环境变量指定的数据目录（Docker 卷挂载点）。显式设置优先级最高：
+	// go test 中也可用它把数据指向指定目录交互调试。
 	if dir := envDataDir(); dir != "" {
 		migrateOnce.Do(func() { migrateLegacyDataFiles(dir) })
 		return filepath.Join(dir, filename)
+	}
+	// 0.5 测试隔离：go test 且未显式设置 CLINE2API_DATA_DIR 时，把全部数据文件
+	// 重定向到一次性临时目录。真实事故：go test 的 fixture 曾把仓库根目录的
+	// live .cline-config.json 覆盖写坏（fixture 组合替换了用户的 premium-coding）。
+	// go build 的正式二进制不受影响（testing.Testing() 恒为 false）。
+	if testing.Testing() {
+		if dir := testIsolatedDataDir(); dir != "" {
+			return filepath.Join(dir, filename)
+		}
 	}
 	// 1. exe 所在目录
 	if exe, err := os.Executable(); err == nil {
