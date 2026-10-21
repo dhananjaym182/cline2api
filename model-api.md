@@ -159,6 +159,52 @@ const freeModels = data.free ?? [];
 
 ---
 
+## 11. Combo 组合模型路由（本项目扩展）
+
+本项目在客户端侧支持 **Combo（具名模型组合）**：管理员在 `/admin/` 后台把若干模型
+按顺序配置成一个组合 ID（如 `claude-free-combo`），客户端把该 ID 当作普通模型名使用。
+
+**适用端点** — 组合通过模型名定位，三个端点均支持：
+
+| 端点 | 用法 |
+|---|---|
+| `POST /v1/chat/completions` | `"model": "<combo-id>"` |
+| `POST /v1/messages` (Anthropic) | `"model": "<combo-id>"` |
+| `POST /v1/responses` | `"model": "<combo-id>"` |
+
+**回退（fallback）语义** — 按管理员配置的条目顺序依次尝试：
+
+1. 配置顺序即优先级：**列表中靠前的启用条目先被尝试**，首个成功者服务本次请求。
+2. 条目失败且被判定为**可重试**（限流 429 / 余额 402 / 瞬态 5xx / 超时 / 账号不可用，
+   以及上游 400「上下文超限」截断重试后仍失败）时，自动**继续尝试下一个条目**。
+3. **永久性错误**（401/403 及一般 400）直接失败，不再换下一个条目。
+4. **固定源条目**（pinned source）：条目可显式固定 `cline` / `provider` / `zen`，
+   此时只用该上游，失败**不回退**到其他源；固定源对该模型不可用时该条目被跳过，
+   继续走下一个条目（不会中止整条组合）。
+5. 停用条目 / 重复条目 / 后台停用的模型会被跳过（计入轨迹，不发起请求）。
+6. 默认不触发全局 ModelChain 或 free 链兜底（应急回退需管理员显式开启）。
+
+**查找可用组合 ID** — `GET /v1/models`（及 `/models`）会把启用中的组合合并进模型列表，
+组合条目以 `owned_by: "combo"` 标识：
+
+```bash
+curl -H "x-api-key: YOUR_KEY" http://127.0.0.1:8999/v1/models
+```
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"id": "kwaipilot/kat-coder-pro", "object": "model", "created": 1, "owned_by": "cline"},
+    {"id": "claude-free-combo",  "object": "model", "created": 1, "owned_by": "combo"}
+  ]
+}
+```
+
+> 组合的创建 / 编辑 / 删除 / 启停在 `/admin/` 后台完成；响应中的 `created` 为当前时间戳。
+
+---
+
 ## 附录：关于 `ox-alpha` 等 UI 所示模型的说明
 
 UI 中显示的 `ox-alpha`、`deepseek-v4-flash`、`laguna-s-2.1` 是**本地硬编码**的 fallback 模型，不是远程 API 返回的 Free 模型：

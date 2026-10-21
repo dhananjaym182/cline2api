@@ -920,6 +920,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
       </span>
     </div>
     <div class="section-desc">把多个模型按优先级编排成组合（Combo）：命中组合时按顺序依次尝试，一个模型失败（限流/不可用）就自动切到下一个。停用的条目会被直接跳过。</div>
+    <!-- 测试数据清理：暂无「清空全部组合」接口（/admin/api/combos/* 仅 list/save/delete/toggle/clone）。
+         调试用组合请在列表中逐个 Delete 按钮删除；不影响的组合可先 toggle 停用保留配置。 -->
     <div class="section-body">
       <div id="combosList">加载中...</div>
 
