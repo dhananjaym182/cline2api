@@ -289,16 +289,34 @@ type compactOutcome struct {
 	note    string
 }
 
+// defaultCompactContextCeiling 压缩预算的保守封顶：cline-pool 远程同步会给未知模型
+// 默认 1M 上下文（models_sync），但真实窗口往往小得多 —— 不封顶的话压缩阈值高达
+// ~4MB，永远不触发，等上游先报错。此封顶只影响压缩/截断预算，展示值不变。
+const defaultCompactContextCeiling = 128000
+
+// effectiveCompactContext 返回用于压缩/截断预算的有效上下文窗口：
+// 管理页显式锁定（MetaLocked）的值优先；否则把解析出的窗口封顶在保守上限。
+func effectiveCompactContext(zm Model) int {
+	if zm.MetaLocked && zm.Context > 0 {
+		return zm.Context
+	}
+	context := zm.Context
+	if context <= 0 {
+		context = 200000
+	}
+	if context > defaultCompactContextCeiling {
+		return defaultCompactContextCeiling
+	}
+	return context
+}
+
 // maybeCompact 估算超限时执行摘要压缩并原地改写 params["messages"]。
 func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutcome {
 	cfg := getZenConfig()
 	if !cfg.Compaction.Auto {
 		return compactOutcome{}
 	}
-	context := zm.Context
-	if context <= 0 {
-		context = 200000
-	}
+	context := effectiveCompactContext(zm)
 	buffer := cfg.Compaction.Buffer
 	if buffer <= 0 {
 		buffer = 20000
@@ -439,10 +457,9 @@ func fallbackTruncate(params map[string]any, zm Model) compactOutcome {
 	if len(messages) == 0 {
 		return compactOutcome{}
 	}
-	ctxBudget := zm.Context
-	if ctxBudget <= 0 {
-		ctxBudget = 200000
-	}
+	// 预算同 maybeCompact 走有效窗口（默认 1M 会被封顶到保守上限），零值 Model 也
+	// 会落到 200k 默认并封顶，截断预算始终合理。
+	ctxBudget := effectiveCompactContext(zm)
 	budget := int(float64(ctxBudget) * 0.6)
 
 	type idxMsg struct {

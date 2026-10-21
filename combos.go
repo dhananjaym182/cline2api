@@ -690,8 +690,6 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 			}
 		}
 		resp, err := callZenAPI(ep, stream)
-<<<<<<< HEAD
-=======
 		// 上游返回「上下文超限」400：压缩后重试一次
 		if err != nil && isContextLengthError(err) {
 			if zm, ok := resolveZenInfo(model); ok {
@@ -702,7 +700,6 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 				}
 			}
 		}
->>>>>>> feat/admin-ui-standardization
 		if err != nil {
 			return nil, nil, upstreamOpenCode, err
 		}
@@ -780,6 +777,8 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 	tried := make(map[string]bool, len(combo.Entries))
 	failed := 0
 	var lastErr error
+	// 上下文超限的「截断重试」整条组合只做一次：截断后的 params 在后续条目间共享。
+	truncatedForRun := false
 
 	for i, entry := range combo.Entries {
 		m := strings.TrimSpace(entry.Model)
@@ -808,6 +807,25 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 		start := time.Now()
 		resp, acc, upstream, err := callSingleModel(params, entry, stream, sessionID)
 		elapsed := time.Since(start).Milliseconds()
+		// 上下文超限（400 + context-length error）：整条组合还没截断过时截断一次并
+		// 重试**当前**条目。模型不是 zen 时用零值 Model 兜底 —— fallbackTruncate /
+		// maybeCompact 的零值默认（200k+封顶）仍会给出合理预算。
+		if err != nil && isContextLengthError(err) && !truncatedForRun {
+			truncatedForRun = true
+			log.Printf("  combo %q: entry %d %q context length exceeded, truncating and retrying", combo.ID, order, m)
+			zm, ok := resolveZenInfo(m)
+			if !ok {
+				zm = Model{}
+			}
+			if out := fallbackTruncate(params, zm); out.changed {
+				log.Printf("  combo %s", out.note)
+				start = time.Now()
+				resp, acc, upstream, err = callSingleModel(params, entry, stream, sessionID)
+				elapsed = time.Since(start).Milliseconds()
+			}
+			// 截断后（或截断未生效）仍报上下文超限：按可重试错误继续下一个条目，
+			// 不让 400 经 comboRetryable 判为永久错误而中止整条组合。
+		}
 		if err == nil {
 			params["model"] = m
 			if upstream == upstreamProvider {
@@ -831,6 +849,10 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 		})
 		log.Printf("  combo %q: entry %d %q failed (%v)", combo.ID, order, m, err)
 
+		if isContextLengthError(err) {
+			// 上下文超限：即便 HTTP 400（comboRetryable 判为永久）也继续换下一个条目。
+			continue
+		}
 		if !comboRetryable(err) {
 			// 永久性错误（400/401/403 等）：继续换模型没有意义，直接失败。
 			return comboRun{Trace: trace, Err: err}

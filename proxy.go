@@ -2716,7 +2716,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		reqLog.toolNames = clampParamsToolNames(openAIReq)
 
 		if req.Stream {
-			streamAnthropicCombo(r.Context(), w, openAIReq, combo, &reqLog, sessionID)
+			streamAnthropicCombo(r.Context(), w, openAIReq, combo, &reqLog, sessionID, cmCompactionSummary, cmApplied)
 			return
 		}
 
@@ -3055,7 +3055,11 @@ func finishAnthropicStreamFailure(sw *sseWriter, w http.ResponseWriter, reqLog *
 // 条目 —— 复用 handleAnthropicStream 的预提交可重试语义与共享 sseWriter（信封只发
 // 一次）。一旦已经交付有意义的内容，该次尝试即视为完成，绝不把答案重开到另一个模型。
 // 尝试次数被组合的可用条目数上界约束，避免无限回退。
-func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map[string]any, combo ModelCombo, reqLog *RequestLog, sessionID string) {
+// compactionSummary / compactionApplied 与单模型流路径（handleAnthropicStream）一致：
+// CM 已在路由前应用并改写了 params["messages"]；组合流同样要在信封后发出压缩 advisory
+// 块与 message_delta 里的 context_management。compaction 块由 sseWriter.compactionEmitted
+// 幂等保护，预提交回退时不会重复发送。
+func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map[string]any, combo ModelCombo, reqLog *RequestLog, sessionID string, compactionSummary string, compactionApplied []CMAppliedEdit) {
 	sw := newSSEWriter(w)
 
 	type cand struct {
@@ -3134,7 +3138,7 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 			Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider)})
 		applyComboLog(reqLog, combo, trace, c.model)
 
-		if handleAnthropicStream(ctx, sw, resp, acc, reqLog, firstContentTimeoutForAttempt(idx+1, len(cands)), "", nil) {
+		if handleAnthropicStream(ctx, sw, resp, acc, reqLog, firstContentTimeoutForAttempt(idx+1, len(cands)), compactionSummary, compactionApplied) {
 			return // 已交付内容 / 已完整收尾（含带内 error）
 		}
 		resp.Body.Close()
