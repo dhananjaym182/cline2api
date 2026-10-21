@@ -660,27 +660,29 @@ func entryRouteKind(e ComboEntry) string {
 //     某一 provider 时改走 callCustomProviderAPINamed（只看该家，不回退账号池）
 //   - 其余 → Cline 账号池（模型级冷却、402/429 换号，账号轮询）
 //
-// 返回：resp / 使用的账号（若有）/ 上游归因 / error。
-func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessionID string) (*http.Response, *Account, string, error) {
+// 返回：resp / 使用的账号（若有）/ 上游归因 / 实际服务的自定义 provider 显示名
+// （upstream=="provider" 时非空，cline/opencode 为空）/ error。
+func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessionID string) (*http.Response, *Account, string, string, error) {
 	model := strings.TrimSpace(entry.Model)
 	ep := withModel(params, model)
 	delete(ep, servedByParam)
+	delete(ep, providerNameParam)
 
 	switch entryRouteKind(entry) {
 	case "reject":
-		return nil, nil, upstreamOpenCode, fmt.Errorf("model %q is a paid opencode model; only free models are proxied", model)
+		return nil, nil, upstreamOpenCode, "", fmt.Errorf("model %q is a paid opencode model; only free models are proxied", model)
 	case "zen-degraded":
 		// zen 处于故障转移窗口：绝不把 zen 免费模型 ID 原样发给 Cline（会被判
 		// 400 "invalid model format"，进而被组合误判为永久失败）。按运行时不可用
 		// 跳过该条目 —— 返回可重试错误，组合继续尝试下一个条目。
-		return nil, nil, upstreamOpenCode, &freeModelUnavailableError{
+		return nil, nil, upstreamOpenCode, "", &freeModelUnavailableError{
 			message: fmt.Sprintf("model %q temporarily unavailable (opencode zen degraded)", model),
 		}
 	case "unavailable":
 		// 条目固定的上游当前无法服务该模型（zen 固定到非免费/非 zen 模型，或
 		// cline 固定到 provider-only 模型等）：按运行时不可用跳过，返回可重试错误，
 		// 让组合继续尝试下一个条目而不是中止。
-		return nil, nil, upstreamOpenCode, &freeModelUnavailableError{
+		return nil, nil, upstreamOpenCode, "", &freeModelUnavailableError{
 			message: fmt.Sprintf("model %q is not available on the pinned source", model),
 		}
 	case "zen":
@@ -701,9 +703,9 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 			}
 		}
 		if err != nil {
-			return nil, nil, upstreamOpenCode, err
+			return nil, nil, upstreamOpenCode, "", err
 		}
-		return resp, nil, upstreamOpenCode, nil
+		return resp, nil, upstreamOpenCode, "", nil
 	}
 
 	// cline 侧：默认先自定义 provider（该模型若接入 provider），失败后走账号池。
@@ -711,26 +713,26 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	case "provider":
 		// 显式固定到某一家 provider：只看它，失败也**不**回退到 Cline 账号池
 		// （用户明确指定了唯一上游）。
-		resp, perr, attempted := callCustomProviderAPINamed(ep, stream, entry.Provider)
+		resp, perr, attempted, provName := callCustomProviderAPINamed(ep, stream, entry.Provider)
 		if !attempted {
-			return nil, nil, upstreamProvider, &freeModelUnavailableError{
+			return nil, nil, upstreamProvider, "", &freeModelUnavailableError{
 				message: fmt.Sprintf("model %q is not served by provider %q", model, strings.TrimSpace(entry.Provider)),
 			}
 		}
 		if perr != nil {
 			// 固定 provider 失败：包装成可重试的「跳过」，避免 400/401/403（如
 			// 一把被轮换的 API key）被 comboRetryable 判为永久错误而中止整条组合。
-			return nil, nil, upstreamProvider, &freeModelUnavailableError{
+			return nil, nil, upstreamProvider, provName, &freeModelUnavailableError{
 				message: fmt.Sprintf("pinned provider %q failed for %q: %s", strings.TrimSpace(entry.Provider), model, truncate(perr.Error(), 200)),
 			}
 		}
-		return resp, nil, upstreamProvider, nil
+		return resp, nil, upstreamProvider, provName, nil
 	case "cline":
 		// 显式固定到 Cline 账号池：跳过自定义 provider 尝试，直接走账号池。
 	default:
-		if resp, perr, attempted := callCustomProviderAPI(ep, stream); attempted {
+		if resp, perr, attempted, provName := callCustomProviderAPI(ep, stream); attempted {
 			if perr == nil {
-				return resp, nil, upstreamProvider, nil
+				return resp, nil, upstreamProvider, provName, nil
 			}
 			// provider 已逐个记录失败原因；继续用账号池兜底同一模型。
 		}
@@ -740,17 +742,17 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	for {
 		acc := pickAccountForModelStrict(model)
 		if acc == nil {
-			return nil, nil, upstreamCline, &freeModelUnavailableError{message: fmt.Sprintf("model %q has no available account", model)}
+			return nil, nil, upstreamCline, "", &freeModelUnavailableError{message: fmt.Sprintf("model %q has no available account", model)}
 		}
 		if tried[acc.AccountID] {
 			// 防呆：账号轮询下也不应无限重试同一个账号（fill 策略等边界）。
-			return nil, acc, upstreamCline, &freeModelUnavailableError{message: fmt.Sprintf("model %q unavailable on all eligible accounts", model)}
+			return nil, acc, upstreamCline, "", &freeModelUnavailableError{message: fmt.Sprintf("model %q unavailable on all eligible accounts", model)}
 		}
 		tried[acc.AccountID] = true
 
 		resp, usedAcc, err := callClineAPIWithAccountCtx(context.Background(), acc, ep, stream)
 		if err == nil {
-			return resp, usedAcc, upstreamCline, nil
+			return resp, usedAcc, upstreamCline, "", nil
 		}
 		var accountErr *clineAccountUnavailableError
 		if errors.As(err, &accountErr) {
@@ -767,7 +769,7 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 				continue // 模型级冷却已记录，换号
 			}
 		}
-		return nil, usedAcc, upstreamCline, err
+		return nil, usedAcc, upstreamCline, "", err
 	}
 }
 
@@ -805,7 +807,7 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 		tried[key] = true
 
 		start := time.Now()
-		resp, acc, upstream, err := callSingleModel(params, entry, stream, sessionID)
+		resp, acc, upstream, provName, err := callSingleModel(params, entry, stream, sessionID)
 		elapsed := time.Since(start).Milliseconds()
 		// 上下文超限（400 + context-length error）：整条组合还没截断过时截断一次并
 		// 重试**当前**条目。模型不是 zen 时用零值 Model 兜底 —— fallbackTruncate /
@@ -820,7 +822,7 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 			if out := fallbackTruncate(params, zm); out.changed {
 				log.Printf("  combo %s", out.note)
 				start = time.Now()
-				resp, acc, upstream, err = callSingleModel(params, entry, stream, sessionID)
+				resp, acc, upstream, provName, err = callSingleModel(params, entry, stream, sessionID)
 				elapsed = time.Since(start).Milliseconds()
 			}
 			// 截断后（或截断未生效）仍报上下文超限：按可重试错误继续下一个条目，
@@ -830,12 +832,15 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 			params["model"] = m
 			if upstream == upstreamProvider {
 				params[servedByParam] = upstreamProvider
+				params[providerNameParam] = provName
 			} else {
 				delete(params, servedByParam)
+				delete(params, providerNameParam)
 			}
 			trace = append(trace, AttemptLog{
 				Model: m, Order: order, Upstream: upstream, Outcome: "success", DurationMs: elapsed,
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider),
+				ProviderName: provName,
 			})
 			return comboRun{Resp: resp, Acc: acc, Upstream: upstream, Model: m, Trace: trace}
 		}
@@ -846,6 +851,7 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 			Model: m, Order: order, Upstream: upstream, Status: attemptStatus(err),
 			Outcome: "failed", Reason: truncate(err.Error(), 200), DurationMs: elapsed,
 			Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider),
+			ProviderName: provName,
 		})
 		log.Printf("  combo %q: entry %d %q failed (%v)", combo.ID, order, m, err)
 
@@ -873,6 +879,11 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 				params[servedByParam] = v
 			} else {
 				delete(params, servedByParam)
+			}
+			if v, ok := fp[providerNameParam].(string); ok {
+				params[providerNameParam] = v // free 链经 provider 服务时同步归因名
+			} else {
+				delete(params, providerNameParam)
 			}
 			trace = append(trace, AttemptLog{
 				Model: fm, Order: -1, Upstream: upstreamCline, Outcome: "success",
@@ -925,7 +936,11 @@ func comboTraceSummary(combo ModelCombo, run comboRun) string {
 		if a.Outcome == "success" {
 			continue
 		}
-		attempted = append(attempted, fmt.Sprintf("%s(%s)", a.Model, a.Outcome))
+		label := a.Model
+		if a.ProviderName != "" {
+			label = a.ProviderName + "/" + a.Model
+		}
+		attempted = append(attempted, fmt.Sprintf("%s(%s)", label, a.Outcome))
 	}
 	sort.Strings(attempted)
 	if len(attempted) == 0 {

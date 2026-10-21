@@ -40,6 +40,9 @@ type AttemptLog struct {
 	Source string `json:"source,omitempty"`
 	// Provider 当 Source=="provider" 时固定到的自定义 Provider 名称；其余为空。
 	Provider string `json:"provider,omitempty"`
+	// ProviderName 实际服务本次尝试的自定义 Provider 名称（upstream=="provider" 时填充，
+	// 自动派发路径同样生效）。cline/opencode 无名称，保持为空。
+	ProviderName string `json:"providerName,omitempty"`
 }
 
 type RequestLog struct {
@@ -52,6 +55,9 @@ type RequestLog struct {
 	// Upstream 标记上游来源："cline"=Cline 账号池，"opencode"=opencode zen 免费模型，
 	// "provider"=自定义 OpenAI 兼容 Provider（归因由 stampUpstream 统一判定）
 	Upstream string `json:"upstream,omitempty"`
+	// ProviderName 当 Upstream=="provider" 时实际服务的自定义 Provider 显示名
+	// （自动派发或条目固定都填充）；cline/opencode 无名称，为空。
+	ProviderName string `json:"providerName,omitempty"`
 	// Model 实际服务本次请求的模型（回退后回写的生效模型）。为兼容既有消费方，
 	// 普通请求语义不变；组合请求也填实际服务模型，另用 RequestedModel 记录原始点名。
 	Model          string  `json:"model"`

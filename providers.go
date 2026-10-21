@@ -961,7 +961,9 @@ func syncProviderModels() {
 // provider 上（钉住的不换模型、不随机切换）；未钉住时按冗余组逐家尝试，
 // 任一成功即把该会话钉到它身上。全部失败返回最后一个 error，调用方决定
 // 是否降级到回退链。模型没有可用 provider 时 attempted=false。
-func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, error, bool) {
+// 第 4 个返回值是实际服务本次尝试的 provider 显示名（成功=命中那家；
+// attempted 失败=最后尝试那家；attempted=false 为空），供请求日志归因。
+func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, error, bool, string) {
 	model, _ := params["model"].(string)
 	// P3 粘贴会话：同一会话（首个 user 消息哈希）在 TTL 内钉到同一家 provider，
 	// 中途不因组内竞争或优先级重算而换源；钉住的 provider 冷却/超限/停用后
@@ -973,7 +975,7 @@ func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, 
 				resp, err := callProvider(p, params, stream)
 				if err == nil {
 					stickySet(sk, pin.providerID, model)
-					return resp, nil, true
+					return resp, nil, true, p.Name
 				}
 				log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
 			}
@@ -982,21 +984,23 @@ func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, 
 	}
 	provs := resolveProvidersForModel(model)
 	if len(provs) == 0 {
-		return nil, nil, false
+		return nil, nil, false, ""
 	}
 	var lastErr error
+	var lastName string
 	for _, p := range provs {
 		resp, err := callProvider(p, params, stream)
 		if err == nil {
 			if sk != "" {
 				stickySet(sk, p.ID, model)
 			}
-			return resp, nil, true
+			return resp, nil, true, p.Name
 		}
 		log.Printf("  provider attempt failed name=%s model=%q: %v", p.Name, model, err)
 		lastErr = err
+		lastName = p.Name
 	}
-	return nil, lastErr, true
+	return nil, lastErr, true, lastName
 }
 
 // providerNameServesModel 判断是否存在**启用中**的 provider，其 Name 匹配（去空白、
@@ -1062,26 +1066,29 @@ func resolveProvidersNamedForModel(model, name string) []*CustomProvider {
 // provider（模型固定到某一家上游）：失败时**不**回退到组内其他 provider。
 // 故意不读取/写入粘性会话——显式固定应当压过自动粘贴，且固定到 A 家的调用不应
 // 污染另一家的粘贴状态。无匹配候选时 attempted=false（调用方决定是否兜底）。
-func callCustomProviderAPINamed(params map[string]any, stream bool, name string) (*http.Response, error, bool) {
+// 供请求日志归因。
+func callCustomProviderAPINamed(params map[string]any, stream bool, name string) (*http.Response, error, bool, string) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, nil, false
+		return nil, nil, false, ""
 	}
 	model, _ := params["model"].(string)
 	provs := resolveProvidersNamedForModel(model, name)
 	if len(provs) == 0 {
-		return nil, nil, false
+		return nil, nil, false, ""
 	}
 	var lastErr error
+	var lastName string
 	for _, p := range provs {
 		resp, err := callProvider(p, params, stream)
 		if err == nil {
-			return resp, nil, true
+			return resp, nil, true, p.Name
 		}
 		log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
 		lastErr = err
+		lastName = p.Name
 	}
-	return nil, lastErr, true
+	return nil, lastErr, true, lastName
 }
 
 // ============================================================================

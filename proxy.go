@@ -1179,25 +1179,33 @@ func clineErrorHTTPStatus(err error) int {
 // buildUpstreamBody / callProvider / callZenAPI 只拷贝白名单键，不会外发。
 const servedByParam = "__served_by"
 
+// providerNameParam 与 servedByParam 配套：自定义 provider 成功服务时回写实际
+// 命中之家的显示名，供 stampUpstream 归因到请求日志的 providerName 字段。
+const providerNameParam = "__served_by_name"
+
 // stampUpstream 按实际服务结果写入请求日志的上游归因：
 // provider 标记 > 生效模型是 zen 模型（反向故障转移）> Cline 账号池。
 func stampUpstream(reqLog *RequestLog, params map[string]any) {
 	if v, _ := params[servedByParam].(string); v == upstreamProvider {
 		reqLog.Upstream = upstreamProvider
+		reqLog.ProviderName, _ = params[providerNameParam].(string)
 		return
 	}
 	if m, _ := params["model"].(string); m != "" {
 		if _, isZen := resolveZenInfo(m); isZen {
 			reqLog.Upstream = upstreamOpenCode
+			reqLog.ProviderName = ""
 			return
 		}
 	}
 	reqLog.Upstream = upstreamCline
+	reqLog.ProviderName = ""
 }
 
 func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account, error) {
 	model, _ := params["model"].(string)
-	delete(params, servedByParam) // 归因标记按次重算，避免流重试沿用上一次结果
+	delete(params, servedByParam)       // 归因标记按次重算，避免流重试沿用上一次结果
+	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
 	if model == "free" {
 		resp, acc, err := callFreeClineAPI(params, stream)
 		if err != nil {
@@ -1241,13 +1249,14 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 	}
 	for _, m := range chain {
 		// 先试自定义 provider
-		if pResp, pErr, attempted := callCustomProviderAPI(withModel(params, m), stream); attempted {
+		if pResp, pErr, attempted, provName := callCustomProviderAPI(withModel(params, m), stream); attempted {
 			if pErr == nil {
 				if m != model {
 					log.Printf("  model fallback: %q unavailable, serving via provider %q", model, m)
 				}
 				params["model"] = m // 回写实际服务模型，供请求日志归因
 				params[servedByParam] = upstreamProvider
+				params[providerNameParam] = provName
 				return pResp, nil, nil
 			}
 			// callCustomProviderAPI 已逐个记录 provider 失败原因，链上不重复打日志
@@ -1306,6 +1315,13 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 			}
 			if v, ok := fp[servedByParam].(string); ok {
 				params[servedByParam] = v // provider 经 free 链服务时同步归因标记
+			} else {
+				delete(params, servedByParam)
+			}
+			if v, ok := fp[providerNameParam].(string); ok {
+				params[providerNameParam] = v // 同步实际服务的 provider 名
+			} else {
+				delete(params, providerNameParam)
 			}
 			return resp, acc, nil
 		}
@@ -1532,16 +1548,18 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 	// 而不是顺序打满第一个，也不在必败的死模型上浪费一次上游往返。
 	chain = filterStaleModels(chain)
 	chain = sortModelsByAvailability(chain)
-	delete(params, servedByParam) // 本次调用重新归因
+	delete(params, servedByParam)     // 本次调用重新归因
+	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
 	var lastErr error
 	lastWas429 := false
 	for _, model := range chain {
 		params["model"] = model
 		// 与显式模型链一致：链内模型命中自定义 provider 时先走 provider，
 		// 失败（记冷却）后继续用账号池兜底——free 别名不再绕过 provider。
-		if pResp, pErr, attempted := callCustomProviderAPI(params, stream); attempted {
+		if pResp, pErr, attempted, provName := callCustomProviderAPI(params, stream); attempted {
 			if pErr == nil {
 				params[servedByParam] = upstreamProvider
+				params[providerNameParam] = provName
 				return pResp, nil, nil
 			}
 			// callCustomProviderAPI 已逐个记录 provider 失败原因，链上不重复打日志
@@ -3108,11 +3126,12 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 			return
 		}
 		start := time.Now()
-		resp, acc, upstream, err := callSingleModel(params, c.entry, true, sessionID)
+		resp, acc, upstream, provName, err := callSingleModel(params, c.entry, true, sessionID)
 		if err != nil {
 			trace = append(trace, AttemptLog{Model: c.model, Order: c.order, Upstream: upstream, Status: attemptStatus(err),
 				Outcome: "failed", Reason: truncate(err.Error(), 200), DurationMs: time.Since(start).Milliseconds(),
-				Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider)})
+				Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider),
+				ProviderName: provName})
 			applyComboLog(reqLog, combo, trace, "")
 			if !comboRetryable(err) {
 				break
@@ -3122,8 +3141,10 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		params["model"] = c.model
 		if upstream == upstreamProvider {
 			params[servedByParam] = upstreamProvider
+			params[providerNameParam] = provName
 		} else {
 			delete(params, servedByParam)
+			delete(params, providerNameParam)
 		}
 		// 每次成功建流后按实际服务方重算归因（流式组合此前只在循环外 stamp 过一次，
 		// 会把 provider/zen 条目错记为 cline）。
@@ -3135,7 +3156,8 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		// 乐观写入成功条目：handleAnthropicStream 成功后会直接 finalize 落盘。
 		trace = append(trace, AttemptLog{Model: c.model, Order: c.order, Upstream: upstream,
 			Outcome: "success", DurationMs: time.Since(start).Milliseconds(),
-			Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider)})
+			Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider),
+			ProviderName: provName})
 		applyComboLog(reqLog, combo, trace, c.model)
 
 		if handleAnthropicStream(ctx, sw, resp, acc, reqLog, firstContentTimeoutForAttempt(idx+1, len(cands)), compactionSummary, compactionApplied) {
@@ -3149,7 +3171,8 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		trace[len(trace)-1] = AttemptLog{Model: c.model, Order: c.order, Upstream: upstream,
 			Outcome: "failed", Reason: "stream produced no content before first token",
 			DurationMs: time.Since(start).Milliseconds(),
-			Source:     strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider)}
+			Source:     strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider),
+			ProviderName: provName}
 		applyComboLog(reqLog, combo, trace, "")
 		// 仅当组合里还有下一个条目时才冷却该模型（避免单条目组合冷却掉唯一模型，
 		// 让下一次请求直接失败）；不再用全局 modelFallbackChain 作为判定依据。
