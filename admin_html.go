@@ -2510,11 +2510,7 @@ async function testAllAccounts(btn) {
 }
 
 async function deleteAccount(id, btn) {
-<<<<<<< HEAD
-  if (!confirm(t('确定删除此账号？'))) return;
-=======
   if (!(await showConfirm(t('确定删除此账号？')))) return;
->>>>>>> feat/admin-ui-standardization
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
@@ -2748,11 +2744,7 @@ async function generateKey(btn) {
 }
 
 async function deleteKey(key, btn) {
-<<<<<<< HEAD
-  if (!confirm(t('确定删除此密钥？'))) return;
-=======
   if (!(await showConfirm(t('确定删除此密钥？')))) return;
->>>>>>> feat/admin-ui-standardization
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
@@ -3472,11 +3464,7 @@ async function toggleCombo(id, enabled, btn) {
 }
 
 async function deleteCombo(id, btn) {
-<<<<<<< HEAD
-  if (!confirm(t('确定删除该组合？'))) return;
-=======
   if (!(await showConfirm(t('确定删除该组合？')))) return;
->>>>>>> feat/admin-ui-standardization
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('删除中...'); }
   try {
@@ -3788,11 +3776,7 @@ async function toggleModelsBatch(groupKey, disabled) {
   const ids = mergedRowsForGroupKey(groupKey).map(m => m.id);
   if (!ids.length) return;
   const confirmMsg = disabled ? t('确定停用该分组全部模型？') : t('确定启用该分组全部模型？');
-<<<<<<< HEAD
-  if (!window.confirm(confirmMsg + ' (' + ids.length + ')')) return;
-=======
   if (!(await showConfirm(confirmMsg + ' (' + ids.length + ')'))) return;
->>>>>>> feat/admin-ui-standardization
   try {
     await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
     toast((disabled ? t('已停用') : t('已启用')) + ' ' + ids.length + ' ' + t('个模型'), 'success');
@@ -3821,11 +3805,7 @@ async function bulkModelToggle(mode) {
   }
   const ids = rows.map(m => m.id);
   if (!ids.length) { toast(t('没有符合条件的模型'), 'info'); return; }
-<<<<<<< HEAD
-  if (!window.confirm(confirmMsg + ' (' + ids.length + ')')) return;
-=======
   if (!(await showConfirm(confirmMsg + ' (' + ids.length + ')'))) return;
->>>>>>> feat/admin-ui-standardization
   if (btn) btn.disabled = true;
   try {
     await api('POST', '/models/toggle', { ids: ids, disabled: disabled });
@@ -3845,16 +3825,6 @@ function toggleAddModelRow() {
 }
 
 // 修改模型上下文/最大输出：压缩阈值按此计算，设置后 zen 同步保留该值
-<<<<<<< HEAD
-async function editModelMeta(id, ctx, out) {
-  const c = prompt(t('上下文窗口 (token)') + ' - ' + id, ctx || 1048576);
-  if (c === null) return;
-  const o = prompt(t('最大输出 (token)'), out || 32768);
-  if (o === null) return;
-  try {
-    await api('POST', '/models/context', { id: id, context: parseInt(c, 10) || 0, output: parseInt(o, 10) || 0 });
-    toast(t('已保存') + ': ' + id + ' ctx=' + formatTokenCount(parseInt(c, 10) || 0), 'success');
-=======
 function showModelMetaEditor(id, ctx, out) {
   _('mmId').value = id;
   _('mmCtx').value = ctx || 200000;
@@ -3875,7 +3845,6 @@ async function saveModelMeta(btn) {
     await api('POST', '/models/context', { id: id, context: c, output: o });
     toast(t('已保存') + ': ' + id + ' ctx=' + formatTokenCount(c), 'success');
     hideModelMetaEditor();
->>>>>>> feat/admin-ui-standardization
     await loadModels();
   } catch (e) { toast(t('保存失败') + ': ' + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
