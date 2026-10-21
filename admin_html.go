@@ -68,7 +68,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text'
 .sync-btn:disabled{opacity:0.6;cursor:wait}
 
 /* ===== Main ===== */
-.main{flex:1;min-width:0;padding:36px clamp(24px,4vw,64px) 64px;overflow-y:auto}
+.main{flex:1;min-width:0;padding:36px clamp(16px,2.5vw,32px) 64px;overflow-y:auto}
 .content-shell{width:min(100%,1440px);margin:0 auto}
 .large-title{font-size:32px;font-weight:700;letter-spacing:0;color:var(--text);margin-bottom:4px;text-wrap:pretty}
 .large-subtitle{font-size:15px;color:var(--text2);margin-bottom:28px}
@@ -93,19 +93,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text'
 
 /* ===== Section / Grouped ===== */
 .section{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);margin-bottom:var(--sp-5);overflow:hidden;box-shadow:var(--shadow-sm)}
-.section-title{padding:var(--sp-4) var(--sp-5) var(--sp-2);font-weight:600;font-size:var(--fs-lg);line-height:1.35;display:flex;align-items:center;gap:var(--sp-2);color:var(--text)}
+.section-title{padding:var(--sp-4) var(--sp-4) var(--sp-2);font-weight:600;font-size:var(--fs-lg);line-height:1.35;display:flex;align-items:center;gap:var(--sp-2);color:var(--text)}
 .section-title svg{width:18px;height:18px;color:var(--text2);flex-shrink:0}
-.section-desc{padding:0 var(--sp-5) var(--sp-3);font-size:var(--fs-base);line-height:1.6;color:var(--text2)}
-.section-body{padding:var(--sp-4) var(--sp-5)}
+.section-desc{padding:0 var(--sp-4) var(--sp-3);font-size:var(--fs-base);line-height:1.6;color:var(--text2)}
+.section-body{padding:var(--sp-4) var(--sp-4)}
 .section-body.flush{padding:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .section-body.xscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 
 /* ===== Tabs (segmented) ===== */
-.tabs{display:flex;border-bottom:1px solid var(--border2);padding:0 20px;gap:4px}
+.tabs{display:flex;border-bottom:1px solid var(--border2);padding:0 var(--sp-4);gap:4px}
 .tab{padding:12px 18px;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;font-size:14px;font-weight:500;transition:all 0.18s var(--ease)}
 .tab:hover{color:var(--text)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-.tab-content{display:none;padding:20px}
+.tab-content{display:none;padding:var(--sp-5) var(--sp-4)}
 .tab-content.active{display:block}
 
 /* ===== Table ===== */
@@ -137,8 +137,8 @@ tbody tr:hover{background:var(--surface2)}
 .account-email{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:500}
 .account-cards{display:none}
 .log-cards{display:none}
-.log-table th:first-child,.log-table td:first-child{width:14%;white-space:nowrap;color:var(--text2)}
-.log-table th:nth-child(2),.log-table td:nth-child(2){width:16%}
+.log-table th:first-child,.log-table td:first-child{width:16%;white-space:nowrap;color:var(--text2)}
+.log-table th:nth-child(2),.log-table td:nth-child(2){width:14%}
 .log-table th:nth-child(3),.log-table td:nth-child(3){width:7%}
 .log-table th:nth-child(4),.log-table td:nth-child(4){width:15%}
 .log-table th:nth-child(5),.log-table td:nth-child(5),.log-table th:nth-child(6),.log-table td:nth-child(6),.log-table th:nth-child(7),.log-table td:nth-child(7),.log-table th:nth-child(8),.log-table td:nth-child(8){width:6%;text-align:right;font-variant-numeric:tabular-nums}
@@ -158,6 +158,10 @@ tbody tr:hover{background:var(--surface2)}
 .log-attempts li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;text-align:left}
 .log-attempts .attempt-model{font-family:ui-monospace,monospace;color:var(--text)}
 .log-attempts .attempt-meta{color:var(--text3)}
+/* 日志时间列：两行式日期+时间（date→time 各占一行，等宽数字），绝不截断 */
+.log-ts-wrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;font-size:11px;color:var(--text2);min-width:0}
+.log-ts-line{display:block;white-space:nowrap;font-variant-numeric:tabular-nums}
+.log-ts-sub{font-size:10px;color:var(--text3)}
 .attempt-outcome{display:inline-block;padding:1px 7px;border-radius:6px;font-size:10px;font-weight:600}
 .attempt-outcome.success{background:var(--green-soft);color:var(--green)}
 .attempt-outcome.failed{background:var(--red-soft);color:var(--red)}
@@ -422,7 +426,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 	  .toast{max-width:calc(100vw - 32px);width:max-content;text-align:center}
 	}
 	@media (min-width:761px) and (max-width:1180px){
-	  .main{padding:30px 32px 56px}
+	  .main{padding:30px clamp(16px,2.5vw,32px) 56px}
 	  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
 	  .cards.tokens{grid-template-columns:repeat(3,minmax(0,1fr))}
 	  .account-table th:nth-child(9),.account-table td:nth-child(9){display:none}
@@ -459,7 +463,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
   .model-toolbar input[type="text"]{flex-basis:100%}
   .model-toolbar select{flex:1 1 calc(50% - 8px)}
   .model-toolbar .btn,.model-toolbar .sync-btn{flex:1 1 auto;justify-content:center}
-  .main{padding:28px 24px 48px}
+  .main{padding:28px clamp(16px,2.5vw,24px) 48px}
 }
 @media (max-width:760px){
   .section-title{flex-wrap:wrap;gap:var(--sp-2)}
@@ -2531,6 +2535,18 @@ function formatDateTime(v, twoLine) {
   return d.toLocaleString(LC());
 }
 
+// 日志时间戳：两行块（date 在上，time 含秒在下）。不再走 toLocaleString 单行 + td.mono
+// 的省略号裁剪（旧渲染在固定 14% 列里日期时间都被裁掉）——两行各自 nowrap，永不被截断。
+function logTimestampHtml(v) {
+  if (!v) return emptyCell();
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return emptyCell();
+  return '<span class="log-ts-wrap" title="' + escAttr(d.toLocaleString(LC())) + '">' +
+    '<span class="log-ts-line">' + d.toLocaleDateString(LC()) + '</span>' +
+    '<span class="log-ts-line log-ts-sub">' + d.toLocaleTimeString(LC()) + '</span>' +
+  '</span>';
+}
+
 // 展开/收起账号的模型统计子行（表格视图）
 function toggleModelRow(id, btn) {
   const row = _('modelRow-' + id);
@@ -4533,7 +4549,6 @@ async function loadRequestLogs(reset) {
     }
 
     const renderRow = l => {
-      const ts = formatDateTime(l.startedAt);
       const st = l.completed
         ? '<span class="log-status ok">' + t('完成') + '</span>'
         : '<span class="log-status fail" title="' + esc(l.error || '') + '">' + t('失败') + '</span>';
@@ -4548,7 +4563,7 @@ async function loadRequestLogs(reset) {
         ? ' class="log-row has-attempts" onclick="toggleLogDetail(\'' + detailId + '\')" title="' + t('点击查看尝试链路') + '"'
         : ' class="log-row"';
       return '<tr' + rowAttr + '>' +
-        '<td class="mono" style="font-size:11px">' + ts + '</td>' +
+        '<td>' + logTimestampHtml(l.startedAt) + '</td>' +
         '<td>' + esc(logUpstreamValue(l)) + '</td>' +
         '<td>' + esc(l.protocol || '-') + '</td>' +
         '<td>' + logModelCell(l) + '</td>' +
@@ -4562,7 +4577,6 @@ async function loadRequestLogs(reset) {
           : '');
     };
     const renderCard = l => {
-      const ts = formatDateTime(l.startedAt);
       const st = l.completed ? t('完成') : t('失败');
       const tk = l.usageAvailable
         ? t('输入 ') + formatTokenCount(l.inputTokens) + t(' · 输出 ') + formatTokenCount(l.outputTokens) + t(' · 缓存 ') + formatTokenCount(l.cachedTokens) + t(' · 总 ') + formatTokenCount(l.totalTokens)
@@ -4590,7 +4604,7 @@ async function loadRequestLogs(reset) {
         '</div>' +
         extraBlock + reqLine +
         '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + tk + '</div>' +
-        '<div class="account-card-footer"><span class="mono" style="font-size:11px">' + ts + '</span><span class="mono" style="font-size:11px">' + esc(l.model || '-') + '</span></div>' +
+        '<div class="account-card-footer">' + logTimestampHtml(l.startedAt) + '<span class="mono" style="font-size:11px">' + esc(l.model || '-') + '</span></div>' +
         attemptsBlock +
       '</article>';
     };
