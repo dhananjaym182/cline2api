@@ -277,6 +277,17 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .model-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
 .model-toolbar input[type="text"]{flex:2;min-width:180px;padding:8px 12px;font-size:13px}
 .model-toolbar select{flex:1;min-width:120px;width:auto;padding:8px 10px;font-size:13px}
+/* 工具栏「更多」溢出菜单：低频批量操作收进下拉，保留常用筛选/同步的一键直达 */
+.toolbar-more{position:relative;display:inline-flex}
+.toolbar-more-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:30;min-width:150px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);padding:6px;flex-direction:column;gap:4px}
+.toolbar-more.open .toolbar-more-menu{display:flex}
+.toolbar-more-menu .btn{width:100%;justify-content:flex-start}
+/* 内联编辑卡片：与弹窗编辑器同一视觉体系（圆角/层高/阴影/内边距取自令牌） */
+.inline-editor{margin-top:var(--sp-4);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);background:var(--surface);box-shadow:var(--shadow-sm)}
+.inline-editor-title{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-lg);font-weight:600;margin-bottom:var(--sp-3);color:var(--text)}
+/* 设置分组小标题：按关注点拆分字段（连接 / 调优 / 故障转移 / 压缩等） */
+.form-group-label{font-size:var(--fs-base);font-weight:600;color:var(--text2);margin:var(--sp-3) 0 var(--sp-2)}
+.form-group-label:first-child{margin-top:0}
 .model-list{border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden}
 .model-list .model-group{margin:0}
 .model-list .model-group + .model-group{border-top:1px solid var(--border2)}
@@ -375,6 +386,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 /* 状态徽章：停用 = 中性灰（与 活跃/冷却/过期 同一视觉体系），不再借用日志红/绿 */
 .status.disabled{background:var(--surface2);color:var(--text3)}
 .status-dot.disabled{background:var(--text3)}
+/* 危险操作区：红描边 + 说明，与普通设置区一眼区分 */
+.section.danger-zone{border-color:var(--red)}
 /* 空 / 加载状态统一留白与行高 */
 .empty{padding:var(--sp-8) var(--sp-5);color:var(--text2);line-height:1.6}
 .empty-state{padding:var(--sp-8) var(--sp-6)}
@@ -784,12 +797,13 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 
   <div class="page-subpage" data-subpage="keys">
   <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>API 密钥管理</div>
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>API 密钥管理</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
+        <button class="btn btn-sm btn-success" onclick="generateKey(this)">生成新密钥</button>
+      </span>
+    </div>
     <div class="section-desc">生成的密钥可用于客户端访问代理 API（作为 x-api-key 或 Authorization 头）。</div>
     <div class="section-body">
-      <div class="form-actions" style="margin-bottom:14px">
-        <button class="btn btn-success" onclick="generateKey(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>生成新密钥</button>
-      </div>
       <div id="keysList"></div>
       <div id="keyGenResult" style="margin-top:8px"></div>
     </div>
@@ -832,8 +846,9 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
   </div>
 
   <div class="page-subpage" data-subpage="danger" style="display:none">
-  <div class="section">
+  <div class="section danger-zone">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>危险操作</div>
+    <div class="section-desc">以下操作会删除全部数据，且删除后无法恢复；每个按钮点击后都会先弹出确认框。</div>
     <div class="section-body">
       <div class="action-row">
         <button class="btn btn-danger" onclick="deleteAllAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除全部账号</button>
@@ -864,8 +879,6 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     <div class="section-body">
       <div class="form-row">
         <div class="field"><label>默认模型</label><select id="settingDefModel" onchange="updateConfig()"><option value="">加载中...</option></select></div>
-      </div>
-      <div class="form-row">
         <div class="field">
           <label>轮询策略</label>
           <select id="settingStrategy" onchange="updateConfig()">
@@ -875,7 +888,13 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
             <option value="quality">质量优先 (quality)</option>
           </select>
         </div>
-        <div class="field"><label>引擎版本</label><input type="text" id="settingVersion" disabled></div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>回退模型链</label>
+          <input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()">
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">逗号分隔模型 ID，可用 <code>free</code> 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
+        </div>
       </div>
       <div class="form-row">
         <div class="field">
@@ -886,13 +905,9 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
           </select>
           <div style="font-size:12px;color:var(--text3);margin-top:4px">影响 /models、/v1/models 对客户端返回的模型列表，不影响管理页模型管理</div>
         </div>
-        <div class="field">
-          <label>回退模型链</label>
-          <input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()">
-          <div style="font-size:12px;color:var(--text3);margin-top:4px">逗号分隔模型 ID，可用 <code>free</code> 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
-        </div>
       </div>
       <div class="form-row">
+        <div class="field"><label>引擎版本</label><input type="text" id="settingVersion" disabled></div>
         <div class="field"><label>账号文件</label><input type="text" id="settingPoolPath" disabled></div>
       </div>
     </div>
@@ -923,8 +938,14 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
           <option value="disabled">已停用</option>
         </select>
         <button class="btn btn-sm" onclick="toggleAddModelRow()">＋ 添加模型</button>
-        <button class="btn btn-sm" id="bulkEnableFreeBtn" onclick="bulkModelToggle('free')">启用全部免费</button>
-        <button class="btn btn-sm" id="bulkDisablePaidBtn" onclick="bulkModelToggle('paid')">停用全部付费</button>
+        <!-- 低频批量操作收入「更多」，避免工具栏两行铺满；保留筛选 / 同步一键直达 -->
+        <div class="toolbar-more" id="modelBulkMore">
+          <button class="btn btn-sm" onclick="toggleToolbarMore(event)">更多操作 ▾</button>
+          <div class="toolbar-more-menu">
+            <button class="btn btn-sm" id="bulkEnableFreeBtn" onclick="bulkModelToggle('free')">启用全部免费</button>
+            <button class="btn btn-sm" id="bulkDisablePaidBtn" onclick="bulkModelToggle('paid')">停用全部付费</button>
+          </div>
+        </div>
         <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
         <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 opencode 同步模型</span></button>
       </div>
@@ -960,7 +981,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     <div class="section-body">
       <div id="combosList"><div class="empty"><span class="loading"></span> 加载中...</div></div>
 
-      <div id="comboEditor" style="display:none;margin-top:14px;border:1px solid var(--border2);border-radius:10px;padding:14px">
+      <div id="comboEditor" class="inline-editor" style="display:none">
+        <div class="inline-editor-title" id="comboEditorTitle">新建组合</div>
         <div class="form-row">
           <div class="field"><label>组合 ID *</label><input type="text" id="comboId" placeholder="premium-coding" style="font-family:ui-monospace,monospace"></div>
           <div class="field"><label>名称 *</label><input type="text" id="comboName" placeholder="Premium Coding"></div>
@@ -1030,6 +1052,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     </div>
     <div class="section-desc">接入 opencode（zen）免费模型。按请求中的模型名自动分流：免费模型走 opencode 上游，付费模型直接拒绝，其余走 Cline 账号池。</div>
     <div class="section-body">
+      <div class="form-group-label">基础连接</div>
       <div class="form-row">
         <div class="field" style="max-width:220px">
           <label>启用 opencode</label>
@@ -1041,9 +1064,13 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         <div class="field" style="flex:1"><label>API Key</label><input type="text" id="ocKey" placeholder="public" onchange="saveOcConfig()"></div>
         <div class="field" style="flex:1.4"><label>Base URL</label><input type="text" id="ocBaseURL" placeholder="https://opencode.ai/zen/v1" style="font-family:ui-monospace,monospace" onchange="saveOcConfig()"></div>
       </div>
-      <div class="form-row" style="margin-top:12px">
+      <div class="form-group-label">请求调优</div>
+      <div class="form-row">
         <div class="field"><label>最大并发</label><input type="number" id="ocMaxConcurrency" min="1" max="64" onchange="saveOcConfig()"></div>
         <div class="field"><label>重试次数</label><input type="number" id="ocRetries" min="0" max="10" onchange="saveOcConfig()"></div>
+      </div>
+      <div class="form-group-label">故障转移</div>
+      <div class="form-row">
         <div class="field"><label>故障转移</label>
           <select id="ocFailover" onchange="saveOcConfig()">
             <option value="true">开启（连续失败后暂走 Cline 池）</option>
@@ -1053,7 +1080,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         <div class="field"><label>失败阈值（次）</label><input type="number" id="ocFailoverCount" min="1" max="20" onchange="saveOcConfig()"></div>
         <div class="field"><label>转移窗口（分钟）</label><input type="number" id="ocFailoverMinutes" min="1" max="120" onchange="saveOcConfig()"></div>
       </div>
-      <div class="form-row" style="margin-top:12px">
+      <div class="form-group-label">上下文压缩</div>
+      <div class="form-row">
         <div class="field"><label>自动上下文压缩</label>
           <select id="ocCompactAuto" onchange="saveOcConfig()">
             <option value="true">开启（超限自动摘要）</option>
@@ -1162,15 +1190,18 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 
   <div class="page-subpage" data-subpage="providers" style="display:none">
   <div class="section">
-    <div class="section-title">自定义 Provider（OpenAI 兼容）</div>
+    <div class="section-title"><span>自定义 Provider（OpenAI 兼容）</span>
+      <!-- 新增入口与「＋ 新建组合」同位：区块标题右侧， body 只放列表与编辑卡片 -->
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
+        <button class="btn btn-sm" onclick="loadProviderPresets()">从预设添加（免费源）</button>
+        <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
+      </span>
+    </div>
     <div class="section-desc">接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini / Mistral / Together / 自建 vLLM 等）。模型命中自定义 Provider 时优先走该上游，失败自动按回退链降级，最终兜底 Cline 池。</div>
     <div class="section-body xscroll">
       <div id="providersList"></div>
-      <div class="form-actions" style="margin-top:10px">
-        <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
-        <button class="btn btn-sm" onclick="loadProviderPresets()">从预设添加（免费源）</button>
-      </div>
-      <div id="providerEditor" style="display:none;margin-top:14px;border:1px solid var(--border2);border-radius:10px;padding:14px">
+      <div id="providerEditor" class="inline-editor" style="display:none">
+        <div class="inline-editor-title" id="providerEditorTitle">添加 Provider</div>
         <div class="form-row">
           <div class="field"><label>名称 *</label><input type="text" id="provName" placeholder="OpenRouter"></div>
           <div class="field" style="flex:1.6"><label>Base URL *</label><input type="text" id="provBaseURL" placeholder="https://openrouter.ai/api/v1" style="font-family:ui-monospace,monospace"></div>
@@ -1208,7 +1239,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
           <span id="provTestResult" style="font-size:12px;margin-left:8px"></span>
         </div>
       </div>
-      <div id="providerPresets" style="display:none;margin-top:14px;border:1px solid var(--border2);border-radius:10px;padding:14px"></div>
+      <div id="providerPresets" class="inline-editor" style="display:none"></div>
     </div>
   </div>
   </div>
@@ -1476,6 +1507,7 @@ const I18N = {
   '添加请求头': 'Add Header',
   '保存请求头': 'Save Headers',
   '危险操作': 'Danger Zone',
+  '以下操作会删除全部数据，且删除后无法恢复；每个按钮点击后都会先弹出确认框。': 'These actions delete all data and cannot be undone; every button asks for confirmation first.',
   '删除全部账号': 'Delete All Accounts',
   '删除全部密钥': 'Delete All Keys',
   '应用信息、使用指南与开源协议': 'App info, usage guide & license',
@@ -1708,6 +1740,7 @@ const I18N = {
   '取消': 'Cancel',
   '保存 Provider': 'Save Provider',
   '添加 Provider': 'Add Provider',
+  '编辑 Provider': 'Edit Provider',
   '本地服务器可留空）': 'leave empty on local server)',
   '超时(秒)': 'Timeout (s)',
   '优先级（小=优先）': 'Priority (lower = first)',
@@ -1793,6 +1826,12 @@ const I18N = {
   // 模型组合（Combo）
   '模型组合': 'Model Combos',
   '＋ 新建组合': '＋ New Combo',
+  '新建组合': 'New Combo',
+  '编辑组合': 'Edit Combo',
+  '查看账号列表': 'View accounts',
+  '基础连接': 'Connection',
+  '请求调优': 'Request tuning',
+  '上下文压缩': 'Context compaction',
   '把多个模型按优先级编排成组合（Combo）：命中组合时按顺序依次尝试，一个模型失败（限流/不可用）就自动切到下一个。停用的条目会被直接跳过。': 'Arrange several models into a priority-ordered combo. A matched combo is tried in order; when one model fails (rate-limited/unavailable) it automatically moves to the next. Disabled entries are skipped.',
   '组合 ID': 'Combo ID',
   '组合 ID *': 'Combo ID *',
@@ -1842,6 +1881,7 @@ const I18N = {
   '选择模型': 'Select Models',
   '勾选多个模型；确认后按勾选顺序追加到组合，勾选顺序即尝试优先级。': 'Tick one or more models; on confirm they are appended to the combo in tick order (tick order = try priority).',
   '搜索模型 / Provider...': 'Search models / providers...',
+  '更多操作': 'More actions',
   '全选': 'Select All',
   '清空': 'Clear',
   '已添加': 'Added',
@@ -2715,19 +2755,34 @@ async function startOAuth() {
 }
 
 // ========== Token 导入 ==========
+// 表单内联结果（成功/失败都渲染进 #tokenResult，不再只靠 toast）
+function tokenFormResult(ok, html) {
+  const el = _('tokenResult');
+  if (el) el.innerHTML = '<div style="color:var(' + (ok ? '--green' : '--red') + ');font-size:13px;margin-top:8px">' + (ok ? '✓ ' : '✗ ') + html + '</div>';
+}
+// 提交后引导：跳到账号列表核对结果
+function viewAccountsLink() {
+  return '<a href="#" onclick="switchTab(\'accounts\')" style="color:var(--accent);text-decoration:none;margin-left:6px">' + t('查看账号列表') + ' →</a>';
+}
+
 async function addByToken(btn) {
   const token = _('tokenInput').value.trim();
-  if (!token) { toast(t('请输入 refreshToken'), 'error'); return; }
+  if (!token) { tokenFormResult(false, t('请输入 refreshToken')); toast(t('请输入 refreshToken'), 'error'); return; }
+  const el = _('tokenResult'); if (el) el.innerHTML = ''; // 清空上次结果，避免旧成败信息与新提交混淆
   const email = _('tokenEmail').value.trim();
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('添加中...'); }
   try {
     const d = await api('POST', '/accounts/add', { refreshToken: token, email: email || undefined });
+    tokenFormResult(true, t('账号添加成功: ') + esc(d.data.email || '') + viewAccountsLink());
     toast(t('账号添加成功: ') + (d.data.email || ''), 'success');
     _('tokenInput').value = '';
     _('tokenEmail').value = '';
     loadAccounts(); loadStats();
-  } catch (e) { toast(t('添加失败: ') + e.message, 'error'); }
+  } catch (e) {
+    tokenFormResult(false, esc(e.message));
+    toast(t('添加失败: ') + e.message, 'error');
+  }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
@@ -2784,18 +2839,29 @@ function parseImportData(text) {
     });
 }
 
+// 批量导入表单内联结果
+function batchFormResult(ok, html) {
+  const el = _('batchResult');
+  if (el) el.innerHTML = '<div style="color:var(' + (ok ? '--green' : '--red') + ');font-size:13px;margin-top:8px">' + (ok ? '✓ ' : '✗ ') + html + '</div>';
+}
+
 async function batchImport(btn) {
   const raw = _('batchInput').value.trim();
-  if (!raw) { toast(t('请输入账号数据'), 'error'); return; }
+  if (!raw) { batchFormResult(false, t('请输入账号数据')); toast(t('请输入账号数据'), 'error'); return; }
+  const el = _('batchResult'); if (el) el.innerHTML = '';
   const tokens = parseImportData(raw);
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('导入中...'); }
   try {
     const d = await api('POST', '/batch-import', { tokens });
+    batchFormResult(true, esc(d.message || t('导入完成')) + viewAccountsLink());
     toast(d.message || t('导入完成'), 'success');
     _('batchInput').value = '';
     loadAccounts(); loadStats();
-  } catch (e) { toast(t('导入失败: ') + e.message, 'error'); }
+  } catch (e) {
+    batchFormResult(false, esc(e.message));
+    toast(t('导入失败: ') + e.message, 'error');
+  }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
@@ -3058,6 +3124,8 @@ async function toggleProvider(id, enable, btn) {
 
 function showProviderEditor(p) {
   _editingProviderId = p ? p.id : '';
+  const title = _('providerEditorTitle');
+  if (title) title.textContent = p ? t('编辑 Provider') : t('添加 Provider');
   _('provName').value = p ? p.name : '';
   _('provBaseURL').value = p ? p.baseURL : '';
   _('provKey').value = p ? (p.apiKey || '') : '';
@@ -3275,6 +3343,8 @@ function renderCombosList() {
 
 function showComboEditor(c) {
   _editingComboId = c ? c.id : '';
+  const title = _('comboEditorTitle');
+  if (title) title.textContent = c ? t('编辑组合') : t('新建组合');
   _('comboId').value = c ? c.id : '';
   _('comboId').disabled = !!c; // 编辑既有组合时 id 不可改（主键）
   _('comboName').value = c ? (c.name || '') : '';
@@ -4115,6 +4185,8 @@ async function toggleModelsBatch(groupKey, disabled) {
 
 // 免费导向的批量开关：一次作用于全部合并行（不受工具栏筛选影响）
 async function bulkModelToggle(mode) {
+  const more = _('modelBulkMore');
+  if (more) more.classList.remove('open');
   const merged = mergeModelsById(_cachedModels);
   let rows, disabled, btn, confirmMsg;
   if (mode === 'free') {
@@ -4149,6 +4221,17 @@ function toggleAddModelRow() {
   row.style.display = (row.style.display === 'none') ? 'flex' : 'none';
   if (row.style.display === 'flex') _('newModelId').focus();
 }
+
+// ===== 模型工具栏「更多」溢出菜单：开关 + 点击外部收起（vanilla，无外部库） =====
+function toggleToolbarMore(ev) {
+  ev.stopPropagation();
+  const more = _('modelBulkMore');
+  if (more) more.classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  const more = _('modelBulkMore');
+  if (more && more.classList.contains('open') && !more.contains(e.target)) more.classList.remove('open');
+});
 
 // 修改模型上下文/最大输出：压缩阈值按此计算，设置后 zen 同步保留该值
 function showModelMetaEditor(id, ctx, out) {
