@@ -308,7 +308,18 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .combo-preview .arrow{color:var(--text3);margin:0 6px}
 .combo-entry{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);margin-bottom:8px;flex-wrap:wrap}
 .combo-entry.disabled-entry{opacity:0.6}
-.combo-entry-idx{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--surface2);border:1px solid var(--border2);display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+/* 拖拽排序：手柄抓取/拖动/落点指示（与 nav-item.drop-target 同款 inset 指示线） */
+.combo-entry-grip{flex-shrink:0;width:20px;height:26px;display:inline-flex;align-items:center;justify-content:center;cursor:grab;color:var(--text3);font-size:13px;line-height:1;border-radius:6px;user-select:none;-webkit-user-select:none}
+.combo-entry-grip:hover{color:var(--text);background:var(--surface2)}
+.combo-entry-grip:active{cursor:grabbing}
+.combo-dragging{opacity:0.45;border-style:dashed}
+.combo-entry.drop-before{box-shadow:inset 0 2px 0 var(--accent)}
+.combo-entry.drop-after{box-shadow:inset 0 -2px 0 var(--accent)}
+/* 优先级序号：首条（最先尝试）高亮为强调色 */
+.combo-entry-idx{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--surface2);border:1px solid var(--border2);display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;transition:background 0.15s var(--ease),color 0.15s var(--ease),border-color 0.15s var(--ease)}
+.combo-entry:first-child .combo-entry-idx{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+/* 相对拖动点最近的一次 2px inset 指示（配合 JS 逐行更新序号与预览） */
+.combo-entry .combo-drag-hint{display:none}
 .combo-entry-select{flex:1;min-width:200px}
 .combo-entry-select select{padding:7px 10px;font-size:13px;font-family:ui-monospace,monospace}
 .combo-entry-source{flex-shrink:0;display:inline-flex;align-items:center}
@@ -319,6 +330,18 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .combo-empty-entries{font-size:13px;color:var(--text3);padding:8px 2px}
 .combos-list{border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden}
 .combos-list .row-count{font-size:12px;color:var(--text2);white-space:nowrap}
+
+/* ===== 组合：多选模型选择器弹窗（样式对齐 #modelMetaEditor） ===== */
+.combo-picker-list{max-height:min(340px,46vh);overflow:auto;overscroll-behavior:contain;border:1px solid var(--border2);border-radius:10px;background:var(--surface);margin-top:10px}
+.combo-pick-group{position:sticky;top:0;z-index:1;padding:6px 10px;font-size:11px;font-weight:600;color:var(--text3);background:var(--surface2);border-bottom:1px solid var(--border2)}
+.combo-pick-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:13px}
+.combo-pick-row:last-child{border-bottom:none}
+.combo-pick-row:hover{background:var(--surface2)}
+.combo-pick-row input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;margin:0}
+.combo-pick-row.combo-pick-used{cursor:default}
+.combo-pick-row.combo-pick-used .combo-pick-id{color:var(--text3)}
+.combo-pick-id{font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
+.combo-pick-rank{flex-shrink:0;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;font-variant-numeric:tabular-nums}
 
 /* ===== Toggle 开关 ===== */
 .switch{position:relative;display:inline-block;width:34px;height:20px;flex-shrink:0}
@@ -946,10 +969,13 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         </div>
         <div style="font-size:12px;color:var(--text3);margin:-6px 0 12px">开启「紧急回退」后，仅当组合内所有条目都失败时，才允许继续回退到配置的全局回退链 / 内置免费链；关闭则组合内失败即结束。</div>
 
-        <div style="font-size:13px;color:var(--text2);font-weight:500;margin-bottom:8px">模型条目（按优先级从上到下）</div>
+        <div style="font-size:13px;color:var(--text2);font-weight:500;margin-bottom:2px">模型条目（按优先级从上到下）</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">顺序即优先级：第 1 个最优先尝试（1st tried → 2nd → …），拖动行首 ⠿ 手柄或用 ↑↓ 按钮调整顺序。</div>
         <div id="comboEntries"></div>
         <div class="form-actions" style="margin-top:10px">
+          <button class="btn btn-sm btn-primary" onclick="openComboModelPicker()">⊕ 多选添加模型</button>
           <button class="btn btn-sm" onclick="addComboEntry()">＋ 添加条目</button>
+          <span style="font-size:12px;color:var(--text3)">从模型目录勾选多个模型，确认后按勾选顺序追加。</span>
         </div>
 
         <div class="combo-preview-box">
@@ -1310,6 +1336,25 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn btn-sm" onclick="resolveConfirm(false)">取消</button>
             <button class="btn btn-sm btn-danger" onclick="resolveConfirm(true)">确认</button>
+          </div>
+        </div>
+      </div>
+      <!-- 组合编辑：从模型目录多选并追加（也支持一键替换整组条目） -->
+      <div id="comboModelPicker" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeComboModelPicker()">
+        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:20px;max-width:560px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="font-size:15px;font-weight:600;color:var(--text)">选择模型</div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">勾选多个模型；确认后按勾选顺序追加到组合，勾选顺序即尝试优先级。</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="comboPickerSearch" placeholder="搜索模型 / Provider..." oninput="renderComboPickerList()" onkeydown="if(event.key==='Escape')closeComboModelPicker()" style="flex:1;min-width:0">
+            <button class="btn btn-sm" onclick="comboPickerSelectAllShown()">全选</button>
+            <button class="btn btn-sm" onclick="comboPickerClear()">清空</button>
+          </div>
+          <div id="comboPickerList" class="combo-picker-list">加载中...</div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+            <span id="comboPickerCount" style="font-size:12px;color:var(--text2);margin-right:auto"></span>
+            <button class="btn btn-sm" onclick="closeComboModelPicker()">取消</button>
+            <button id="comboPickerReplaceBtn" class="btn btn-sm" style="display:none" onclick="comboPickerConfirm(true)">替换整表</button>
+            <button class="btn btn-sm btn-primary" onclick="comboPickerConfirm(false)">确认追加</button>
           </div>
         </div>
       </div>
@@ -1775,6 +1820,28 @@ const I18N = {
   '请填写名称': 'Enter a name',
   '该 ID 为保留别名，请更换': 'This ID is a reserved alias; choose another',
   '条目中存在重复模型: ': 'Duplicate model in entries: ',
+  // 组合编辑器：优先级提示 / 拖拽 / 多选添加弹窗
+  '顺序即优先级：第 1 个最优先尝试（1st tried → 2nd → …），拖动行首 ⠿ 手柄或用 ↑↓ 按钮调整顺序。': 'Order = priority: entry 1 is tried first (1st tried → 2nd → …). Drag the row handle or use the up/down buttons to reorder.',
+  '⊕ 多选添加模型': '⊕ Multi-select models',
+  '从模型目录勾选多个模型，确认后按勾选顺序追加。': 'Tick models from the catalog; on confirm they are appended in tick order.',
+  '拖动调整顺序': 'Drag to reorder',
+  '已调整顺序': 'Order updated',
+  '选择模型': 'Select Models',
+  '勾选多个模型；确认后按勾选顺序追加到组合，勾选顺序即尝试优先级。': 'Tick one or more models; on confirm they are appended to the combo in tick order (tick order = try priority).',
+  '搜索模型 / Provider...': 'Search models / providers...',
+  '全选': 'Select All',
+  '清空': 'Clear',
+  '已添加': 'Added',
+  '已在组合条目中，无需重复添加': 'Already in this combo',
+  '勾选顺序即尝试优先级': 'Tick order = try priority',
+  '已选 ': 'Selected ',
+  '请先勾选至少一个模型': 'Select at least one model first',
+  '替换整表': 'Replace All',
+  '确认追加': 'Append Selected',
+  '已按勾选顺序替换全部条目': 'All entries replaced in tick order',
+  '已按勾选顺序追加 ': 'Appended in tick order: ',
+  ' 个条目': ' entries',
+  '模型目录为空，请先同步模型': 'Model catalog is empty; sync models first',
   // 请求日志：组合与尝试链路
   '组合': 'Combo',
   '回退': 'Fallback',
@@ -3314,6 +3381,9 @@ function comboSourceSelectHtml(i, e) {
 }
 
 // 条目编辑器渲染 + 优先级预览
+// 行结构：拖拽手柄 / 优先级序号 / 模型下拉 / 上游钉选 / 徽章 / 启停与排序操作
+// 拖拽：以 ⠿ 手柄作为 HTML5 drag 源，行本身作为落点（dragover/drop），落点用
+//      inset 指示线 + 序号 + 优先级预览同步"模拟落位"后的新序号（live preview）。
 function renderComboEntries() {
   const box = _('comboEntries');
   if (!box) return;
@@ -3327,7 +3397,8 @@ function renderComboEntries() {
   box.innerHTML = _comboEntries.map((e, i) => {
     const opts = buildComboModelOptions(e.model, chosen);
     const dis = e.disabled ? ' disabled-entry' : '';
-    return '<div class="combo-entry' + dis + '">' +
+    return '<div class="combo-entry' + dis + '" data-entry-idx="' + i + '" ondragover="comboDragOver(event, ' + i + ')" ondrop="comboDrop(event, ' + i + ')">' +
+      '<span class="combo-entry-grip" draggable="true" ondragstart="comboDragStart(event, ' + i + ')" ondragend="comboDragEnd(event)" title="' + t('拖动调整顺序') + '" role="button" tabindex="0" aria-label="' + t('拖动调整顺序') + '">⠿</span>' +
       '<span class="combo-entry-idx">' + (i + 1) + '</span>' +
       '<span class="combo-entry-select"><select onchange="onComboEntryModelChange(' + i + ', this.value)">' + opts + '</select></span>' +
       comboSourceSelectHtml(i, e) +
@@ -3343,16 +3414,18 @@ function renderComboEntries() {
   renderComboPreview();
 }
 
-function renderComboPreview() {
+// 优先级预览：order 传入原下标数组时显示"模拟落位"后的顺序（拖拽 live preview 用）
+function renderComboPreview(order) {
   const box = _('comboPreview');
   if (!box) return;
-  const enabled = _comboEntries.filter(e => !e.disabled && e.model);
+  const idxs = order || _comboEntries.map((_, k) => k);
+  const enabled = idxs.filter(k => { const e = _comboEntries[k]; return e && !e.disabled && e.model; });
   if (!enabled.length) {
     box.innerHTML = '<span style="color:var(--text3)">' + t('（暂无启用的条目）') + '</span>';
     return;
   }
-  box.innerHTML = enabled.map((e, i) =>
-    '<span class="step">' + (i + 1) + '. ' + esc(e.model) + '</span>'
+  box.innerHTML = enabled.map((k, i) =>
+    '<span class="step">' + (i + 1) + '. ' + esc(_comboEntries[k].model) + '</span>'
   ).join('<span class="arrow">→</span>');
 }
 
@@ -3406,6 +3479,217 @@ function moveComboEntry(i, dir) {
   _comboEntries[i] = _comboEntries[j];
   _comboEntries[j] = tmp;
   renderComboEntries();
+}
+
+// ========== 组合条目拖拽排序（HTML5 drag & drop；↑↓ 按钮为无障碍兜底） ==========
+let _comboDragFrom = -1; // 拖起条目的原下标
+let _comboDragTo = -1;   // 最近 preview 的插入位置（移除原位后的坐标系，0..len）
+
+function comboDragStart(ev, i) {
+  _comboDragFrom = i;
+  _comboDragTo = -1;
+  if (ev.dataTransfer) {
+    ev.dataTransfer.effectAllowed = 'move';
+    try { ev.dataTransfer.setData('text/plain', String(i)); } catch (e) {}
+  }
+  const row = ev.target && ev.target.closest ? ev.target.closest('.combo-entry') : null;
+  if (row) row.classList.add('combo-dragging');
+}
+
+// 计算插入位置：光标在落点行上半 → 插到该行前，否则插到该行后；
+// 若拖起项在插入点之前，需先扣除自身占位。
+function comboDragInsert(ev, overIdx) {
+  if (_comboDragFrom < 0 || overIdx < 0 || overIdx >= _comboEntries.length) return -1;
+  const rect = ev.currentTarget.getBoundingClientRect();
+  const before = ev.clientY < rect.top + rect.height / 2;
+  let ins = before ? overIdx : overIdx + 1;
+  if (_comboDragFrom < ins) ins--;
+  return ins;
+}
+
+// 模拟"移除 from，插入 ins"后原下标的新顺序（0..len-1）
+function comboSimulatedOrder(ins) {
+  const arr = _comboEntries.map((_, k) => k);
+  arr.splice(_comboDragFrom, 1);
+  arr.splice(Math.max(0, Math.min(arr.length, ins)), 0, _comboDragFrom);
+  return arr;
+}
+
+// live preview：inset 指示线 + 各行序号 + 优先级预览同步为模拟落位后的顺序
+function comboDragPreview(hoverRow, before, ins) {
+  const box = _('comboEntries');
+  if (!box) return;
+  const rows = box.querySelectorAll('.combo-entry');
+  rows.forEach(r => r.classList.remove('drop-before', 'drop-after'));
+  if (hoverRow) hoverRow.classList.add(before ? 'drop-before' : 'drop-after');
+  const order = comboSimulatedOrder(ins);
+  const pos = new Array(_comboEntries.length);
+  order.forEach((origIdx, p) => { pos[origIdx] = p; });
+  rows.forEach(r => {
+    const badge = r.querySelector('.combo-entry-idx');
+    const oi = Number(r.getAttribute('data-entry-idx'));
+    if (badge && oi >= 0 && Number.isFinite(pos[oi])) badge.textContent = pos[oi] + 1;
+  });
+  renderComboPreview(order);
+}
+
+function comboDragOver(ev, i) {
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+  if (_comboDragFrom < 0) return;
+  const rect = ev.currentTarget.getBoundingClientRect();
+  const before = ev.clientY < rect.top + rect.height / 2;
+  const ins = comboDragInsert(ev, i);
+  if (ins < 0) return;
+  _comboDragTo = ins;
+  comboDragPreview(ev.currentTarget, before, ins);
+}
+
+function comboDrop(ev, i) {
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+  let ins = _comboDragTo;
+  if (_comboDragFrom >= 0 && (ins < 0 || ins === null || ins === undefined)) ins = comboDragInsert(ev, i);
+  if (_comboDragFrom >= 0 && ins >= 0) {
+    const item = _comboEntries.splice(_comboDragFrom, 1)[0];
+    _comboEntries.splice(Math.max(0, Math.min(_comboEntries.length, ins)), 0, item);
+    toast(t('已调整顺序'), 'success');
+    renderComboEntries(); // 重建行：序号 / 上移下移按钮禁用态 / 预览全部复位
+  }
+  _comboDragFrom = -1;
+  _comboDragTo = -1;
+}
+
+// dragend 兜底（取消拖拽 / 松手感复位）；成功 drop 后行已重建，此处为幂等清理
+function comboDragEnd() {
+  const box = _('comboEntries');
+  if (box) box.querySelectorAll('.combo-entry').forEach(r => r.classList.remove('combo-dragging', 'drop-before', 'drop-after'));
+  if (_comboDragFrom >= 0) renderComboEntries();
+  _comboDragFrom = -1;
+  _comboDragTo = -1;
+}
+
+// ========== 组合：多选模型选择器（从 /admin/api/combos 的 modelCatalog 取数） ==========
+var _pickerOrder = []; // 勾选顺序（model id，先勾先排；确认后即 entries 追加顺序）
+
+function openComboModelPicker() {
+  if (!_comboCatalog || !_comboCatalog.length) {
+    toast(t('模型目录为空，请先同步模型'), 'error');
+    return;
+  }
+  _pickerOrder = [];
+  _('comboPickerSearch').value = '';
+  const editing = _comboEntries.some(e => e.model);
+  _('comboPickerReplaceBtn').style.display = editing ? '' : 'none';
+  renderComboPickerList();
+  _('comboModelPicker').style.display = 'flex';
+  try { _('comboPickerSearch').focus(); } catch (e) {}
+}
+
+function closeComboModelPicker() {
+  _('comboModelPicker').style.display = 'none';
+  _pickerOrder = [];
+}
+
+function comboPickerToggle(model, checked) {
+  const idx = _pickerOrder.indexOf(model);
+  if (checked && idx === -1) _pickerOrder.push(model);
+  if (!checked && idx !== -1) _pickerOrder.splice(idx, 1);
+  renderComboPickerList();
+}
+
+// 工具条「全选」：把当前筛选结果里所有可选模型按显示顺序补进勾选序列
+function comboPickerSelectAllShown() {
+  comboPickerVisibleModels().forEach(m => {
+    if (_pickerOrder.indexOf(m.id) === -1) _pickerOrder.push(m.id);
+  });
+  renderComboPickerList();
+}
+
+function comboPickerClear() {
+  _pickerOrder = [];
+  renderComboPickerList();
+}
+
+// 当前筛选条件下可展示的模型（跳过管理页已停用；与条目下拉同一条规则）
+function comboPickerVisibleModels() {
+  const q = (_('comboPickerSearch').value || '').trim().toLowerCase();
+  const rx = q.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
+  return _comboCatalog.filter(m => !m.disabled && (!rx || (m.id + ' ' + (m.provider || '')).toLowerCase().search(rx) !== -1));
+}
+
+// 已在组合中的模型不允许重复勾选（标记「已添加」且复选框禁用）
+function renderComboPickerList() {
+  const box = _('comboPickerList');
+  if (!box) return;
+  const scrollTop = box.scrollTop;
+  const inCombo = {};
+  _comboEntries.forEach(e => { if (e.model) inCombo[e.model] = true; });
+  const visible = comboPickerVisibleModels();
+  if (!visible.length) {
+    box.innerHTML = '<div class="empty">' + t('没有符合条件的模型') + '</div>';
+    renderComboPickerCount();
+    return;
+  }
+  // 按来源归组（与条目下拉一致：Provider 用真实名）
+  const groups = new Map();
+  const seenSrc = {}; // 同一模型多上游时只展示一次
+  for (const m of visible) {
+    const gk = comboOptgroupKey(m);
+    if (!groups.has(gk)) groups.set(gk, { label: comboSourceName(m), pin: comboPinKey(comboCatalogPin(m)), items: [] });
+    const g = groups.get(gk);
+    if (!g.pin || !seenSrc[g.pin + '|' + m.id]) {
+      seenSrc[g.pin + '|' + m.id] = true;
+      g.items.push(m);
+    }
+  }
+  const gkeys = Array.from(groups.keys()).sort(comboGroupSortKey);
+  let html = '';
+  for (const gk of gkeys) {
+    const g = groups.get(gk);
+    html += '<div class="combo-pick-group">' + esc(g.label) + '</div>';
+    g.items.sort((a, b) => a.id.localeCompare(b.id));
+    for (const m of g.items) {
+      const rank = _pickerOrder.indexOf(m.id);
+      const used = inCombo[m.id];
+      html += '<label class="combo-pick-row' + (used ? ' combo-pick-used' : '') + '">' +
+        '<input type="checkbox"' + (rank !== -1 ? ' checked' : '') + (used ? ' disabled' : '') + ' onchange="comboPickerToggle(\'' + escAttr(m.id) + '\', this.checked)">' +
+        '<span class="combo-pick-id">' + esc(m.id) + '</span>' +
+        '<span class="model-source-badge ' + (m.source === 'provider' ? 'provider' : (m.source === 'zen' || m.source === 'seed' ? 'zen' : (m.source === 'remote' ? 'remote' : 'custom'))) + '">' + esc(comboSourceName(m)) + '</span>' +
+        (m.cost === 'free'
+          ? '<span class="model-tag free" style="padding:1px 7px;font-size:10px;margin:0">' + t('免费') + '</span>'
+          : '<span class="model-tag pass" style="padding:1px 7px;font-size:10px;margin:0">' + t('付费') + '</span>') +
+        (used ? '<span class="model-source-badge" title="' + t('已在组合条目中，无需重复添加') + '">' + t('已添加') + '</span>' : '') +
+        (rank !== -1 ? '<span class="combo-pick-rank" title="' + t('勾选顺序即尝试优先级') + '">#' + (rank + 1) + '</span>' : '') +
+      '</label>';
+    }
+  }
+  box.innerHTML = html;
+  box.scrollTop = scrollTop;
+  renderComboPickerCount();
+}
+
+function renderComboPickerCount() {
+  const el = _('comboPickerCount');
+  if (!el) return;
+  const n = _pickerOrder.length;
+  el.textContent = t('已选 ') + n + ' ' + t('个模型');
+}
+
+// 确认：append=false 追加到现有条目之后；append=true（替换整表）用勾选顺序重构全部条目
+function comboPickerConfirm(replace) {
+  if (!_pickerOrder.length) { toast(t('请先勾选至少一个模型'), 'error'); return; }
+  if (replace) {
+    _comboEntries = _pickerOrder.map(id => ({ model: id, disabled: false, source: '', provider: '' }));
+  } else {
+    for (const id of _pickerOrder) {
+      if (_comboEntries.some(e => e.model === id)) continue; // 防重复：已在组合中的跳过
+      _comboEntries.push({ model: id, disabled: false, source: '', provider: '' });
+    }
+  }
+  closeComboModelPicker();
+  renderComboEntries();
+  toast(replace ? t('已按勾选顺序替换全部条目') : t('已按勾选顺序追加 ') + _pickerOrder.length + t(' 个条目'), 'success');
 }
 
 async function saveCombo() {
@@ -4173,13 +4457,26 @@ function attemptOutcomeLabel(o) {
   return t('失败');
 }
 
+// 上游展示名：自定义 provider 上游时用后端回传的 providerName 显示真实名称，
+// 旧日志条目（无 providerName）与 cline/opencode 上游回落为原通用文案。
+function attemptUpstreamLabel(a) {
+  return (a.upstream === 'provider' && a.providerName) ? 'Provider › ' + a.providerName : (a.upstream || '');
+}
+
+// 表格「账号」列 / 卡片标题：账号邮箱优先；无邮箱时展示上游（provider 上游带真实名称）
+function logUpstreamValue(l) {
+  if (l.accountEmail) return l.accountEmail;
+  return attemptUpstreamLabel(l) || '-';
+}
+
 // 尝试链路渲染：序号 / 模型 / 上游 / 结果 / HTTP 状态 / 耗时 / 原因
 function renderAttempts(attempts) {
   return '<ol class="log-attempts">' + attempts.map((a, i) => {
     const outcome = a.outcome || 'failed';
     const oc = (outcome === 'success' || outcome === 'failed' || outcome === 'skipped') ? outcome : 'failed';
     const meta = [];
-    if (a.upstream) meta.push(esc(a.upstream));
+    const upLabel = attemptUpstreamLabel(a);
+    if (upLabel) meta.push(esc(upLabel));
     if (a.status) meta.push('HTTP ' + esc(String(a.status)));
     if (typeof a.durationMs === 'number' && a.durationMs >= 0) meta.push(formatDuration(a.durationMs));
     return '<li>' +
@@ -4252,7 +4549,7 @@ async function loadRequestLogs(reset) {
         : ' class="log-row"';
       return '<tr' + rowAttr + '>' +
         '<td class="mono" style="font-size:11px">' + ts + '</td>' +
-        '<td>' + esc(l.accountEmail || l.upstream || '-') + '</td>' +
+        '<td>' + esc(logUpstreamValue(l)) + '</td>' +
         '<td>' + esc(l.protocol || '-') + '</td>' +
         '<td>' + logModelCell(l) + '</td>' +
         '<td>' + tk + '</td>' +
@@ -4284,7 +4581,7 @@ async function loadRequestLogs(reset) {
         ? '<details class="log-card-attempts"><summary>' + t('尝试链路') + ' (' + attempts.length + ')</summary>' + renderAttempts(attempts) + '</details>'
         : '';
       return '<article class="account-card">' +
-        '<div class="account-card-header"><span class="account-email">' + esc(l.accountEmail || l.upstream || '-') + '</span><span class="log-status ' + (l.completed ? 'ok' : 'fail') + '">' + st + '</span></div>' +
+        '<div class="account-card-header"><span class="account-email">' + esc(logUpstreamValue(l)) + '</span><span class="log-status ' + (l.completed ? 'ok' : 'fail') + '">' + st + '</span></div>' +
         '<div class="account-metrics">' +
           '<div class="account-metric"><span class="account-metric-label">' + t('协议') + '</span><span class="account-metric-value">' + esc(l.protocol || '-') + '</span></div>' +
           '<div class="account-metric"><span class="account-metric-label">' + t('耗时') + '</span><span class="account-metric-value">' + formatDuration(l.durationMs) + '</span></div>' +
