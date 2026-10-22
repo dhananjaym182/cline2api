@@ -1185,19 +1185,54 @@ func handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleProviderTest 发一条 min-token 请求验证 provider 可用性。
+// 两侧重载：
+//   - {id, model?}            → 已保存的 provider（model 非空时覆盖默认 ModelIDs[0]）
+//   - {baseURL, apiKey?, headers?, model?} → 未保存配置的临时测试：构造临时
+//     CustomProvider 走同一 callProvider 路径，不落盘、不产生新状态。
+// 上游失败 ≠ API 失败：一律 200 包裹 {success:true, data:{ok:false, error:...}}。
 func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
 		return
 	}
 	var req struct {
-		ID    string `json:"id"`
-		Model string `json:"model"`
+		ID      string            `json:"id"`
+		BaseURL string            `json:"baseURL"`
+		APIKey  string            `json:"apiKey"`
+		Headers map[string]string `json:"headers"`
+		Model   string            `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
 		return
 	}
+	model := strings.TrimSpace(req.Model)
+
+	if strings.TrimSpace(req.BaseURL) != "" {
+		// 未保存配置路径：一次性 provider（不进 registry，不落盘）。
+		baseURL := strings.TrimSpace(strings.TrimRight(req.BaseURL, "/"))
+		if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+			writeAPI(w, http.StatusBadRequest, apiResponse{Error: "baseURL must start with http:// or https://"})
+			return
+		}
+		if model == "" {
+			// 临时 provider 未声明模型列表，空 model 无从发起补全，需给出明确说明。
+			writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+				"ok": false, "model": "", "durationMs": 0,
+				"error": "model is required when testing an unsaved provider",
+			}})
+			return
+		}
+		target := &CustomProvider{
+			BaseURL:    baseURL,
+			APIKey:     strings.TrimSpace(req.APIKey),
+			Headers:    req.Headers,
+			TimeoutSec: quickTestProviderTimeoutSec, // 探测用短超时
+		}
+		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: runProviderMiniTest(target, model)})
+		return
+	}
+
 	loadProviders()
 	providersMu.Lock()
 	var target *CustomProvider
@@ -1213,23 +1248,27 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 		writeAPI(w, http.StatusNotFound, apiResponse{Error: "provider not found"})
 		return
 	}
-	model := strings.TrimSpace(req.Model)
 	if model == "" && len(target.ModelIDs) > 0 {
 		model = target.ModelIDs[0]
 	}
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: runProviderMiniTest(target, model)})
+}
+
+// runProviderMiniTest 用 callProvider 发一条 min-token（16 tokens / 单条 "hi"）
+// 非流式补全，返回测试结果 map：durationMs/model/ok,error?/inputTokens?/outputTokens?。
+func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
 	params := map[string]any{
 		"model":      model,
 		"max_tokens": 16,
 		"messages":   []any{map[string]any{"role": "user", "content": "hi"}},
 	}
 	started := time.Now()
-	resp, err := callProvider(target, params, false)
+	resp, err := callProvider(p, params, false)
 	result := map[string]any{"durationMs": time.Since(started).Milliseconds(), "model": model}
 	if err != nil {
 		result["ok"] = false
 		result["error"] = truncate(err.Error(), 300)
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: result})
-		return
+		return result
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
@@ -1245,7 +1284,7 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 		result["inputTokens"] = u.Prompt
 		result["outputTokens"] = u.Completion
 	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: result})
+	return result
 }
 
 func handleProviderPresets(w http.ResponseWriter, r *http.Request) {
