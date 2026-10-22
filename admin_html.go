@@ -358,6 +358,27 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .combo-pick-id{font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
 .combo-pick-rank{flex-shrink:0;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;font-variant-numeric:tabular-nums}
 
+/* ===== 拉取模型选择器 / 组合测试弹窗：复用 .combo-picker-list / .combo-pick-* 视觉 ===== */
+#provPickerModal,#comboTestModal{background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
+/* 组合测试结果行：优先级序号 / 模型 / 上游徽章 / 测试结论 / 行内操作 */
+.combo-test-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border2);font-size:13px;flex-wrap:wrap}
+.combo-test-row:last-child{border-bottom:none}
+.combo-test-row.combo-test-disabled{opacity:0.55}
+.combo-test-verdict{display:inline-flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.combo-test-error{font-size:11px;color:var(--text2);max-width:180px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.combo-test-row .combo-entry-actions{margin-left:auto}
+/* 列表行内测试结果：固定省略宽度，长错误不撑破行/列（完整原因放 title） */
+.model-test-out{font-size:11px;max-width:170px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)}
+.prov-row-test-out{font-size:11px;max-width:150px;display:inline-block;vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:6px}
+@media (max-width:760px){
+  .model-test-out{max-width:120px}
+  .combo-test-error{max-width:100%}
+  .combos-list{overflow-x:auto} /* 触面核对：新增「测试」后行更宽，表格窄屏可横向滚动而非撑破 */
+}
+/* 行内测试追加后放宽两处表格操作列（5 个紧凑按钮 + 结果位不折行） */
+.combos-list .action-table th:last-child,.combos-list .action-table td:last-child{width:352px;min-width:352px}
+#providersList .action-table th:last-child,#providersList .action-table td:last-child{width:304px;min-width:304px}
+
 /* ===== Toggle 开关 ===== */
 .switch{position:relative;display:inline-block;width:34px;height:20px;flex-shrink:0}
 .switch input{opacity:0;width:0;height:0;position:absolute}
@@ -1235,7 +1256,8 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
         <div class="form-actions" style="margin-top:10px">
           <button class="btn btn-sm btn-primary" onclick="saveProvider(this)">保存 Provider</button>
           <button class="btn btn-sm" onclick="hideProviderEditor()">取消</button>
-          <button class="btn btn-sm" onclick="testProvider()">测试连通性</button>
+          <button class="btn btn-sm" onclick="testProvider(this)">测试连通性</button>
+          <button id="provFetchModelsBtn" class="btn btn-sm" onclick="fetchProviderModels(this)">拉取模型</button>
           <span id="provTestResult" style="font-size:12px;margin-left:8px"></span>
         </div>
       </div>
@@ -1398,6 +1420,41 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
             <button class="btn btn-sm" onclick="closeComboModelPicker()">取消</button>
             <button id="comboPickerReplaceBtn" class="btn btn-sm" style="display:none" onclick="comboPickerConfirm(true)">替换整表</button>
             <button class="btn btn-sm btn-primary" onclick="comboPickerConfirm(false)">确认追加</button>
+          </div>
+        </div>
+      </div>
+      <!-- Provider 编辑器：/providers/models 拉取到的模型多选弹窗（视觉对齐 #comboModelPicker） -->
+      <div id="provPickerModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeProvModelPicker()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:560px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="font-size:15px;font-weight:600;color:var(--text)">选择模型</div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">来自上游 /models 接口；确认后追加到下方「模型 ID」输入框，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="provPickerSearch" placeholder="搜索模型..." oninput="renderProvPickerList()" onkeydown="if(event.key==='Escape')closeProvModelPicker()" style="flex:1;min-width:0">
+            <button class="btn btn-sm" onclick="provPickerSelectAllShown()">全选</button>
+            <button class="btn btn-sm" onclick="provPickerClear()">清空</button>
+          </div>
+          <div id="provPickerList" class="combo-picker-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+            <span id="provPickerCount" style="font-size:12px;color:var(--text2);margin-right:auto"></span>
+            <button class="btn btn-sm" onclick="closeProvModelPicker()">取消</button>
+            <button class="btn btn-sm btn-primary" onclick="provPickerConfirm()">确认添加</button>
+          </div>
+        </div>
+      </div>
+      <!-- 组合连通性测试弹窗：逐条目结果 + 行内启停/移除（工作副本，保存更改后经既存 /combos/save 落盘） -->
+      <div id="comboTestModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeComboTest()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:620px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:15px;font-weight:600;color:var(--text)">组合测试</span>
+            <span id="comboTestSummary" class="model-source-badge zen" style="display:none"></span>
+            <span id="comboTestId" class="mono" style="font-size:12px;color:var(--text3)"></span>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">按优先级逐条探测；可在结果中直接启停/移除条目，保存更改后才实际落盘，取消即放弃修改。</div>
+          <div id="comboTestList" class="combo-picker-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+            <span id="comboTestResult" style="font-size:12px;color:var(--text2);margin-right:auto"></span>
+            <button class="btn btn-sm" onclick="closeComboTest()">取消</button>
+            <button id="comboTestSaveBtn" class="btn btn-sm btn-primary" style="display:none" onclick="comboTestSave(this)">保存更改</button>
           </div>
         </div>
       </div>
@@ -1936,6 +1993,23 @@ const I18N = {
   '下一页': 'Next page',
   ' Tok · ': ' tok · ',
   ' 次': ' req',
+  // Provider 编辑器：测试/拉取模型（老接口 404 → 提示重启代理）
+  '拉取模型': 'Fetch models',
+  '拉取中...': 'Fetching...',
+  '搜索模型...': 'Search models...',
+  '确认添加': 'Add selected',
+  '来自上游 /models 接口；确认后追加到下方「模型 ID」输入框，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。': 'From the upstream /models endpoint; confirmed models are appended to the Model IDs field below, then save manually. Models already on this provider are pre-checked and locked. If it fails, check Base URL and API Key first.',
+  '未获取到模型：请先检查 Base URL 与 API Key': 'No models returned: check Base URL and API Key first',
+  '接口不可用，请重启代理更新到新版本后再试': 'Endpoint unavailable — restart the proxy to load the new version, then retry',
+  '没有匹配的模型': 'No matching models',
+  '未找到该组合': 'Combo not found',
+  '已在 Provider 中，无需重复添加': 'Already in this provider',
+  '所选模型均已在 Provider 中': 'All selected models are already in this provider',
+  // 组合连通性测试弹窗
+  '组合测试': 'Combo Test',
+  '按优先级逐条探测；可在结果中直接启停/移除条目，保存更改后才实际落盘，取消即放弃修改。': 'Entries are probed in priority order. Enable/disable or remove entries right in the results — save applies the changes, cancel discards them.',
+  '✓ 全部通过': '✓ All passed',
+  '保存更改': 'Save Changes',
 };
 let LANG = 'zh';
 const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
@@ -3093,7 +3167,8 @@ async function loadProviders() {
             ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
             : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') + '</td>' +
           '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">编辑</button> ' +
-              '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '")\'>测试</button> ' +
+              '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '", this)\'>' + t('测试') + '</button> ' +
+              '<span class="prov-row-test-out"></span> ' +
               '<button class="btn btn-sm" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ', this)\'>' + (p.enabled ? t('停用') : t('启用')) + '</button> ' +
               '<button class="btn btn-sm btn-danger" onclick=\'deleteProvider("' + p.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
         '</tr>'
@@ -3137,6 +3212,8 @@ function showProviderEditor(p) {
   _('provHeaders').value = p ? Object.entries(p.headers || {}).map(([k, v]) => k + ': ' + v).join('\n') : '';
   _('provEnabled').value = p ? String(p.enabled !== false) : 'true';
   _('provFree').value = p ? String(!!p.free) : 'true';
+  const testOut = _('provTestResult');
+  if (testOut) testOut.innerHTML = '';
   _('providerEditor').style.display = '';
 }
 
@@ -3184,28 +3261,186 @@ async function deleteProvider(id) {
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
 }
 
-async function testProviderById(id) {
-  _('provTestResult').textContent = '...';
-  try {
-    const d = await api('POST', '/providers/test', { id });
-    const r = d.data;
-    _('provTestResult').innerHTML = r.ok
-      ? '<span style="color:var(--green)">✓ ' + r.durationMs + 'ms</span>'
-      : '<span style="color:var(--red)">✗ ' + esc(r.error || 'failed') + '</span>';
-  } catch (e) { _('provTestResult').innerHTML = '<span style="color:var(--red)">✗</span>'; }
+// 内联测试结果统一渲染：绿 ✓ + 摘要 / 红 ✗ + 原因（一律就地展示，不弹 toast-only）
+function renderTestResultHTML(ok, text) {
+  return ok
+    ? '<span style="color:var(--green)">✓ ' + esc(text) + '</span>'
+    : '<span style="color:var(--red)">✗ ' + esc(text) + '</span>';
 }
 
-async function testProvider() {
-  // 先保存再测试（测试走已保存配置）
-  await saveProvider();
-  setTimeout(async () => {
-    try {
-      const d = await api('GET', '/providers');
-      const list = d.data.providers || [];
-      const mine = list.filter(p => p.name === _('provName').value.trim());
-      if (mine.length) testProviderById(mine[0].id);
-    } catch (e) { _('provTestResult').innerHTML = '<span style="color:var(--red)">✗ ' + esc(e.message || '') + '</span>'; }
-  }, 400);
+// 老接口/网关异常的降级文案：404「page not found」/ 非 JSON 响应（旧版本进程）→ 提示重启代理；
+// 其余业务错误（如「无启用条目」）原样透出。
+function friendlyTestError(e) {
+  const msg = (e && e.message || '').toString();
+  if (!msg || /unexpected token|json|404|not found|not allowed/i.test(msg)) {
+    return t('接口不可用，请重启代理更新到新版本后再试');
+  }
+  return t('测试失败: ') + msg;
+}
+
+// 列表行「测试」：结果写入所在行 td 的 .prov-row-test-out（此前写到编辑器内的结果位，编辑器关闭时不可见）
+async function testProviderById(id, cell) {
+  const out = cell && cell.closest ? cell.closest('td').querySelector('.prov-row-test-out') : null;
+  const orig = cell ? cell.innerHTML : '';
+  if (cell) { cell.disabled = true; cell.innerHTML = '<span class="loading"></span> ' + t('测试中...'); }
+  if (out) out.innerHTML = '';
+  try {
+    const d = await api('POST', '/providers/test', { id });
+    const r = d.data || {};
+    if (out) out.innerHTML = renderTestResultHTML(r.ok, r.ok ? (r.durationMs + 'ms') : (r.error || t('失败')));
+  } catch (e) {
+    if (out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(e));
+  } finally {
+    if (cell) { cell.disabled = false; cell.innerHTML = orig; }
+  }
+}
+
+// 编辑器内「测试连通性」：已有 Provider → {id, model?}；新建（未保存）→ 直接用
+// 表单的未保存值（baseURL/apiKey/headers），不再「先保存再按名称匹配」。
+// 结果一律内联展示在按钮旁的 #provTestResult。
+async function testProvider(btn) {
+  const out = _('provTestResult');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('测试中...'); }
+  if (out) out.innerHTML = '<span style="color:var(--text3)"><span class="loading"></span> ' + t('测试中...') + '</span>';
+  // 表单里的「模型 ID」是逗号分隔列表，探测取第一个（显式给出的模型按原样使用）
+  const model = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean)[0] || '';
+  const body = _editingProviderId
+    ? { id: _editingProviderId, model: model }
+    : { baseURL: _('provBaseURL').value.trim(), apiKey: _('provKey').value.trim(), headers: parseHeaderText(_('provHeaders').value), model: model };
+  try {
+    const d = await api('POST', '/providers/test', body);
+    const r = d.data || {};
+    if (out) out.innerHTML = renderTestResultHTML(r.ok, r.ok ? (r.durationMs + 'ms' + (r.model ? ' · ' + r.model : '')) : (r.error || t('失败')));
+  } catch (e) {
+    if (out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// ========== Provider：拉取模型（/providers/models，15s 上游探测）+ 多选弹窗 ==========
+let _provPickerModels = [];   // 上游返回的全部模型 id（服务端已去重排序，保留原顺序）
+let _provPickerOrder = [];    // 勾选顺序（确认后即追加顺序）
+let _provPickerExisting = {}; // 编辑器中已有的模型 id（预勾选且禁用，确认时跳过）
+
+// 已有 Provider 用 {id}（服务端补全 baseURL/key/headers）；新建直接传表单未保存值
+function provEditorPayload() {
+  return _editingProviderId
+    ? { id: _editingProviderId }
+    : { baseURL: _('provBaseURL').value.trim(), apiKey: _('provKey').value.trim(), headers: parseHeaderText(_('provHeaders').value) };
+}
+
+async function fetchProviderModels(btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('拉取中...'); }
+  const out = _('provTestResult');
+  if (out) out.innerHTML = '';
+  try {
+    const d = await api('POST', '/providers/models', provEditorPayload());
+    const r = d.data || {};
+    const models = (r.models || []).map(m => m && m.id).filter(Boolean);
+    if (!models.length) {
+      // 上游失败（HTTP 200 + {error, models:[]}）：不是 API 错误，就地提示排查 Base URL / Key
+      if (out) out.innerHTML = renderTestResultHTML(false,
+        t('未获取到模型：请先检查 Base URL 与 API Key') + (r.error ? ' — ' + r.error : ''));
+      return;
+    }
+    _provPickerModels = Array.from(new Set(models));
+    _provPickerOrder = [];
+    _provPickerExisting = {};
+    _('provModels').value.split(',').map(s => s.trim()).filter(Boolean).forEach(id => { _provPickerExisting[id] = true; });
+    _('provPickerSearch').value = '';
+    renderProvPickerList();
+    _('provPickerModal').style.display = 'flex';
+    try { _('provPickerSearch').focus(); } catch (e) {}
+  } catch (e) {
+    if (out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+function closeProvModelPicker() {
+  const m = _('provPickerModal');
+  if (m) m.style.display = 'none';
+  _provPickerOrder = [];
+}
+
+function provPickerVisible() {
+  const q = (_('provPickerSearch').value || '').trim().toLowerCase();
+  const rx = q.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
+  return _provPickerModels.filter(id => !rx || id.toLowerCase().search(rx) !== -1);
+}
+
+function provPickerToggle(id, checked) {
+  const idx = _provPickerOrder.indexOf(id);
+  if (checked && idx === -1) _provPickerOrder.push(id);
+  if (!checked && idx !== -1) _provPickerOrder.splice(idx, 1);
+  renderProvPickerList();
+}
+
+// 工具条「全选」：把当前筛选结果里所有可勾选的模型补进勾选序列（已有的跳过，不可再选）
+function provPickerSelectAllShown() {
+  provPickerVisible().forEach(id => {
+    if (_provPickerOrder.indexOf(id) === -1 && !_provPickerExisting[id]) _provPickerOrder.push(id);
+  });
+  renderProvPickerList();
+}
+
+function provPickerClear() { _provPickerOrder = []; renderProvPickerList(); }
+
+function renderProvPickerList() {
+  const box = _('provPickerList');
+  if (!box) return;
+  const scrollTop = box.scrollTop;
+  const visible = provPickerVisible();
+  if (!visible.length) {
+    box.innerHTML = '<div class="empty">' + t('没有匹配的模型') + '</div>';
+    renderProvPickerCount();
+    return;
+  }
+  box.innerHTML = visible.map(id => {
+    const rank = _provPickerOrder.indexOf(id);
+    const used = !!_provPickerExisting[id];
+    const checked = used || rank !== -1;
+    return '<label class="combo-pick-row' + (used ? ' combo-pick-used' : '') + '">' +
+      '<input type="checkbox"' + (checked ? ' checked' : '') + (used ? ' disabled' : '') + ' onchange="provPickerToggle(\'' + escAttr(id) + '\', this.checked)">' +
+      '<span class="combo-pick-id">' + esc(id) + '</span>' +
+      (used ? '<span class="model-source-badge" title="' + t('已在 Provider 中，无需重复添加') + '">' + t('已添加') + '</span>' : '') +
+      (rank !== -1 ? '<span class="combo-pick-rank" title="' + t('勾选顺序即尝试优先级') + '">#' + (rank + 1) + '</span>' : '') +
+    '</label>';
+  }).join('');
+  box.scrollTop = scrollTop;
+  renderProvPickerCount();
+}
+
+function renderProvPickerCount() {
+  const el = _('provPickerCount');
+  if (!el) return;
+  el.textContent = t('已选 ') + _provPickerOrder.length + ' / ' + _provPickerModels.length + t(' 个模型');
+}
+
+// 确认：按勾选顺序追加进「模型 ID」输入框（去重），用户仍走既存保存流
+function provPickerConfirm() {
+  if (!_provPickerOrder.length) { toast(t('请先勾选至少一个模型'), 'error'); return; }
+  const cur = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean);
+  const seen = {};
+  cur.forEach(id => { seen[id] = true; });
+  let added = 0;
+  for (const id of _provPickerOrder) {
+    if (seen[id]) continue; // 防重复
+    cur.push(id);
+    seen[id] = true;
+    added++;
+  }
+  if (added) {
+    _('provModels').value = cur.join(', ');
+    toast(t('已按勾选顺序追加 ') + added + t(' 个模型'), 'success');
+  } else {
+    toast(t('所选模型均已在 Provider 中'), 'info');
+  }
+  closeProvModelPicker();
 }
 
 async function loadProviderPresets() {
@@ -3332,7 +3567,8 @@ function renderCombosList() {
         '<td>' + (c.category ? esc(c.category) : '<span style="color:var(--text3)">-</span>') + '</td>' +
         '<td class="row-count num-col">' + enabledEntries + ' / ' + entries.length + '</td>' +
         '<td>' + badge + '</td>' +
-        '<td><button class="btn btn-sm" onclick="editCombo(\'' + escAttr(c.id) + '\')">' + t('编辑') + '</button> ' +
+        '<td><button class="btn btn-sm" onclick="testCombo(\'' + escAttr(c.id) + '\', this)">' + t('测试') + '</button> ' +
+            '<button class="btn btn-sm" onclick="editCombo(\'' + escAttr(c.id) + '\')">' + t('编辑') + '</button> ' +
             '<button class="btn btn-sm" onclick="cloneCombo(\'' + escAttr(c.id) + '\', this)">' + t('克隆') + '</button> ' +
             '<button class="btn btn-sm" onclick="toggleCombo(\'' + escAttr(c.id) + '\', ' + !c.enabled + ', this)">' + t(c.enabled ? '停用' : '启用') + '</button> ' +
             '<button class="btn btn-sm btn-danger" onclick="deleteCombo(\'' + escAttr(c.id) + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
@@ -3883,6 +4119,198 @@ async function cloneCombo(id, btn) {
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
+// ========== 组合连通性测试（/combos/test 纯只读探测 + 结果内启停/移除工作副本） ==========
+let _comboTestCopy = null;    // 正在测试的组合的工作副本（结构同 _comboList 条目，保存前不落盘）
+let _comboTestChanged = false;
+let _comboTestResults = [];   // 服务端返回的逐条目结果（仅含启用条目，顺序与条目一致）
+
+async function testCombo(id, btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('测试中...'); }
+  try {
+    const c = _comboList.find(x => x.id === id);
+    if (!c) { toast(t('未找到该组合'), 'error'); return; }
+    const d = await api('POST', '/combos/test', { id: id });
+    const r = d.data || {};
+    // 工作副本：所有行内启停/移除只改这里，保存更改后才经既存 /combos/save 流落盘
+    _comboTestCopy = {
+      id: c.id, name: c.name || '', description: c.description || '', category: c.category || '',
+      enabled: c.enabled !== false, emergencyFallback: !!c.emergencyFallback,
+      entries: (c.entries || []).map(e => ({ model: e.model || '', disabled: !!e.disabled, source: e.source || '', provider: e.provider || '' })),
+    };
+    _comboTestChanged = false;
+    _comboTestResults = r.results || [];
+    renderComboTestModal();
+    _('comboTestModal').style.display = 'flex';
+  } catch (e) {
+    // 400（组合无启用条目）等业务错误原样透出；404/接口缺失 → 重启提示
+    const box = _('comboTestList');
+    if (box) box.innerHTML = '<div class="empty" style="color:var(--red)">✗ ' + esc(friendlyTestError(e)) + '</div>';
+    const summary = _('comboTestSummary');
+    if (summary) summary.style.display = 'none';
+    const saveBtn = _('comboTestSaveBtn');
+    if (saveBtn) saveBtn.style.display = 'none';
+    const resLbl = _('comboTestResult');
+    if (resLbl) resLbl.textContent = '';
+    const idLbl = _('comboTestId');
+    if (idLbl) idLbl.textContent = '';
+    _comboTestCopy = null;
+    _comboTestChanged = false;
+    _comboTestResults = [];
+    _('comboTestModal').style.display = 'flex';
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// 结果与条目关联：结果仅含启用条目且与条目同序 → 依次配对；配对不上（停用/为空）显示为跳过
+function comboTestResultDetails() {
+  const details = [];
+  let ri = 0;
+  for (const e of (_comboTestCopy ? _comboTestCopy.entries : [])) {
+    if (e.model && !e.disabled && ri < _comboTestResults.length && _comboTestResults[ri].model === e.model) {
+      details.push({ entry: e, res: _comboTestResults[ri] });
+      ri++;
+    } else {
+      details.push({ entry: e, res: null });
+    }
+  }
+  return details;
+}
+
+// 复用 comboPinLabel 的上游-pin 文案：结果自带 upstream（"provider"|"opencode"|"cline"）
+function comboTestUpstreamBadge(upstream) {
+  if (!upstream) return '';
+  const map = { opencode: 'zen', cline: 'remote', provider: 'provider' };
+  const label = upstream === 'opencode' ? 'opencode' : (upstream === 'cline' ? 'Cline' : 'Provider');
+  return '<span class="model-source-badge ' + (map[upstream] || '') + '" title="' + t('上游') + '">' + esc(label) + '</span>';
+}
+
+function comboTestSourcePin(e, res) {
+  const src = res && res.source ? res.source : (e.source || '');
+  if (src === 'provider') return '<span class="model-source-badge provider">' + esc((res && res.provider) || e.provider || 'Provider') + '</span>';
+  if (src === 'zen') return '<span class="model-source-badge zen">opencode</span>';
+  if (src === 'cline') return '<span class="model-source-badge remote">Cline</span>';
+  return '<span class="model-source-badge" title="' + t('自动') + '">' + t('自动') + '</span>';
+}
+
+function renderComboTestModal() {
+  const box = _('comboTestList');
+  if (!box) return;
+  const idLbl = _('comboTestId');
+  if (idLbl) idLbl.textContent = _comboTestCopy ? _comboTestCopy.id : '';
+  // 摘要头：全绿 → 紧凑 ✓ 徽章；有失败 → 失败计数徽章（明细在行内）
+  const allOk = _comboTestResults.length > 0 && _comboTestResults.every(r => !!r.ok);
+  const summary = _('comboTestSummary');
+  if (summary) {
+    const fails = _comboTestResults.filter(r => !r.ok).length;
+    if (!_comboTestResults.length) {
+      summary.style.display = 'none';
+    } else if (allOk) {
+      summary.textContent = t('✓ 全部通过');
+      summary.className = 'model-source-badge zen';
+      summary.style.display = '';
+    } else {
+      summary.textContent = fails + ' ✗ ' + t('失败');
+      summary.className = 'model-source-badge remote';
+      summary.style.display = '';
+    }
+  }
+  const resLbl = _('comboTestResult');
+  if (resLbl) resLbl.textContent = '';
+  const saveBtn = _('comboTestSaveBtn');
+  if (saveBtn) saveBtn.style.display = _comboTestChanged ? '' : 'none';
+  const details = comboTestResultDetails();
+  if (!details.length) {
+    box.innerHTML = '<div class="empty">' + t('（暂无启用的条目）') + '</div>';
+    return;
+  }
+  box.innerHTML = details.map((d, i) => {
+    const e = d.entry, res = d.res;
+    const verdict = !res
+      ? '<span class="combo-test-verdict" style="color:var(--text3)">—</span>'
+      : (res.ok
+        ? '<span class="combo-test-verdict" style="color:var(--green)">✓ <span>' + esc((res.durationMs || 0) + 'ms') + '</span></span>'
+        : '<span class="combo-test-verdict" style="color:var(--red)">✗</span>');
+    const errHtml = res && !res.ok
+      ? '<span class="combo-test-error" title="' + escAttr(res.error || '') + '">' + esc(res.error || '') + '</span>'
+      : '';
+    // 移除只对已测失败的条目开放（保存确认前仅改工作副本，取消即放弃）
+    const removeBtn = res && !res.ok
+      ? '<button class="btn btn-sm btn-danger" onclick="comboTestRemoveEntry(' + i + ')" title="' + t('移除') + '" aria-label="' + t('移除') + '">✕</button>'
+      : '';
+    return '<div class="combo-test-row' + (e.disabled ? ' combo-test-disabled' : '') + '">' +
+      '<span class="combo-entry-idx">' + (i + 1) + '</span>' +
+      '<span class="combo-pick-id" style="flex:1 1 160px">' + esc(e.model) + '</span>' +
+      comboTestSourcePin(e, res) +
+      (res ? comboTestUpstreamBadge(res.upstream) : '') +
+      verdict + errHtml +
+      '<span class="combo-entry-actions">' +
+        '<label class="switch" title="' + t('启用/停用该条目') + '"><input type="checkbox"' + (e.disabled ? '' : ' checked') + ' onchange="comboTestToggleEntry(' + i + ', !this.checked)"><span class="slider"></span></label>' +
+        removeBtn +
+      '</span>' +
+    '</div>';
+  }).join('');
+}
+
+function comboTestToggleEntry(i, disabled) {
+  if (!_comboTestCopy || !_comboTestCopy.entries[i]) return;
+  _comboTestCopy.entries[i].disabled = !!disabled;
+  _comboTestChanged = true;
+  renderComboTestModal();
+}
+
+function comboTestRemoveEntry(i) {
+  if (!_comboTestCopy || !_comboTestCopy.entries[i]) return;
+  _comboTestCopy.entries.splice(i, 1);
+  _comboTestChanged = true;
+  renderComboTestModal();
+}
+
+function closeComboTest() {
+  const m = _('comboTestModal');
+  if (m) m.style.display = 'none';
+  _comboTestCopy = null;
+  _comboTestChanged = false;
+  _comboTestResults = [];
+}
+
+// 保存更改：仅在有修改时可用；走既存保存接口（/combos/save，与 saveCombo 同一载荷结构）
+async function comboTestSave(btn) {
+  if (!_comboTestCopy || !_comboTestChanged) { closeComboTest(); return; }
+  const entries = _comboTestCopy.entries.filter(e => e.model).map(e => {
+    const out = { model: e.model, disabled: !!e.disabled };
+    if (e.source) {
+      out.source = e.source;
+      if (e.source === 'provider' && e.provider) out.provider = e.provider;
+    }
+    return out;
+  });
+  const payload = {
+    id: _comboTestCopy.id,
+    name: _comboTestCopy.name,
+    description: _comboTestCopy.description,
+    category: _comboTestCopy.category,
+    enabled: _comboTestCopy.enabled,
+    emergencyFallback: _comboTestCopy.emergencyFallback,
+    entries: entries,
+  };
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
+  try {
+    await api('POST', '/combos/save', payload);
+    toast(t('组合已保存'), 'success');
+    closeComboTest();
+    await loadCombos();
+  } catch (e) {
+    const resLbl = _('comboTestResult');
+    if (resLbl) resLbl.innerHTML = '<span style="color:var(--red)">✗ ' + esc(e.message) + '</span>';
+    toast(t('保存失败: ') + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
 // ========== 模型列表 ==========
 let _cachedModels = [];
 let _modelSyncSeen = false;
@@ -4053,7 +4481,11 @@ function renderModelRow(m) {
   if (m.output) meta += (meta ? ' · ' : '') + 'out ' + formatTokenCount(m.output);
   // 所有模型都开放上下文/最大输出编辑：Cline 模型不在已知硬限制表时，
   // 手动设置的 Output 会作为 modelMaxOutputLimit 的封顶值生效
-  let actions = '<button class="btn btn-sm" style="padding:2px 6px" onclick="editModelMeta(\'' + esc(m.id) + '\',' + m.context + ',' + m.output + ')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
+  const prevTest = _modelTestResults[m.id] || null;
+  let actions = '<span class="model-test-out" title="' + (prevTest && !prevTest.ok ? escAttr(prevTest.text) : '') + '" ' +
+      (prevTest ? 'data-tested="1"' : '') + '>' + (prevTest ? renderTestResultHTML(prevTest.ok, prevTest.text) : '') + '</span>' +
+    '<button class="btn btn-sm" style="padding:2px 6px" onclick="testModelRow(\'' + escAttr(m.id) + '\', this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">' + t('测试') + '</button>' +
+    '<button class="btn btn-sm" style="padding:2px 6px" onclick="editModelMeta(\'' + esc(m.id) + '\',' + m.context + ',' + m.output + ')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
   if (m._customAny || m._delistedAny) {
     actions += '<button class="btn btn-sm btn-danger" style="padding:2px 6px" onclick="deleteModel(\'' + esc(m.id) + '\')" title="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '" aria-label="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '">✕</button>';
   }
@@ -4063,6 +4495,36 @@ function renderModelRow(m) {
     '<div class="model-row-meta" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">' + meta + '</div>' +
     '<div class="model-row-actions">' + actions + '</div>' +
   '</div>';
+}
+
+// ========== 模型行内测试（/models/test：16-token 小探测，服务端按模型串行化） ==========
+// 结果按模型 ID 回记，筛选/折叠重渲染时回显上次测试结论
+const _modelTestResults = {}; // id -> { ok, text }
+
+async function testModelRow(id, btn) {
+  if (btn && btn.disabled) return; // 行级防重入：等待完成前忽略再次点击
+  const row = btn && btn.closest ? btn.closest('.model-row') : null;
+  const out = row ? row.querySelector('.model-test-out') : null;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
+  if (out) out.innerHTML = '<span style="color:var(--text3)"><span class="loading"></span></span>';
+  try {
+    const d = await api('POST', '/models/test', { model: id });
+    const r = d.data || {};
+    const text = r.ok ? ((r.upstream || '') + ' · ' + (r.durationMs || 0) + 'ms') : (r.error || t('失败'));
+    _modelTestResults[id] = { ok: !!r.ok, text: text };
+    if (out) {
+      out.innerHTML = renderTestResultHTML(r.ok, text);
+      out.title = r.ok ? '' : text;
+    }
+  } catch (e) {
+    const text = friendlyTestError(e);
+    _modelTestResults[id] = { ok: false, text: text };
+    if (out) out.innerHTML = renderTestResultHTML(false, text);
+    if (out) out.title = text;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
 }
 
 // 模型管理列表渲染：两级分组（来源 → 厂商）+ 工具栏筛选；两级都可折叠、可批量启停
@@ -4272,11 +4734,13 @@ function resolveConfirm(val) {
   if (_confirmResolve) { _confirmResolve(val); _confirmResolve = null; }
 }
 
-// Esc 逐层关闭弹层：确认 → 模型元信息 → 模型同步（组合选择器的搜索框自带 Esc 处理）
+// Esc 逐层关闭弹层：确认 → 模型元信息 → 拉取模型选择器 → 组合测试 → 模型同步（组合选择器的搜索框自带 Esc 处理）
 document.addEventListener('keydown', e => {
   if (!e || e.key !== 'Escape') return;
   if (_('confirmModal') && _('confirmModal').style.display === 'flex') { resolveConfirm(false); return; }
   if (_('modelMetaEditor') && _('modelMetaEditor').style.display === 'flex') { hideModelMetaEditor(); return; }
+  if (_('provPickerModal') && _('provPickerModal').style.display === 'flex') { closeProvModelPicker(); return; }
+  if (_('comboTestModal') && _('comboTestModal').style.display === 'flex') { closeComboTest(); return; }
   if (_('modelSyncOverlay') && _('modelSyncOverlay').style.display === 'flex') { closeModelSyncModal(); }
 });
 
