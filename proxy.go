@@ -403,6 +403,9 @@ func startProxy(host string, port int) error {
 	// 启动时异步同步一次 Cline 官方推荐模型（不阻塞启动）
 	startModelSync()
 
+	// §W3-C：已启用 provider 的上游模型清单后台自动检测（下架标记 + 新模型入队待审）
+	startProviderModelRecheck()
+
 	// opencode zen：定时同步免费模型列表 + 压缩会话状态清理
 	if getZenConfig().Enabled {
 		startZenModelsRefresher()

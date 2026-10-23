@@ -1,13 +1,20 @@
 // ========== 自定义 Provider ==========
 let _editingProviderId = '';
+// 从免费类预设新建并保存后，自动触发一次分级导入预览（用户勾选后才写入）
+let _previewAfterSave = false;
 
 async function loadProviders() {
   try {
-    const d = await api('GET', '/providers');
+    const [d, sd] = await Promise.all([
+      api('GET', '/providers'),
+      api('GET', '/providers/sync-status').catch(() => ({ data: {} })),
+    ]);
+    _provSync = (sd && sd.data && sd.data.providers) || {};
     const list = d.data.providers || [];
     const box = _('providersList');
+    renderProviderSyncBanner(list);
     if (!list.length) { box.innerHTML = listEmptyState(ICON_PROVIDERS, t('暂无自定义 Provider')); return; }
-    box.innerHTML = '<table class="action-table"><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th class="num-col">优先级</th><th>状态</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
+    box.innerHTML = '<table class="action-table"><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th class="num-col">优先级</th><th>状态</th><th>' + t('最近检测') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
       list.map(p =>
         '<tr>' +
           '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + (p.connectionId ? ' <span style="color:var(--accent);font-size:11px">token</span>' : '') + '</td>' +
@@ -17,9 +24,12 @@ async function loadProviders() {
           '<td>' + (p.enabled
             ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
             : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') + '</td>' +
+          '<td style="white-space:nowrap">' + (p.enabled ? provSyncCellHTML(p.id) : '<span style="font-size:11px;color:var(--text3)">—</span>') + '</td>' +
           '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">编辑</button> ' +
               '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '", this)\'>' + t('测试') + '</button> ' +
               '<span class="prov-row-test-out"></span> ' +
+              '<button class="btn btn-sm" onclick=\'recheckProvider("' + p.id + '", this)\'>' + t('重新检测') + '</button> ' +
+              '<span class="prov-row-recheck-out"></span> ' +
               '<button class="btn btn-sm" onclick=\'toggleProvider("' + p.id + '", ' + !p.enabled + ', this)\'>' + (p.enabled ? t('停用') : t('启用')) + '</button> ' +
               '<button class="btn btn-sm btn-danger" onclick=\'deleteProvider("' + p.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
         '</tr>'
@@ -28,6 +38,110 @@ async function loadProviders() {
     const box = _('providersList');
     if (box) box.innerHTML = '<div class="empty" style="padding:10px;color:var(--text3)">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
   }
+}
+
+// ========== §W3-C 上游自动检测：列表状态列 + 待审横幅 ==========
+let _provSync = {};
+
+function fmtAgo(ms) {
+  if (!ms) return '';
+  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (s < 60) return t('刚刚');
+  if (s < 3600) return Math.floor(s / 60) + ' ' + t('分钟前');
+  if (s < 86400) return Math.floor(s / 3600) + ' ' + t('小时前');
+  return Math.floor(s / 86400) + ' ' + t('天前');
+}
+
+function provSyncCellHTML(id) {
+  const st = _provSync[id] || {};
+  const when = st.lastCheckedMs
+    ? '<span style="font-size:11px;color:var(--text3)" title="' + esc(new Date(st.lastCheckedMs).toLocaleString(LC())) + '">' + fmtAgo(st.lastCheckedMs) + '</span>'
+    : '<span style="font-size:11px;color:var(--text3)">' + t('未检测') + '</span>';
+  const err = st.lastError
+    ? ' <span style="font-size:11px;color:var(--red)" title="' + esc(st.lastError) + '">✗</span>' : '';
+  let flow = '';
+  if (st.newQueued && st.batchId) flow += ' <span class="a-link" style="font-size:11px" onclick="openAutoBatch(\'' + esc(st.batchId) + '\')">+' + st.newQueued + ' ' + t('待审') + '</span>';
+  if (st.delistedMarked) flow += ' <span style="font-size:11px;color:var(--text3)" title="' + t('已下架') + '">' + st.delistedMarked + ' ↓</span>';
+  return when + err + flow;
+}
+
+async function recheckProvider(id, btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('检测中...'); }
+  try {
+    const d = await api('POST', '/providers/recheck', { id: id });
+    const st = d.data || {};
+    const out = btn ? btn.parentNode.querySelector('.prov-row-recheck-out') : null;
+    if (st.lastError && !st.lastCheckedMs) {
+      if (out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(new Error(st.lastError)));
+    } else {
+      const bits = [];
+      if (st.newQueued) bits.push('+' + st.newQueued + ' ' + t('待审'));
+      if (st.delistedMarked) bits.push(st.delistedMarked + ' ' + t('已下架'));
+      if (out) out.innerHTML = renderTestResultHTML(true, bits.length ? bits.join(' · ') : t('无变化'));
+    }
+    loadProviders();
+  } catch (e) {
+    toast(t('检测失败') + ': ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+function renderProviderSyncBanner(list) {
+  const box = _('providerSyncBanner');
+  if (!box) return;
+  let delisted = 0, queued = 0;
+  (list || []).forEach(p => {
+    const st = _provSync[p.id] || {};
+    delisted += st.delistedMarked || 0;
+    if (st.newQueued && st.batchId) queued += st.newQueued;
+  });
+  if (!queued && !delisted) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'flex';
+  box.innerHTML = '<span style="font-size:12px;color:var(--text2)">' +
+    (queued ? '<span style="color:var(--accent);font-weight:600">' + queued + t('个新模型待审') + '</span>' : '') +
+    (queued && delisted ? ' · ' : '') +
+    (delisted ? '<span style="color:var(--text3)">' + delisted + ' ' + t('已下架') + '</span>' : '') +
+    '</span>' +
+    '<span style="font-size:11px;color:var(--text3);margin-left:8px">' + t('后台每 6 小时自动检测已启用 Provider 的上游模型清单') + '</span>' +
+    '<span style="margin-left:auto;display:flex;gap:8px">' +
+    (queued ? '<button class="btn btn-sm btn-primary" onclick="openNewestAutoBatch()">' + t('查看审阅') + '</button>' +
+             '<button class="btn btn-sm" onclick="discardAutoBatches(this)">' + t('全部忽略') + '</button>' : '') +
+    '</span>';
+}
+
+async function openNewestAutoBatch() {
+  try {
+    const d = await api('GET', '/models/import/pending');
+    const autos = ((d.data || {}).batches || []).filter(b => b.auto);
+    if (!autos.length) { toast(t('没有可导入的模型'), 'info'); return; }
+    openAutoBatch(autos[0].id);
+  } catch (e) { toast(t('加载失败') + ': ' + esc(e.message), 'error'); }
+}
+
+async function openAutoBatch(batchId) {
+  try {
+    const d = await api('GET', '/models/import/batch?id=' + encodeURIComponent(batchId));
+    const r = d.data || {};
+    if (!r.batch) { toast(t('批次不存在或已过期'), 'info'); loadProviders(); return; }
+    _importBatch = r.batch;
+    renderImportPreviewList();
+    _('importPreviewModal').style.display = 'flex';
+  } catch (e) { toast(t('加载失败') + ': ' + esc(e.message), 'error'); }
+}
+
+async function discardAutoBatches(btn) {
+  if (!(await showConfirm(t('确定忽略全部待审的新模型批次？')))) return;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; }
+  try {
+    const d = await api('GET', '/models/import/pending');
+    const autos = ((d.data || {}).batches || []).filter(b => b.auto);
+    for (const b of autos) { await api('POST', '/models/import/discard', { batchId: b.id }); }
+    toast(t('已忽略全部待审批次'), 'success');
+    loadProviders();
+  } catch (e) { toast(t('忽略失败') + ': ' + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 // toggleProvider 快速切换 provider 启停（不打开编辑表单）：拉取最新配置，
@@ -50,6 +164,7 @@ async function toggleProvider(id, enable, btn) {
 
 function showProviderEditor(p) {
   _editingProviderId = p ? p.id : '';
+  _previewAfterSave = false;
   const title = _('providerEditorTitle');
   if (title) title.textContent = p ? t('编辑 Provider') : t('添加 Provider');
   _('provName').value = p ? p.name : '';
@@ -102,11 +217,28 @@ async function saveProvider(btn) {
   };
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
+  const isNew = !payload.id;
   try {
-    await api('POST', '/providers/save', payload);
+    const d = await api('POST', '/providers/save', payload);
     toast(t('Provider 已保存'), 'success');
     hideProviderEditor();
     loadProviders();
+    // 从免费/免密钥预设新建后，自动跑一次分级预览，弹出勾选导入（仍受控，不静默写入）
+    if (isNew && _previewAfterSave) {
+      const newId = d && d.data && d.data.provider && d.data.provider.id;
+      if (newId) {
+        _previewAfterSave = false;
+        try {
+          const pd = await api('POST', '/models/import/preview', { id: newId });
+          const pr = pd.data || {};
+          if (!pr.error && pr.batch) {
+            _importBatch = pr.batch;
+            renderImportPreviewList();
+            _('importPreviewModal').style.display = 'flex';
+          }
+        } catch (e) {}
+      }
+    }
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
@@ -376,8 +508,12 @@ function applyPreset(key) {
   _('provModels').value = (p.modelIDs || []).join(', ');
   renderProvModelChips();
   // hasFree/other 是混合目录：整源标 free 会把付费模型误标为免费（审计 §9.2 缺口），默认标为付费。
-  const freeSource = p.kind === 'free' || p.kind === 'freeTier' || p.kind === 'local';
-  _('provFree').value = freeSource ? 'true' : 'false';
+  // 混合目录（freeTier/hasFree/other）整源标 free 会把付费模型误标为免费（审计 §9.2 缺口），
+  // 仅免密钥/本地整源免费；逐模型层级交给 §9.3 分级预览判定。
+  const wholeFree = p.kind === 'free' || p.kind === 'local';
+  _('provFree').value = wholeFree ? 'true' : 'false';
+  // 带种子模型或目录端点的预设：新建保存后自动开分级预览（勾选后才写入，绝不静默导入）
+  _previewAfterSave = !p.loginFlow && (!!p.modelIDs || !!p.modelsFetcher || wholeFree);
   if (p.loginFlow) {
     toast(t('已填充登录类预设：请在「登录连接（OAuth）」完成设备码登录，再在编辑器「账号连接」选择连接'), 'info');
   } else if (p.kind === 'free') {
@@ -398,11 +534,16 @@ const _tierSignals = {
 };
 
 async function previewModelImport(btn) {
-  if (!_editingProviderId) { toast(t('请先保存 Provider 再分级导入'), 'info'); return; }
+  const body = _editingProviderId
+    ? { id: _editingProviderId }
+    : { baseURL: _('provBaseURL').value.trim(), apiKey: _('provKey').value.trim(),
+        headers: parseHeaderText(_('provHeaders').value),
+        free: _('provFree').value === 'true', name: _('provName').value.trim() };
+  if (!_editingProviderId && !body.baseURL) { toast(t('请先填写 Base URL'), 'info'); return; }
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('扫描中...'); }
   try {
-    const d = await api('POST', '/models/import/preview', { id: _editingProviderId });
+    const d = await api('POST', '/models/import/preview', body);
     const r = d.data || {};
     if (r.error) { toast(t('上游拉取失败') + ': ' + r.error, 'error'); return; }
     _importBatch = r.batch;
@@ -458,6 +599,21 @@ async function importPreviewApply(btn) {
   if (!_importBatch) return;
   const approve = Array.from(document.querySelectorAll('#importPreviewList .import-approve:checked')).map(el => el.value);
   if (!approve.length) { toast(t('请先勾选要导入的模型'), 'info'); return; }
+  // 草稿批次（未保存 Provider）：服务端无 provider 可写 → 所选并入表单模型列表并触发保存
+  if (!_importBatch.providerId) {
+    const input = _('provModels');
+    const seen = {};
+    const merged = input.value.split(',').map(s => s.trim()).filter(Boolean)
+      .concat(approve)
+      .filter(id => !seen[id] && (seen[id] = true));
+    input.value = merged.join(', ');
+    renderProvModelChips();
+    closeImportPreview();
+    _importBatch = null;
+    toast(t('所选模型已并入，正在保存 Provider...'), 'info');
+    await saveProvider(null);
+    return;
+  }
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('导入中...'); }
   try {
@@ -481,6 +637,14 @@ let _connList = [];
 let _loginSessionId = '';
 let _loginPollTimer = null;
 
+// 流程 key → 用户可读名（未知 key 回落原样显示）
+const _flowLabels = {
+  kilocode: 'Kilo Code', github: 'GitHub Copilot', qwen: 'Qwen Chat',
+  'kimi-coding': 'Kimi for Coding', 'codebuddy-cn': 'CodeBuddy CN（腾讯）',
+  'codebuddy-intl': 'CodeBuddy Intl', workbuddy: 'WorkBuddy',
+};
+function flowLabel(p) { return _flowLabels[p] || p; }
+
 async function loadConnections() {
   try {
     const d = await api('GET', '/connections');
@@ -492,7 +656,7 @@ async function loadConnections() {
   }
   renderConnectionsList();
   const dl = _('connProviderList');
-  if (dl) dl.innerHTML = _connFlows.map(p => '<option value="' + esc(p) + '">').join('');
+  if (dl) dl.innerHTML = _connFlows.map(p => '<option value="' + esc(p) + '" label="' + esc(flowLabel(p)) + '">').join('');
   const ed = _('providerEditor');
   if (ed && ed.classList.contains('open')) fillConnectionSelect(_('provConnection') ? _('provConnection').value : '');
 }
@@ -504,7 +668,7 @@ function renderConnectionsList() {
   box.innerHTML = '<table class="action-table"><thead><tr><th>' + t('服务') + '</th><th>' + t('方式') + '</th><th>' + t('账号') + '</th><th>' + t('状态') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
     _connList.map(c =>
       '<tr>' +
-        '<td>' + esc(c.provider) + '</td>' +
+        '<td>' + esc(flowLabel(c.provider)) + ' <span class="mono" style="font-size:11px;color:var(--text3)">' + esc(c.provider) + '</span></td>' +
         '<td style="font-size:11px;color:var(--text3)">' + esc(c.authType === 'device_code' ? t('设备码登录') : c.authType === 'import_token' ? t('导入 Token') : (c.authType || '')) + '</td>' +
         '<td style="font-size:12px">' + esc(c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : '—')) + '</td>' +
         '<td>' + (c.status === 'active'
@@ -521,8 +685,8 @@ function openDeviceLogin() {
   const sel = _('connLoginProvider');
   if (sel) {
     sel.innerHTML = _connFlows.length
-      ? _connFlows.map(p => '<option value="' + esc(p) + '">' + esc(p) + '</option>').join('')
-      : '<option value="kilocode">kilocode</option>';
+      ? _connFlows.map(p => '<option value="' + esc(p) + '">' + esc(flowLabel(p)) + '</option>').join('')
+      : '<option value="kilocode">Kilo Code</option>';
   }
   _('connLoginStep1').style.display = '';
   _('connLoginStep2').style.display = 'none';

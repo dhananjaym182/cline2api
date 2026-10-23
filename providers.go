@@ -912,6 +912,13 @@ var providerPresets = map[string]providerPreset{
 		Notes:    "Self-hosted OpenAI-compatible server (no key needed usually)",
 		FreeTier: true,
 	},
+	"ollama-local": {
+		Name:     "Local Ollama",
+		BaseURL:  "http://127.0.0.1:11434/v1",
+		Kind:     "local",
+		Notes:    "Ollama 自带 OpenAI 兼容端点（/api 同服务），无需密钥，模型列表来自本机 /v1/models",
+		FreeTier: true,
+	},
 	// §8.3 登录类免费源：无 API Key，用「登录连接（OAuth）」设备码授权后在编辑器绑定连接
 	"kilocode": {
 		Name:      "Kilo Code (Free)",
@@ -934,6 +941,39 @@ var providerPresets = map[string]providerPreset{
 		Notes:     "设备码登录 Qwen Chat（PKCE，无需 API Key）；OpenAI 兼容端点",
 		FreeTier:  true,
 		LoginFlow: true,
+	},
+	"kimi-coding": {
+		Name:          "Kimi for Coding (Free)",
+		BaseURL:       "https://api.kimi.com/coding/v1",
+		Notes:         "设备码登录 Kimi（标准 RFC8628，无需 API Key）；OpenAI 兼容 /coding/v1，含 k2 编码模型免费额度",
+		FreeTier:      true,
+		LoginFlow:     true,
+		ModelIDs:      []string{"kimi-k2.6", "kimi-k2.5", "kimi-k2.5-thinking", "kimi-latest"},
+		ModelsFetcher: &modelsFetcher{URL: "https://api.kimi.com/coding/v1/models", Type: "openai"},
+	},
+	"codebuddy-cn": {
+		Name:      "CodeBuddy CN (Free)",
+		BaseURL:   "https://copilot.tencent.com/v2",
+		Notes:     "浏览器授权轮询登录（state-poll，无需 API Key）；腾讯 CodeBuddy 国内站 /v2/chat/completions",
+		FreeTier:  true,
+		LoginFlow: true,
+		ModelIDs:  []string{"glm-5.3", "glm-5.3-flash", "glm-5.2", "minimax-m3", "kimi-k2.7"},
+	},
+	"codebuddy-intl": {
+		Name:      "CodeBuddy Intl (Free)",
+		BaseURL:   "https://www.codebuddy.ai/v2",
+		Notes:     "浏览器授权轮询登录（state-poll，无需 API Key）；CodeBuddy 国际站 /v2/chat/completions",
+		FreeTier:  true,
+		LoginFlow: true,
+		ModelIDs:  []string{"glm-5.3", "glm-5.3-flash", "glm-5.2", "minimax-m3", "kimi-k3-1"},
+	},
+	"workbuddy": {
+		Name:      "WorkBuddy (Free)",
+		BaseURL:   "https://www.workbuddy.ai/v2",
+		Notes:     "浏览器授权轮询登录（state-poll，无需 API Key）；WorkBuddy /v2/chat/completions，含混元预览模型",
+		FreeTier:  true,
+		LoginFlow: true,
+		ModelIDs:  []string{"hy3", "hy4-preview", "glm-5.3", "glm-5.3-flash", "minimax-m3"},
 	},
 }
 
@@ -1261,6 +1301,7 @@ func handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	syncProviderModels() // 清理该 provider 声明的池内模型条目
+	clearProviderRecheck(req.ID)
 	log.Printf("admin: provider deleted id=%s", req.ID)
 	writeAPI(w, http.StatusOK, apiResponse{Success: true})
 }

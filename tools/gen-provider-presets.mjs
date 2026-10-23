@@ -40,7 +40,22 @@ for (const f of files) {
   const base = String(baseUrl).replace(/\/+(chat\/completions|responses)$/i, "");
   if (!base) { skipped.push([mod.id, "no chat/completions-capable baseURL"]); continue; }
   const fetcher = transport.modelsFetcher || mod.modelsFetcher || {};
-  const modelIDs = (mod.models || []).filter((m) => typeof m === "string");
+  // 注册表 models 是对象数组（{id, kind}）；排除 embedding/rerank/语音等非对话模态，
+  // 免费信号（:free / -free 后缀）排前面，供 Go 侧 ModelIDs 种子直接呈现免费模型。
+  const modelIDs = (() => {
+    const out = [];
+    const seen = new Set();
+    for (const m of mod.models || []) {
+      const id = typeof m === "string" ? m : (m && m.id) || "";
+      if (!id || seen.has(id)) continue;
+      if (m && /(embedding|rerank|tts|audio|image|speech|moderation)/i.test(String(m.kind || ""))) continue;
+      if (/(embedding|rerank|tts|whisper|image|speech)/i.test(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+    out.sort((a, b) => (/-?free$/i.test(b) ? 1 : 0) - (/-?free$/i.test(a) ? 1 : 0));
+    return out;
+  })();
 
   const tiered = category === "free" || category === "freeTier";
   const host = (() => { try { return new URL(base).hostname; } catch { return ""; } })();
@@ -55,7 +70,7 @@ for (const f of files) {
     hasFree: tiered || mod.noAuth === true,
     headers: Object.keys(headers).length ? headers : undefined,
     modelsFetcher: fetcher?.url ? { url: fetcher.url, type: fetcher.type || "openai" } : undefined,
-    modelIDs: modelIDs.length ? modelIDs.slice(0, 12) : undefined,
+    modelIDs: modelIDs.length ? modelIDs.slice(0, 40) : undefined,
     notes: `${mod.id} (from extremerouter registry)`
   });
 }
@@ -69,7 +84,7 @@ const EXISTING_BASE = new Set([
   "https://api.cerebras.ai/v1", "https://generativelanguage.googleapis.com/v1beta/openai",
   "https://api.mistral.ai/v1", "https://api.together.xyz/v1",
   "https://api.deepseek.com/v1", "https://api.openai.com/v1",
-  "http://127.0.0.1:8000/v1",
+  "http://127.0.0.1:8000/v1", "http://127.0.0.1:11434/v1",
 ]);
 const gq = (s) => String(s ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ");
 let go = `// ============================================================================
@@ -98,7 +113,7 @@ for (const p of presets) {
     ? `\n\t\tHeaders: map[string]string{${Object.entries(p.headers).map(([k, v]) => `"${gq(k)}": "${gq(v)}"`).join(", ")}},`
     : "";
   const mf = p.modelsFetcher ? `\n\t\tModelsFetcher: &modelsFetcher{URL: "${gq(p.modelsFetcher.url)}", Type: "${gq(p.modelsFetcher.type)}"},` : "";
-  const ids = p.modelIDs ? `\n\t\tModelIDs: []string{${p.modelIDs.slice(0, 8).map(gq).map((s) => `"${s}"`).join(", ")}},` : "";
+  const ids = p.modelIDs ? `\n\t\tModelIDs: []string{${p.modelIDs.slice(0, 40).map(gq).map((s) => `"${s}"`).join(", ")}},` : "";
   go += `\t"${gq(p.key)}": {\n\t\tName: "${gq(p.displayName)}",\n\t\tBaseURL: "${gq(p.baseURL)}",${h}${mf}${ids}\n\t\tKind: "${gq(p.kind)}",\n\t\tFreeTier: ${p.hasFree},\n\t\tNotes: "${gq(p.notes || "")}",\n\t},\n`;
 }
 for (const [id, why] of skipped) notices.push([id, why]);

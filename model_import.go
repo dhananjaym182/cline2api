@@ -72,7 +72,37 @@ func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signa
 	return "pass", tierSignalPaidDefault
 }
 
-// discoverModelEntries 拉取 {baseURL}/models（404 时补试 /v1/models），解析 id + 定价 + 标签。
+// fetcherBaseForBase 按规范化 baseURL 匹配预设的 ModelsFetcher 目录端点。
+// 仅采信以 /models 结尾的 fetcher URL（openrouter / kilo 形态）；其他自定义格式
+// （pricing 页等）解析不了，宁可不回退也不瞎猜。返回去掉尾部 /models 的基址。
+func fetcherBaseForBase(baseURL string) string {
+	norm := func(u string) string {
+		u = strings.ToLower(strings.TrimRight(strings.TrimSpace(u), "/"))
+		u = strings.TrimSuffix(u, "/chat/completions")
+		return strings.Replace(u, "//localhost", "//127.0.0.1", 1)
+	}
+	target := norm(baseURL)
+	if target == "" {
+		return ""
+	}
+	for _, m := range []map[string]providerPreset{providerPresets, providerPresetsImported} {
+		for _, p := range m {
+			if p.ModelsFetcher == nil || !strings.HasSuffix(strings.ToLower(p.ModelsFetcher.URL), "/models") {
+				continue
+			}
+			if norm(p.BaseURL) == target {
+				fb := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(p.ModelsFetcher.URL, "/"), "/models"), "/")
+				if fb != "" && fb != target {
+					return fb
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// discoverModelEntries 拉取 {baseURL}/models（404 时补试 /v1/models，再回退预设
+// ModelsFetcher 目录端点），解析 id + 定价 + 标签。
 func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]upstreamModelEntry, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
 	if baseURL == "" {
@@ -151,22 +181,36 @@ func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		return resp.StatusCode, body, nil
 	}
-	status, body, err := fetch(baseURL + "/models")
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %v", err)
+	tryBase := func(b string) ([]upstreamModelEntry, error) {
+		status, body, err := fetch(b + "/models")
+		if err != nil {
+			return nil, fmt.Errorf("request failed: %v", err)
+		}
+		if status == http.StatusNotFound {
+			s2, b2, e2 := fetch(b + "/v1/models")
+			if e2 == nil && s2 == http.StatusOK {
+				status, body = s2, b2
+			}
+		}
+		if status != http.StatusOK {
+			return nil, fmt.Errorf("HTTP %d: %s", status, truncate(strings.TrimSpace(string(body)), 200))
+		}
+		return parse(body)
 	}
-	if status == http.StatusNotFound {
-		s2, b2, e2 := fetch(baseURL + "/v1/models")
-		if e2 == nil && s2 == http.StatusOK {
-			status, body = s2, b2
+	bases := []string{baseURL}
+	if fb := fetcherBaseForBase(baseURL); fb != "" {
+		bases = append(bases, fb)
+	}
+	var entries []upstreamModelEntry
+	var lastErr error
+	for _, b := range bases {
+		entries, lastErr = tryBase(b)
+		if lastErr == nil {
+			break
 		}
 	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", status, truncate(strings.TrimSpace(string(body)), 200))
-	}
-	entries, err := parse(body)
-	if err != nil {
-		return nil, err
+	if lastErr != nil {
+		return nil, lastErr
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
 	return entries, nil
@@ -188,6 +232,7 @@ type importBatch struct {
 	ProviderID   string       `json:"providerId"`
 	ProviderName string       `json:"providerName"`
 	CreatedAt    time.Time    `json:"createdAt"`
+	Auto         bool         `json:"auto,omitempty"` // 后台自动检测生成（同一 provider 至多一个，重复检测时刷新）
 	Items        []importItem `json:"items"`
 }
 
@@ -244,15 +289,22 @@ func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBat
 
 // ---------- admin 端点 ----------
 
-// POST /admin/api/models/import/preview  body: {id}
-// 拉取 + 分类 + 生成预览批次。上游失败按既有约定：HTTP 200 包 {error}。
+// POST /admin/api/models/import/preview  body: {id} 或草稿 {baseURL,apiKey,headers,free,name}
+// 拉取 + 分类 + 生成预览批次。草稿（未保存 Provider）走后者，批次 providerId 为空、
+// 仅可预览：apply 端点找不到 provider 会拒绝，前端改为「所选并入并保存」。
+// 上游失败按既有约定：HTTP 200 包 {error}。
 func handleModelImportPreview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: "method_not_allowed"})
 		return
 	}
 	var req struct {
-		ID string `json:"id"`
+		ID      string            `json:"id"`
+		BaseURL string            `json:"baseURL"`
+		APIKey  string            `json:"apiKey"`
+		Headers map[string]string `json:"headers"`
+		Free    bool              `json:"free"`
+		Name    string            `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
@@ -261,11 +313,21 @@ func handleModelImportPreview(w http.ResponseWriter, r *http.Request) {
 	loadProviders()
 	providersMu.Lock()
 	var prov *CustomProvider
-	for _, p := range customProviders {
-		if p.ID == req.ID {
-			cp := *p
-			prov = &cp
-			break
+	if req.ID != "" {
+		for _, p := range customProviders {
+			if p.ID == req.ID {
+				cp := *p
+				prov = &cp
+				break
+			}
+		}
+	} else if strings.TrimSpace(req.BaseURL) != "" {
+		prov = &CustomProvider{
+			Name:    req.Name,
+			BaseURL: strings.TrimRight(strings.TrimSpace(req.BaseURL), "/"),
+			APIKey:  req.APIKey,
+			Headers: req.Headers,
+			Free:    req.Free,
 		}
 	}
 	providersMu.Unlock()
@@ -393,7 +455,7 @@ func handleModelImportPending(w http.ResponseWriter, r *http.Request) {
 	for _, b := range pendingImports {
 		out = append(out, map[string]any{
 			"id": b.ID, "providerId": b.ProviderID, "providerName": b.ProviderName,
-			"createdAt": b.CreatedAt, "items": len(b.Items),
+			"createdAt": b.CreatedAt, "items": len(b.Items), "auto": b.Auto,
 		})
 	}
 	importsMu.Unlock()
@@ -401,6 +463,19 @@ func handleModelImportPending(w http.ResponseWriter, r *http.Request) {
 		return out[i]["createdAt"].(time.Time).After(out[j]["createdAt"].(time.Time))
 	})
 	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"batches": out}})
+}
+
+// GET /admin/api/models/import/batch?id=x — 读回待批准批次全文（横幅点击打开 Auto 批次用）。
+func handleModelImportBatch(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	importsMu.Lock()
+	batch := pendingImports[id]
+	importsMu.Unlock()
+	if batch == nil {
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: "batch not found (already applied or expired)"})
+		return
+	}
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"batch": batch}})
 }
 
 // POST /admin/api/models/import/discard  body: {batchId}

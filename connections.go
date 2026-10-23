@@ -197,13 +197,21 @@ type deviceFlowSpec struct {
 	ModelsTestURL string // 连接测试 / 模型发现用的 GET 端点（bearer + OrgHeader）
 	IntervalSec   int    // 轮询间隔（默认 3）
 
-	// rfc8628 模式（GitHub / Qwen Portal）：POST form 授权 + 轮询，error 字段表状态
-	Mode          string // "" | "kilo" | "rfc8628"
+	// rfc8628 模式（GitHub / Qwen Portal / Kimi）：POST form 授权 + 轮询，error 字段表状态
+	Mode          string // "" | "kilo" | "rfc8628" | "state-poll"
 	TokenURL      string // rfc8628 轮询端点（POST x-www-form-urlencoded）
 	ClientID      string
 	Scope         string
 	PKCE          bool   // 授权请求带 code_challenge(S256)，轮询带 code_verifier
 	UserCodeField string // 用户码字段名（默认 "user_code"；kilo 为 "code"）
+
+	// state-poll 模式（CodeBuddy 家族：codebuddy-cn/intl、workbuddy）：
+	// POST {StateURL}?platform= 得 {code:0,data:{state,authUrl}}；
+	// GET {TokenURL}?state= 轮询，code 11217=pending / code 0+data.accessToken=成功。
+	// 请求需带 X-Domain(=StateURL host)、X-Requested-With、X-No-*、X-Product 与固定 UA。
+	StateURL  string // state-poll 授权端点（POST 空 JSON）
+	Platform  string // state-poll：platform 查询参数（CLI / ide / workbuddy）
+	UserAgent string // state-poll：CLI/... UA
 
 	// 可选二段兑换：登录 token → 短期作业票（GitHub: OAuth token → copilot job token）
 	ExchangeURL       string // GET + Bearer，响应 JSON
@@ -247,6 +255,44 @@ var providerDeviceFlows = map[string]deviceFlowSpec{
 		// Qwen Chat OAuth 票直连 portal.qwen.ai/v1（OpenAI 兼容）
 		ModelsTestURL: "https://portal.qwen.ai/v1/models",
 		IntervalSec:   3,
+	},
+	"kimi-coding": {
+		Mode:        "rfc8628",
+		InitiateURL: "https://auth.kimi.com/api/oauth/device_authorization",
+		TokenURL:    "https://auth.kimi.com/api/oauth/token",
+		ClientID:    "17e5f671-d194-4dfb-9706-5516cb48c098",
+		// 端点形状已实测（2026-10）：initiate 返回标准 device_code/user_code/verification_uri
+		ModelsTestURL: "https://api.kimi.com/coding/v1/models",
+		IntervalSec:   5,
+	},
+	// CodeBuddy 家族：同一 /v2/plugin 轮询契约，三个域名各一条（登录成功形状按
+	// 上游 services 实现镜像：code 0 + data.accessToken / 11217 pending）
+	"codebuddy-cn": {
+		Mode:        "state-poll",
+		StateURL:    "https://copilot.tencent.com/v2/plugin/auth/state",
+		TokenURL:    "https://copilot.tencent.com/v2/plugin/auth/token",
+		Platform:    "CLI",
+		UserAgent:   "CLI/2.63.2 CodeBuddy/2.63.2",
+		ModelsTestURL: "https://copilot.tencent.com/v2/models",
+		IntervalSec: 5,
+	},
+	"codebuddy-intl": {
+		Mode:        "state-poll",
+		StateURL:    "https://www.codebuddy.ai/v2/plugin/auth/state",
+		TokenURL:    "https://www.codebuddy.ai/v2/plugin/auth/token",
+		Platform:    "ide",
+		UserAgent:   "IDE/2.63.2 CodeBuddy/2.63.2",
+		ModelsTestURL: "https://www.codebuddy.ai/v2/models",
+		IntervalSec: 5,
+	},
+	"workbuddy": {
+		Mode:        "state-poll",
+		StateURL:    "https://www.workbuddy.ai/v2/plugin/auth/state",
+		TokenURL:    "https://www.workbuddy.ai/v2/plugin/auth/token",
+		Platform:    "workbuddy",
+		UserAgent:   "CLI/2.63.2 WorkBuddy/2.63.2",
+		ModelsTestURL: "https://www.workbuddy.ai/v2/models",
+		IntervalSec: 5,
 	},
 }
 
@@ -310,6 +356,30 @@ func newPKCE() (verifier, challenge string, err error) {
 	verifier = base64.RawURLEncoding.EncodeToString(b)
 	sum := sha256.Sum256([]byte(verifier))
 	return verifier, base64.RawURLEncoding.EncodeToString(sum[:]), nil
+}
+
+// statePollHeaders CodeBuddy 家族固定请求头：X-Domain 取 StateURL host，其余按上游 CLI 常量。
+func statePollHeaders(spec deviceFlowSpec, isPoll bool) map[string]string {
+	host := ""
+	if u, e := url.Parse(spec.StateURL); e == nil {
+		host = u.Host
+	}
+	h := map[string]string{
+		"Accept":             "application/json",
+		"User-Agent":         spec.UserAgent,
+		"X-Requested-With":   "XMLHttpRequest",
+		"X-Domain":           host,
+		"X-No-Authorization": "true",
+		"X-No-User-Id":       "true",
+		"X-Product":          "SaaS",
+	}
+	if isPoll {
+		h["X-No-Enterprise-Id"] = "true"
+		h["X-No-Department-Info"] = "true"
+	} else {
+		h["Content-Type"] = "application/json"
+	}
+	return h
 }
 
 // exchangeJobToken 二段兑换（GitHub Copilot）：OAuth token → 短期作业票。
@@ -409,6 +479,46 @@ func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 				userDisp = code
 			}
 			return code, userDisp, verifURL, expiresIn, nil
+		}
+		if spec.Mode == "state-poll" {
+			target := spec.StateURL
+			if spec.Platform != "" {
+				target += "?platform=" + url.QueryEscape(spec.Platform)
+			}
+			req, e := http.NewRequest(http.MethodPost, target, bytes.NewReader([]byte("{}")))
+			if e != nil {
+				return "", "", "", 0, e
+			}
+			for k, v := range statePollHeaders(spec, false) {
+				req.Header.Set(k, v)
+			}
+			resp, e := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+			if e != nil {
+				return "", "", "", 0, fmt.Errorf("initiate failed: %v", e)
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+			if resp.StatusCode != http.StatusOK {
+				return "", "", "", 0, fmt.Errorf("device auth initiation failed: %d %s", resp.StatusCode, truncate(strings.TrimSpace(string(body)), 200))
+			}
+			var data map[string]any
+			if e := json.Unmarshal(body, &data); e != nil {
+				return "", "", "", 0, fmt.Errorf("initiate decode: %v", e)
+			}
+			if c, _ := data["code"].(float64); c != 0 {
+				msg, _ := data["msg"].(string)
+				return "", "", "", 0, fmt.Errorf("state error: %s", truncate(msg, 160))
+			}
+			inner, _ := data["data"].(map[string]any)
+			state, _ := inner["state"].(string)
+			authURL, _ := inner["authUrl"].(string)
+			if state == "" {
+				return "", "", "", 0, fmt.Errorf("state missing in response")
+			}
+			if authURL == "" {
+				authURL = state // 无链接时至少展示 state
+			}
+			return state, state, authURL, 900, nil
 		}
 		req, e := http.NewRequest(http.MethodPost, spec.InitiateURL, bytes.NewReader([]byte("{}")))
 		if e != nil {
@@ -531,6 +641,21 @@ func pollProviderDeviceToken(spec deviceFlowSpec, code string, expiresIn int, ve
 			body, _ = io.ReadAll(io.LimitReader(resp.Body, 256<<10))
 			statusCode = resp.StatusCode
 			resp.Body.Close()
+		} else if spec.Mode == "state-poll" {
+			req, e := http.NewRequest(http.MethodGet, spec.TokenURL+"?state="+url.QueryEscape(code), nil)
+			if e != nil {
+				return nil, fmt.Errorf("poll failed: %v", e)
+			}
+			for k, v := range statePollHeaders(spec, true) {
+				req.Header.Set(k, v)
+			}
+			resp, e := client.Do(req)
+			if e != nil {
+				return nil, fmt.Errorf("poll failed: %v", e)
+			}
+			body, _ = io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+			statusCode = resp.StatusCode
+			resp.Body.Close()
 		} else {
 			resp, e := client.Get(spec.PollURLBase + "/" + url.PathEscape(code))
 			if e != nil {
@@ -559,7 +684,31 @@ func pollProviderDeviceToken(spec deviceFlowSpec, code string, expiresIn int, ve
 			continue // 非 JSON 的过渡态（代理/限流页）继续等
 		}
 		res := &deviceLoginResult{}
-		if spec.Mode == "rfc8628" {
+		if spec.Mode == "state-poll" {
+			if statusCode != http.StatusOK {
+				continue // 过渡态/代理错误：继续轮询直到过期
+			}
+			c, _ := data["code"].(float64)
+			inner, _ := data["data"].(map[string]any)
+			switch {
+			case c == 11217: // RetryFetchToken：等待用户在浏览器完成授权
+				continue
+			case c == 0 && inner != nil:
+				res.token, _ = inner["accessToken"].(string)
+				if res.token == "" {
+					continue
+				}
+				res.refreshToken, _ = inner["refreshToken"].(string)
+				if n, okk := inner["expiresIn"].(float64); okk && n > 0 {
+					res.expiresAtMs = time.Now().Add(time.Duration(n) * time.Second).UnixMilli()
+				} else {
+					res.expiresAtMs = time.Now().Add(24 * time.Hour).UnixMilli() // 上游缺省 86400s
+				}
+			default:
+				msg, _ := data["msg"].(string)
+				return nil, fmt.Errorf("poll failed: %s", truncate(msg, 160))
+			}
+		} else if spec.Mode == "rfc8628" {
 			switch errCode, _ := data["error"].(string); errCode {
 			case "authorization_pending", "slow_down", "":
 			case "access_denied", "expired_token":
@@ -634,7 +783,81 @@ func updateConnectionPSD(id string, kv map[string]string) {
 
 // connectionBearer 派发/测试用：默认 OAuth access token；带二段兑换的（Copilot）
 // 优先用短期作业票，临期自动重兑换并回存。
+// refreshRFC8628Connection 标准 OAuth 刷新：rfc8628 模式且有 refreshToken 且临近过期时，
+// 向 TokenURL POST grant_type=refresh_token 换取新 access/refresh 并落盘。成功返回 true。
+func refreshRFC8628Connection(conn *Connection, spec deviceFlowSpec) bool {
+	if spec.TokenURL == "" || conn.RefreshToken == "" {
+		return false
+	}
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", conn.RefreshToken)
+	if spec.ClientID != "" {
+		form.Set("client_id", spec.ClientID)
+	}
+	req, e := http.NewRequest(http.MethodPost, spec.TokenURL, strings.NewReader(form.Encode()))
+	if e != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	resp, e := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if e != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var data map[string]any
+	if json.Unmarshal(body, &data) != nil {
+		return false
+	}
+	at, _ := data["access_token"].(string)
+	if at == "" {
+		return false
+	}
+	rt, _ := data["refresh_token"].(string)
+	if rt == "" {
+		rt = conn.RefreshToken
+	}
+	expMs := int64(0)
+	if n, ok := data["expires_in"].(float64); ok && n > 0 {
+		expMs = time.Now().Add(time.Duration(n) * time.Second).UnixMilli()
+	} else {
+		expMs = conn.ExpiresAt
+	}
+	connectionsMu.Lock()
+	for _, c := range connections {
+		if c.ID == conn.ID {
+			c.AccessToken, c.RefreshToken, c.ExpiresAt, c.Status = at, rt, expMs, "active"
+			break
+		}
+	}
+	saveConnectionsLocked()
+	connectionsMu.Unlock()
+	return true
+}
+
 func connectionBearer(conn *Connection, spec deviceFlowSpec) string {
+	if spec.Mode == "rfc8628" && conn.RefreshToken != "" &&
+		conn.ExpiresAt > 0 && time.Now().UnixMilli() >= conn.ExpiresAt-60_000 {
+		if refreshRFC8628Connection(conn, spec) {
+			connectionsMu.Lock()
+			var fresh string
+			for _, c := range connections {
+				if c.ID == conn.ID {
+					fresh = c.AccessToken
+					break
+				}
+			}
+			connectionsMu.Unlock()
+			if fresh != "" {
+				return fresh
+			}
+		}
+	}
 	if spec.ExchangeURL == "" {
 		return conn.AccessToken
 	}

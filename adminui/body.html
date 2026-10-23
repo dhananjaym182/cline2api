@@ -740,6 +740,7 @@
         <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
       </span>
     </div>
+    <div id="providerSyncBanner" style="display:none;align-items:center;gap:10px;padding:8px 12px;margin:0 0 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--surface2)"></div>
     <div class="section-body xscroll">
       <div id="providersList"></div>
     </div>
@@ -883,8 +884,8 @@
   <div id="connImportModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)hideConnectionImport()">
     <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:480px;width:100%;box-shadow:var(--shadow-lg)">
       <div style="font-size:15px;font-weight:600;color:var(--text)">导入 Token</div>
-      <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">粘贴已有的访问令牌（适合 Kilo 这类不签发刷新令牌的上游；过期后需重新导入或重新登录）。</div>
-      <div class="field" style="margin-bottom:8px"><label>服务 *</label><input type="text" id="connImpProvider" placeholder="kilocode" list="connProviderList" style="font-family:ui-monospace,monospace"><datalist id="connProviderList"></datalist></div>
+      <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">粘贴已有访问令牌作为连接（Bearer 注入），适合 Kilo 这类不签发刷新令牌的上游，或任何无设备码流程、但你已持有 token 的服务；过期后需重新导入或登录。</div>
+      <div class="field" style="margin-bottom:8px"><label>服务 *</label><input type="text" id="connImpProvider" placeholder="kilocode / 任意 provider key" list="connProviderList" style="font-family:ui-monospace,monospace"><datalist id="connProviderList"></datalist></div>
       <div class="field" style="margin-bottom:8px"><label>Access Token *</label><input type="password" id="connImpToken" placeholder="粘贴令牌（只存服务端，不外泄）"></div>
       <div class="form-row">
         <div class="field"><label>邮箱（可选，用于去重）</label><input type="text" id="connImpEmail" placeholder="dev@example.com"></div>

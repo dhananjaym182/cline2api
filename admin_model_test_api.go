@@ -452,21 +452,26 @@ func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]
 	if reqErr != "" {
 		return nil, reqErr
 	}
+	probeOK := status == http.StatusOK
 	if status == http.StatusNotFound {
 		// 一些 baseURL 不含 /v1（如 https://host）：补一次 /v1/models
 		altStatus, altBody, altErr := fetch(strings.TrimRight(baseURL, "/") + "/v1/models")
-		if altErr != "" {
-			return nil, altErr
-		}
-		if altStatus == http.StatusOK {
+		if altErr == "" && altStatus == http.StatusOK {
 			status, body = altStatus, altBody
-		} else {
-			return nil, fmt.Sprintf("HTTP %d (GET %s/models and %s/v1/models): %s",
-				status, baseURL, baseURL, truncate(strings.TrimSpace(string(altBody)), 300))
+			probeOK = true
 		}
 	}
-	if status != http.StatusOK {
-		return nil, fmt.Sprintf("HTTP %d: %s", status, truncate(strings.TrimSpace(string(body)), 300))
+	if !probeOK {
+		// 目录端点与 baseURL 不同的预设（如 kilo gateway/models）：回退一次 ModelsFetcher URL
+		if fb := fetcherBaseForBase(baseURL); fb != "" {
+			if st2, b2, e2 := fetch(fb + "/models"); e2 == "" && st2 == http.StatusOK {
+				status, body = st2, b2
+			} else {
+				return nil, fmt.Sprintf("HTTP %d: %s", status, truncate(strings.TrimSpace(string(body)), 300))
+			}
+		} else {
+			return nil, fmt.Sprintf("HTTP %d: %s", status, truncate(strings.TrimSpace(string(body)), 300))
+		}
 	}
 
 	var payload struct {
