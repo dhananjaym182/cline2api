@@ -764,6 +764,23 @@
         <div class="field" style="flex:1.4"><label>API Key</label><input type="password" id="provKey" placeholder="sk-...（本地服务器可留空）"></div>
       </div>
     </div>
+    <div class="drawer-group" id="provModelsGroup">
+      <div class="form-group-label">模型与请求头 <span id="provModelsCount" style="font-weight:400;font-size:11px;color:var(--text3)"></span></div>
+      <div class="form-row" style="align-items:center">
+        <button type="button" id="provFetchModelsBtn" class="btn btn-sm btn-primary" onclick="fetchProviderModels(this)">选择模型</button>
+        <span style="font-size:11px;color:var(--text3);margin-left:10px">从上游目录勾选（免费 / 付费分组），确认前不写入</span>
+      </div>
+      <div id="provModelsChips" class="chip-row" style="display:none;margin-top:10px"></div>
+      <div style="margin:2px 0 10px">
+        <a href="javascript:void(0)" onclick="toggleProvModelsAdv()" style="font-size:11px;color:var(--text3);text-decoration:underline">手动输入模型 ID（高级）</a>
+        <div id="provModelsAdv" style="display:none;margin-top:6px">
+          <input type="text" id="provModels" style="width:100%;font-family:ui-monospace,monospace" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash" oninput="renderProvModelChips()">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field" style="flex:1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
+      </div>
+    </div>
     <div class="drawer-group">
       <div class="form-group-label">调度与限额</div>
       <div class="form-row">
@@ -773,16 +790,6 @@
         <div class="field"><label>每日请求上限（0=不限）</label><input type="number" id="provDailyLimit" value="0" min="0" max="1000000"></div>
       </div>
       <div class="field-hint">配额提示：填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
-    </div>
-    <div class="drawer-group">
-      <div class="form-group-label">模型与请求头</div>
-      <div class="form-row">
-        <div class="field" style="flex:1"><label>模型 ID（逗号分隔，如 z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash）</label><input type="text" id="provModels" style="font-family:ui-monospace,monospace" oninput="renderProvModelChips()"></div>
-      </div>
-      <div id="provModelsChips" class="chip-row" style="display:none"></div>
-      <div class="form-row">
-        <div class="field" style="flex:1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
-      </div>
     </div>
     <div class="drawer-group">
       <div class="form-group-label">行为与连接</div>
@@ -807,21 +814,21 @@
     <button class="btn btn-sm" onclick="hideProviderEditor()">取消</button>
     <span class="drawer-footer-sep"></span>
     <button class="btn btn-sm" onclick="testProvider(this)">测试连通性</button>
-    <button id="provFetchModelsBtn" class="btn btn-sm" onclick="fetchProviderModels(this)">拉取模型</button>
     <button class="btn btn-sm" onclick="previewModelImport(this)">导入分级预览</button>
     <span id="provTestResult" style="font-size:12px;margin-left:8px"></span>
   </div>
 </aside>
       <!-- 预设选择弹窗：按接入成本分组（免密钥 → 免费额度 → 含免费模型 → 本地 → 其他），顶部搜索即时过滤 -->
       <div id="presetPickerModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closePresetPicker()">
-        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:640px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:960px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
           <div style="font-size:15px;font-weight:600;color:var(--text)">从预设添加 Provider</div>
           <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">来自 ExtremeRouter 目录，按接入成本分组。点击预设填充表单；免密钥源会自动拉取模型。</div>
           <div style="display:flex;gap:8px;align-items:center">
             <input type="text" id="presetSearch" placeholder="搜索预设..." oninput="renderPresetPickerList()" onkeydown="if(event.key==='Escape')closePresetPicker()" style="flex:1;min-width:0">
             <span id="presetCount" style="font-size:12px;color:var(--text2);white-space:nowrap"></span>
           </div>
-          <div id="presetPickerList" class="combo-picker-list" style="margin-top:10px"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div id="presetFilterChips" class="chip-row" style="margin:10px 0 0"></div>
+          <div id="presetPickerList" class="combo-picker-list" style="margin-top:10px;max-height:min(52vh,480px)"><div class="empty"><span class="loading"></span> 加载中...</div></div>
           <div style="display:flex;justify-content:flex-end;margin-top:12px">
             <button class="btn btn-sm" onclick="closePresetPicker()">取消</button>
           </div>
@@ -1061,9 +1068,9 @@
       </div>
       <!-- Provider 编辑器：/providers/models 拉取到的模型多选弹窗（视觉对齐 #comboModelPicker） -->
       <div id="provPickerModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeProvModelPicker()">
-        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:560px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:760px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
           <div style="font-size:15px;font-weight:600;color:var(--text)">选择模型</div>
-          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">来自上游 /models 接口；确认后追加到下方「模型 ID」输入框，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。</div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">来自上游 /models 接口，按免费 / 付费分组；确认后写入模型列表，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。</div>
           <div style="display:flex;gap:8px;align-items:center">
             <input type="text" id="provPickerSearch" placeholder="搜索模型..." oninput="renderProvPickerList()" onkeydown="if(event.key==='Escape')closeProvModelPicker()" style="flex:1;min-width:0">
             <button class="btn btn-sm" onclick="provPickerSelectAllShown()">全选</button>

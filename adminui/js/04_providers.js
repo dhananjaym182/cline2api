@@ -165,6 +165,8 @@ async function toggleProvider(id, enable, btn) {
 function showProviderEditor(p) {
   _editingProviderId = p ? p.id : '';
   _previewAfterSave = false;
+  const adv = _('provModelsAdv');
+  if (adv) adv.style.display = 'none';
   const title = _('providerEditorTitle');
   if (title) title.textContent = p ? t('编辑 Provider') : t('添加 Provider');
   _('provName').value = p ? p.name : '';
@@ -192,11 +194,28 @@ function hideProviderEditor() { closeDrawer('providerEditor'); }
 // 模型 ID 输入实时回显为芯片（真值仍是输入框文本，保存逻辑不变）
 function renderProvModelChips() {
   const box = _('provModelsChips');
-  if (!box) return;
   const ids = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean);
+  const cnt = _('provModelsCount');
+  if (cnt) cnt.textContent = ' · ' + (ids.length ? ids.length + t(' 个模型') : t('未选择'));
+  if (!box) return;
   if (!ids.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = '';
-  box.innerHTML = ids.map(id => '<span class="model-tag mono">' + esc(id) + '</span>').join('');
+  box.innerHTML = ids.map(id => '<span class="model-tag mono">' + esc(id) +
+    ' <a href="javascript:void(0)" onclick="removeProvModel(\'' + escAttr(id) + '\')" title="' + t('移除') + '" aria-label="' + t('移除') + '" style="color:var(--text3);text-decoration:none">×</a></span>').join('');
+}
+
+function removeProvModel(id) {
+  const kept = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean).filter(x => x !== id);
+  _('provModels').value = kept.join(', ');
+  renderProvModelChips();
+}
+
+function toggleProvModelsAdv() {
+  const d = _('provModelsAdv');
+  if (!d) return;
+  const open = d.style.display !== 'none';
+  d.style.display = open ? 'none' : '';
+  if (!open) { try { _('provModels').focus(); } catch (e) {} }
 }
 
 async function saveProvider(btn) {
@@ -317,8 +336,9 @@ async function testProvider(btn) {
   }
 }
 
-// ========== Provider：拉取模型（/providers/models，15s 上游探测）+ 多选弹窗 ==========
+// ========== Provider：模型多选弹窗（免费/付费分组 + §9.3 分级信号） ==========
 let _provPickerModels = [];   // 上游返回的全部模型 id（服务端已去重排序，保留原顺序）
+let _provPickerTiers = {};    // id → 'free' | 其他（来自分级预览的有序信号判定）
 let _provPickerOrder = [];    // 勾选顺序（确认后即追加顺序）
 let _provPickerExisting = {}; // 编辑器中已有的模型 id（预勾选且禁用，确认时跳过）
 
@@ -330,21 +350,30 @@ function provEditorPayload() {
 }
 
 async function fetchProviderModels(btn) {
+  const payload = provEditorPayload();
+  if (!_editingProviderId && !payload.baseURL) { toast(t('请先填写 Base URL'), 'info'); return; }
+  if (!_editingProviderId) {
+    payload.free = _('provFree').value === 'true';
+    payload.name = _('provName').value.trim();
+  }
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('拉取中...'); }
   const out = _('provTestResult');
   if (out) out.innerHTML = '';
   try {
-    const d = await api('POST', '/providers/models', provEditorPayload());
+    // 分级预览端点一次给回 id + free/paid 判定（pricing/后缀/白名单/整源免费有序信号）
+    const d = await api('POST', '/models/import/preview', payload);
     const r = d.data || {};
-    const models = (r.models || []).map(m => m && m.id).filter(Boolean);
-    if (!models.length) {
-      // 上游失败（HTTP 200 + {error, models:[]}）：不是 API 错误，就地提示排查 Base URL / Key
+    const items = ((r.batch && r.batch.items) || []).filter(it => it && it.modelId);
+    if (!items.length) {
+      // 上游失败（HTTP 200 + {error}）：不是 API 错误，就地提示排查 Base URL / Key
       if (out) out.innerHTML = renderTestResultHTML(false,
         t('未获取到模型：请先检查 Base URL 与 API Key') + (r.error ? ' — ' + r.error : ''));
       return;
     }
-    _provPickerModels = Array.from(new Set(models));
+    _provPickerModels = Array.from(new Set(items.map(it => it.modelId)));
+    _provPickerTiers = {};
+    items.forEach(it => { _provPickerTiers[it.modelId] = it.tier; });
     _provPickerOrder = [];
     _provPickerExisting = {};
     _('provModels').value.split(',').map(s => s.trim()).filter(Boolean).forEach(id => { _provPickerExisting[id] = true; });
@@ -386,6 +415,16 @@ function provPickerSelectAllShown() {
   renderProvPickerList();
 }
 
+// 分组「全选」：只把当前筛选结果里该层级（free / 非 free）可勾选的模型补进序列
+function provPickerSelectAllTier(tier) {
+  provPickerVisible().forEach(id => {
+    const isFree = _provPickerTiers[id] === 'free';
+    if ((tier === 'free') !== isFree) return;
+    if (_provPickerOrder.indexOf(id) === -1 && !_provPickerExisting[id]) _provPickerOrder.push(id);
+  });
+  renderProvPickerList();
+}
+
 function provPickerClear() { _provPickerOrder = []; renderProvPickerList(); }
 
 function renderProvPickerList() {
@@ -398,7 +437,7 @@ function renderProvPickerList() {
     renderProvPickerCount();
     return;
   }
-  box.innerHTML = visible.map(id => {
+  const row = id => {
     const rank = _provPickerOrder.indexOf(id);
     const used = !!_provPickerExisting[id];
     const checked = used || rank !== -1;
@@ -408,7 +447,15 @@ function renderProvPickerList() {
       (used ? '<span class="model-source-badge" title="' + t('已在 Provider 中，无需重复添加') + '">' + t('已添加') + '</span>' : '') +
       (rank !== -1 ? '<span class="combo-pick-rank" title="' + t('勾选顺序即尝试优先级') + '">#' + (rank + 1) + '</span>' : '') +
     '</label>';
-  }).join('');
+  };
+  const groupTitle = (label, n, tier) =>
+    '<div class="preset-group-title">' + label + ' · ' + n +
+    '<button type="button" class="btn btn-sm" style="float:right;padding:1px 8px;font-size:11px" onclick="event.preventDefault();provPickerSelectAllTier(\'' + tier + '\')">' + t('全选') + '</button></div>';
+  const freeIds = visible.filter(id => _provPickerTiers[id] === 'free');
+  const paidIds = visible.filter(id => _provPickerTiers[id] !== 'free');
+  box.innerHTML =
+    (freeIds.length ? groupTitle(t('免费'), freeIds.length, 'free') + freeIds.map(row).join('') : '') +
+    (paidIds.length ? groupTitle(t('付费'), paidIds.length, 'pass') + paidIds.map(row).join('') : '');
   box.scrollTop = scrollTop;
   renderProvPickerCount();
 }
@@ -416,10 +463,12 @@ function renderProvPickerList() {
 function renderProvPickerCount() {
   const el = _('provPickerCount');
   if (!el) return;
-  el.textContent = t('已选 ') + _provPickerOrder.length + ' / ' + _provPickerModels.length + t(' 个模型');
+  const nFree = _provPickerOrder.filter(id => _provPickerTiers[id] === 'free').length;
+  el.textContent = t('已选 ') + _provPickerOrder.length + ' / ' + _provPickerModels.length + t(' 个模型') +
+    (nFree ? ' · ' + nFree + ' ' + t('免费') : '');
 }
 
-// 确认：按勾选顺序追加进「模型 ID」输入框（去重），用户仍走既存保存流
+// 确认：写入「模型 ID」真值（隐藏的高级输入框），芯片即时回显
 function provPickerConfirm() {
   if (!_provPickerOrder.length) { toast(t('请先勾选至少一个模型'), 'error'); return; }
   const cur = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean);
@@ -432,6 +481,7 @@ function provPickerConfirm() {
     seen[id] = true;
     added++;
   }
+  closeProvModelPicker();
   if (added) {
     _('provModels').value = cur.join(', ');
     renderProvModelChips();
@@ -439,11 +489,12 @@ function provPickerConfirm() {
   } else {
     toast(t('所选模型均已在 Provider 中'), 'info');
   }
-  closeProvModelPicker();
+  try { _('provModelsGroup').scrollIntoView({ block: 'nearest' }); } catch (e) {}
 }
 
 // ========== 预设选择弹窗（/providers/presets，按接入成本分组） ==========
 let _presetList = [];
+let _presetFilter = ''; // ''=全部 | kind | 'login'（需登录）
 const _presetKinds = [
   {kind:'free',     label:'免密钥直连', desc:'无需 API Key；应用后自动拉取模型',        badge:'免密钥',  cls:'model-source-badge custom'},
   {kind:'freeTier', label:'免费额度',   desc:'注册领取免费 API Key',                    badge:'免费额度', cls:'model-source-badge zen'},
@@ -460,6 +511,8 @@ async function loadProviderPresets() {
     }
     if (!_presetList.length) { toast(t('加载失败'), 'error'); return; }
     _('presetSearch').value = '';
+    _presetFilter = '';
+    renderPresetFilterChips();
     renderPresetPickerList();
     _('presetPickerModal').style.display = 'flex';
     try { _('presetSearch').focus(); } catch (e) {}
@@ -472,28 +525,57 @@ function closePresetPicker() {
   _('presetPickerModal').style.display = 'none';
 }
 
+function renderPresetFilterChips() {
+  const box = _('presetFilterChips');
+  if (!box) return;
+  const defs = [{ f: '', label: '全部' }]
+    .concat(_presetKinds.map(g => ({ f: g.kind, label: g.label })))
+    .concat([{ f: 'login', label: '需登录' }]);
+  box.innerHTML = defs.map(d =>
+    '<span class="chip chip-btn' + (_presetFilter === d.f ? ' active' : '') + '" onclick="setPresetFilter(\'' + d.f + '\')">' + t(d.label) + '</span>').join('');
+}
+
+function setPresetFilter(f) {
+  _presetFilter = (_presetFilter === f && f !== '') ? '' : f;
+  renderPresetFilterChips();
+  renderPresetPickerList();
+}
+
+function presetRowHTML(p) {
+  const g = _presetKinds.find(x => x.kind === (p.kind || 'other')) || _presetKinds[_presetKinds.length - 1];
+  return '<div class="preset-row" onclick="applyPreset(\'' + esc(p.key) + '\')" title="' + esc(p.baseURL || '') + '">' +
+    '<span class="preset-name">' + esc(p.name) + '</span>' +
+    '<span class="preset-key">' + esc(p.baseURL || p.key) + '</span>' +
+    '<span style="display:inline-flex;gap:6px;align-items:center;flex-shrink:0">' +
+    (p.loginFlow ? '<span class="model-source-badge zen" title="' + t('设备码登录后，在编辑器「账号连接」中选择连接；无需 API Key') + '">' + t('需登录') + '</span>' : (g.badge ? '<span class="' + g.cls + '">' + t(g.badge) + '</span>' : '')) +
+    (p.modelIDs && p.modelIDs.length ? '<span class="model-source-badge">' + p.modelIDs.length + ' ' + t('个模型') + '</span>' : '') +
+    '</span></div>';
+}
+
 function renderPresetPickerList() {
   const q = (_('presetSearch').value || '').trim().toLowerCase();
-  const list = _presetList.filter(p =>
-    !q || p.key.toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q) || (p.baseURL || '').toLowerCase().includes(q));
+  const list = _presetList.filter(p => {
+    if (_presetFilter === 'login') { if (!p.loginFlow) return false; }
+    else if (_presetFilter && (p.kind || 'other') !== _presetFilter) return false;
+    return !q || p.key.toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q) || (p.baseURL || '').toLowerCase().includes(q);
+  });
   _('presetCount').textContent = list.length + ' / ' + _presetList.length;
   if (!list.length) {
     _('presetPickerList').innerHTML = '<div class="empty">' + t('没有匹配的预设') + '</div>';
     return;
   }
+  const byName = (a, b) => (a.name || '').localeCompare(b.name || '');
+  if (_presetFilter === 'login') {
+    _('presetPickerList').innerHTML = '<div class="preset-group-title">' + t('需登录') + '</div>' +
+      list.slice().sort(byName).map(presetRowHTML).join('');
+    return;
+  }
   _('presetPickerList').innerHTML = _presetKinds.map(g => {
-    const items = list.filter(p => (p.kind || 'other') === g.kind).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const items = list.filter(p => (p.kind || 'other') === g.kind).sort(byName);
     if (!items.length) return '';
     return '<div class="preset-group-title">' + t(g.label) +
       (g.desc ? '<span class="preset-group-desc">· ' + t(g.desc) + '</span>' : '') + '</div>' +
-      items.map(p =>
-        '<div class="preset-row" onclick="applyPreset(\'' + esc(p.key) + '\')" title="' + esc(p.baseURL || '') + '">' +
-        '<span class="preset-name">' + esc(p.name) + '</span>' +
-        '<span class="preset-key">' + esc(p.baseURL || p.key) + '</span>' +
-        '<span style="display:inline-flex;gap:6px;align-items:center;flex-shrink:0">' +
-        (p.loginFlow ? '<span class="model-source-badge zen" title="' + t('设备码登录后，在编辑器「账号连接」中选择连接；无需 API Key') + '">' + t('需登录') + '</span>' : (g.badge ? '<span class="' + g.cls + '">' + t(g.badge) + '</span>' : '')) +
-        (p.modelIDs && p.modelIDs.length ? '<span class="model-source-badge">' + p.modelIDs.length + ' ' + t('个模型') + '</span>' : '') +
-        '</span></div>').join('');
+      items.map(presetRowHTML).join('');
   }).join('');
 }
 
@@ -516,8 +598,8 @@ function applyPreset(key) {
   _previewAfterSave = !p.loginFlow && (!!p.modelIDs || !!p.modelsFetcher || wholeFree);
   if (p.loginFlow) {
     toast(t('已填充登录类预设：请在「登录连接（OAuth）」完成设备码登录，再在编辑器「账号连接」选择连接'), 'info');
-  } else if (p.kind === 'free') {
-    // 免密钥源：直接走上游探测，弹出模型多选
+  } else if (p.kind === 'free' || p.kind === 'local') {
+    // 免密钥/本地源：直接走上游探测，弹出模型多选（免费/付费分组）
     toast(t('免密钥预设：正在自动拉取模型…'), 'info');
     fetchProviderModels(_('provFetchModelsBtn'));
   } else {

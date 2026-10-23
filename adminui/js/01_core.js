@@ -676,6 +676,11 @@ const I18N = {
   '确定忽略全部待审的新模型批次？': 'Ignore all pending new-model batches?',
   ' 个模型': ' models',
   '登录成功': 'Logged in',
+  '全部': 'All',
+  '未选择': 'None selected',
+  '手动输入模型 ID（高级）': 'Type model IDs manually (advanced)',
+  '从上游目录勾选（免费 / 付费分组），确认前不写入': 'Pick from the upstream catalog (grouped free / paid); nothing is written until you confirm',
+  '来自上游 /models 接口，按免费 / 付费分组；确认后写入模型列表，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。': 'From the upstream /models endpoint, grouped by free / paid; confirmed picks go into the model list, saving is still manual. Models already on this provider are pre-checked and locked. If it fails, check Base URL and API Key first.',
 };
 let LANG = 'zh';
 const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
