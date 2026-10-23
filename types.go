@@ -43,6 +43,11 @@ type Model struct {
 	// Disabled 用户在管理页手动停用：不进客户端模型列表（/v1/models）、
 	// 直接请求返回 400、默认模型与回退链自动跳过；同步保留该标记。
 	Disabled bool `json:"disabled,omitempty"`
+	// TierSignal 免费/付费分级出处（§9.3 导入器写入；"manual"=用户手动定级，
+	// 导入批次对这类条目只报 protected 不覆盖；空=未经分级器）
+	TierSignal string `json:"tierSignal,omitempty"`
+	// TierDecidedAt 分级判定时间（unix 秒）
+	TierDecidedAt int64 `json:"tierDecidedAt,omitempty"`
 }
 
 // ModelStat 是单个模型在某账号下的用量统计（仅统计 free 模型）。

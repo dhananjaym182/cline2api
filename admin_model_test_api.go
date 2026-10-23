@@ -470,24 +470,28 @@ func discoverOpenAIModels(baseURL, apiKey string, headers map[string]string) ([]
 	}
 
 	var payload struct {
-		Data   []struct{ ID string `json:"id"` } `json:"data"`
-		Models []struct{ ID string `json:"id"` } `json:"models"`
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+		Models []struct {
+			ID string `json:"id"`
+		} `json:"models"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, fmt.Sprintf("unexpected response format: %s", truncate(strings.TrimSpace(string(body)), 300))
 	}
 	seen := map[string]bool{}
 	var ids []string
-	collect := func(list []struct{ ID string `json:"id"` }) {
-		for _, it := range list {
-			id := strings.TrimSpace(it.ID)
-			if id == "" || seen[id] {
-				continue
-			}
-			seen[id] = true
-			ids = append(ids, id)
+	collect := func(list []struct {
+		ID string `json:"id"`
+	}) { for _, it := range list {
+		id := strings.TrimSpace(it.ID)
+		if id == "" || seen[id] {
+			continue
 		}
-	}
+		seen[id] = true
+		ids = append(ids, id)
+	} }
 	collect(payload.Data)
 	collect(payload.Models)
 	if len(ids) == 0 {
@@ -531,6 +535,12 @@ func handleProviderModels(w http.ResponseWriter, r *http.Request) {
 				}
 				if req.Headers == nil {
 					req.Headers = p.Headers
+				}
+				// §8.3：绑定登录连接的 provider，模型发现也用连接票
+				if conn := activeConnectionForProvider(p); conn != nil {
+					if spec, ok := providerDeviceFlows[conn.Provider]; ok {
+						req.APIKey = connectionBearer(conn, spec)
+					}
 				}
 				break
 			}

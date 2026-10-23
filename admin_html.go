@@ -359,7 +359,16 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .combo-pick-rank{flex-shrink:0;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;font-variant-numeric:tabular-nums}
 
 /* ===== 拉取模型选择器 / 组合测试弹窗：复用 .combo-picker-list / .combo-pick-* 视觉 ===== */
-#provPickerModal,#comboTestModal{background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
+#provPickerModal,#comboTestModal,#importPreviewModal{background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
+/* 预设选择弹窗：分组吸顶标题 + 可点击行 */
+#presetPickerModal{background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
+.preset-group-title{position:sticky;top:0;z-index:1;background:var(--surface);padding:7px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:1px solid var(--border2)}
+.preset-group-title .preset-group-desc{font-weight:400;color:var(--text3);margin-left:6px}
+.preset-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:13px}
+.preset-row:last-child{border-bottom:none}
+.preset-row:hover{background:var(--surface2)}
+.preset-name{font-weight:600;color:var(--text);white-space:nowrap}
+.preset-key{font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
 /* 组合测试结果行：优先级序号 / 模型 / 上游徽章 / 测试结论 / 行内操作 */
 .combo-test-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border2);font-size:13px;flex-wrap:wrap}
 .combo-test-row:last-child{border-bottom:none}
@@ -1214,7 +1223,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
     <div class="section-title"><span>自定义 Provider（OpenAI 兼容）</span>
       <!-- 新增入口与「＋ 新建组合」同位：区块标题右侧， body 只放列表与编辑卡片 -->
       <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
-        <button class="btn btn-sm" onclick="loadProviderPresets()">从预设添加（免费源）</button>
+        <button class="btn btn-sm" onclick="loadProviderPresets()">从预设添加 Provider</button>
         <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
       </span>
     </div>
@@ -1252,16 +1261,105 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
             <label>免费来源（供统计）</label>
             <select id="provFree"><option value="true">免费</option><option value="false">付费</option></select>
           </div>
+          <div class="field">
+            <label>账号连接（可选）</label>
+            <select id="provConnection"><option value="">不使用连接</option></select>
+          </div>
         </div>
         <div class="form-actions" style="margin-top:10px">
           <button class="btn btn-sm btn-primary" onclick="saveProvider(this)">保存 Provider</button>
           <button class="btn btn-sm" onclick="hideProviderEditor()">取消</button>
           <button class="btn btn-sm" onclick="testProvider(this)">测试连通性</button>
           <button id="provFetchModelsBtn" class="btn btn-sm" onclick="fetchProviderModels(this)">拉取模型</button>
+          <button class="btn btn-sm" onclick="previewModelImport(this)">导入分级预览</button>
           <span id="provTestResult" style="font-size:12px;margin-left:8px"></span>
         </div>
       </div>
-      <div id="providerPresets" class="inline-editor" style="display:none"></div>
+      <!-- 预设选择弹窗：按接入成本分组（免密钥 → 免费额度 → 含免费模型 → 本地 → 其他），顶部搜索即时过滤 -->
+      <div id="presetPickerModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closePresetPicker()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:640px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="font-size:15px;font-weight:600;color:var(--text)">从预设添加 Provider</div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">来自 ExtremeRouter 目录，按接入成本分组。点击预设填充表单；免密钥源会自动拉取模型。</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="presetSearch" placeholder="搜索预设..." oninput="renderPresetPickerList()" onkeydown="if(event.key==='Escape')closePresetPicker()" style="flex:1;min-width:0">
+            <span id="presetCount" style="font-size:12px;color:var(--text2);white-space:nowrap"></span>
+          </div>
+          <div id="presetPickerList" class="combo-picker-list" style="margin-top:10px"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button class="btn btn-sm" onclick="closePresetPicker()">取消</button>
+          </div>
+        </div>
+      </div>
+      <!-- §9.3 受控导入：预览批次（新模型 / 层级变化 / protected），勾选批准后写入池 -->
+      <div id="importPreviewModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeImportPreview()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:640px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="font-size:15px;font-weight:600;color:var(--text)">导入分级预览 <span id="importPreviewProv" class="mono" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
+          <div id="importPreviewSummary" style="font-size:12px;color:var(--text3);margin:4px 0 10px"></div>
+          <div id="importPreviewList" class="combo-picker-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+            <span id="importPreviewCount" style="font-size:12px;color:var(--text2);margin-right:auto"></span>
+            <button class="btn btn-sm" onclick="closeImportPreview()">取消</button>
+            <button class="btn btn-sm btn-primary" onclick="importPreviewApply(this)">批准导入所选</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span>登录连接（OAuth）</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
+        <button class="btn btn-sm" onclick="showConnectionImport()">导入 Token</button>
+        <button class="btn btn-sm btn-primary" onclick="openDeviceLogin()">设备码登录</button>
+      </span>
+    </div>
+    <div class="section-desc">为需要登录签票的上游（如 Kilo Code）做设备码授权。登录成功后，在 Provider 编辑器的「账号连接」里选中该连接，派发时自动注入 Bearer 与组织头；Token 只存服务端，不写进 Provider。</div>
+    <div class="section-body">
+      <div id="connectionsList"></div>
+    </div>
+  </div>
+
+  <!-- 设备码登录弹窗：选择 provider → 展示 user code + 验证链接 → 轮询状态 -->
+  <div id="connLoginModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeDeviceLogin()">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:480px;width:100%;box-shadow:var(--shadow-lg)">
+      <div style="font-size:15px;font-weight:600;color:var(--text)">设备码登录</div>
+      <div id="connLoginStep1" style="margin-top:12px">
+        <div class="field"><label>选择服务</label><select id="connLoginProvider" style="width:100%"></select></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+          <button class="btn btn-sm" onclick="closeDeviceLogin()">取消</button>
+          <button class="btn btn-sm btn-primary" onclick="beginDeviceLogin(this)">开始登录</button>
+        </div>
+      </div>
+      <div id="connLoginStep2" style="display:none;margin-top:12px">
+        <div style="font-size:12px;color:var(--text3)" id="connLoginHint">在浏览器中打开下面的地址并输入此代码，然后保持本窗口打开。</div>
+        <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
+          <div id="connLoginCode" class="mono" style="font-size:26px;font-weight:700;letter-spacing:2px;color:var(--text);background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px 16px"></div>
+          <button class="btn btn-sm" onclick="copyDeviceCode()">复制</button>
+        </div>
+        <div style="margin-bottom:10px"><a id="connLoginUrl" href="#" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent);word-break:break-all"></a></div>
+        <div id="connLoginStatus" style="font-size:12px;color:var(--text2)"><span class="loading"></span> 等待授权...</div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+          <button class="btn btn-sm" onclick="closeDeviceLogin()">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 粘贴 token 导入弹窗（无刷新上游的备用登录路径） -->
+  <div id="connImportModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)hideConnectionImport()">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:480px;width:100%;box-shadow:var(--shadow-lg)">
+      <div style="font-size:15px;font-weight:600;color:var(--text)">导入 Token</div>
+      <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">粘贴已有的访问令牌（适合 Kilo 这类不签发刷新令牌的上游；过期后需重新导入或重新登录）。</div>
+      <div class="field" style="margin-bottom:8px"><label>服务 *</label><input type="text" id="connImpProvider" placeholder="kilocode" list="connProviderList" style="font-family:ui-monospace,monospace"><datalist id="connProviderList"></datalist></div>
+      <div class="field" style="margin-bottom:8px"><label>Access Token *</label><input type="password" id="connImpToken" placeholder="粘贴令牌（只存服务端，不外泄）"></div>
+      <div class="form-row">
+        <div class="field"><label>邮箱（可选，用于去重）</label><input type="text" id="connImpEmail" placeholder="dev@example.com"></div>
+        <div class="field"><label>Org ID（可选）</label><input type="text" id="connImpOrg" placeholder="org-..." style="font-family:ui-monospace,monospace"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn btn-sm" onclick="hideConnectionImport()">取消</button>
+        <button class="btn btn-sm btn-primary" onclick="submitConnectionImport(this)">保存连接</button>
+      </div>
     </div>
   </div>
   </div>
@@ -1388,6 +1486,10 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
           <div class="field"><label>模型 ID</label><input type="text" id="mmId" disabled style="font-family:ui-monospace,monospace"></div>
           <div class="field"><label>上下文窗口 (token)</label><input type="number" id="mmCtx" value="200000" min="1000" max="2000000"></div>
           <div class="field"><label>最大输出 (token)</label><input type="number" id="mmOut" value="32768" min="256" max="200000"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>层级（免费/付费）</label><select id="mmTier"><option value="auto">自动</option><option value="free">免费</option><option value="pass">付费</option></select></div>
+          <div class="field" style="flex:1.6"><label>&nbsp;</label><div id="mmTierNote" style="font-size:12px;color:var(--text3)"></div></div>
         </div>
         <div class="form-actions" style="margin-top:10px">
           <button class="btn btn-sm btn-primary" onclick="saveModelMeta(this)">保存</button>
@@ -1980,6 +2082,81 @@ const I18N = {
   '已保存 ': 'Saved ',
   '已删除': 'Deleted',
   '已填充预设，请补 API Key 和模型 ID': 'Preset applied; add the API Key and model ID',
+  '从预设添加 Provider': 'Add provider from presets',
+  '来自 ExtremeRouter 目录，按接入成本分组。点击预设填充表单；免密钥源会自动拉取模型。': 'From the ExtremeRouter catalog, grouped by access cost. Click a preset to fill the form; no-key sources auto-fetch models.',
+  '搜索预设...': 'Search presets...',
+  '免密钥直连': 'No-key direct',
+  '免费额度': 'Free quota',
+  '含免费模型': 'Includes free models',
+  '本地服务': 'Local servers',
+  '其他': 'Other',
+  '免密钥': 'No key',
+  '含免费': 'Some free',
+  '本地': 'Local',
+  '个模型': 'models',
+  '没有匹配的预设': 'No matching presets',
+  '无需 API Key；应用后自动拉取模型': 'No API key needed; models auto-fetch after apply',
+  '注册领取免费 API Key': 'Register to claim a free API key',
+  '混合目录：需 Key，部分模型免费': 'Mixed catalog: key required, some models free',
+  '本机推理端点（LM Studio、llama.cpp 等）': 'Local inference endpoints (LM Studio, llama.cpp, etc.)',
+  '免密钥预设：正在自动拉取模型…': 'No-key preset: fetching models…',
+  '导入分级预览': 'Import tier preview',
+  '请先保存 Provider 再分级导入': 'Save the provider first, then run the tier import',
+  '扫描中...': 'Scanning...',
+  '上游拉取失败': 'Upstream fetch failed',
+  '定价为 0': 'Zero pricing',
+  'id 后缀 free': 'id suffix free',
+  '免费标签/白名单': 'Free tag/allowlist',
+  '整源免费': 'Whole source free',
+  '无免费信号 → 付费': 'No free signal → paid',
+  '层级（免费/付费）': 'Tier (free/paid)',
+  '自动': 'Auto',
+  '当前判定': 'Current decision',
+  '手动设置': 'Manually set',
+  '新增': 'New',
+  '层级变化': 'Tier change',
+  '无变化': 'No change',
+  '受保护': 'Protected',
+  '没有可导入的模型': 'No models to import',
+  '个已选': ' selected',
+  '导入中...': 'Importing...',
+  '已导入 ': 'Imported ',
+  ' 个新模型，调整 ': ' new models, adjusted ',
+  ' 个层级': ' tiers',
+  '请先勾选要导入的模型': 'Select models to import first',
+  '导入失败: ': 'Import failed: ',
+  // §8.3 登录连接（OAuth）
+  '登录连接（OAuth）': 'Logins (OAuth)',
+  '为需要登录签票的上游（如 Kilo Code）做设备码授权。登录成功后，在 Provider 编辑器的「账号连接」里选中该连接，派发时自动注入 Bearer 与组织头；Token 只存服务端，不写进 Provider。': 'Device-code authorization for upstreams that issue tokens by login (e.g. Kilo Code). After sign-in, choose the connection in the Account connection field of the provider editor; Bearer and org headers are injected at dispatch. Tokens stay server-side, never copied into the provider.',
+  '设备码登录': 'Device-code login',
+  '选择服务': 'Provider',
+  '开始登录': 'Start login',
+  '在浏览器中打开下面的地址并输入此代码，然后保持本窗口打开。': 'Open the URL below in your browser, enter this code, then keep this window open.',
+  '等待授权...': 'Waiting for authorization...',
+  '发起中...': 'Starting...',
+  '发起登录失败: ': 'Login start failed: ',
+  '代码已复制': 'Code copied',
+  '粘贴已有的访问令牌（适合 Kilo 这类不签发刷新令牌的上游；过期后需重新导入或重新登录）。': 'Paste an existing access token (fits upstreams like Kilo that never issue refresh tokens; re-import or re-login when it expires).',
+  '服务 *': 'Provider *',
+  '邮箱（可选，用于去重）': 'Email (optional, for dedup)',
+  'Org ID（可选）': 'Org ID (optional)',
+  '保存连接': 'Save connection',
+  '服务与 Token 必填': 'Provider and token are required',
+  '连接已保存': 'Connection saved',
+  '暂无登录连接': 'No logins yet',
+  '服务': 'Provider',
+  '方式': 'Method',
+  '已登录': 'Signed in',
+  '需重新登录': 'Re-login required',
+  '导入 Token': 'Import Token',
+  '可用': 'OK',
+  '确定删除该连接？绑定它的 Provider 将不再注入 token。': 'Delete this connection? Bound providers will stop injecting the token.',
+  '账号连接（可选）': 'Account connection (optional)',
+  '不使用连接': 'No connection',
+  '复制': 'Copy',
+  '需登录': 'Login required',
+  '设备码登录后，在编辑器「账号连接」中选择连接；无需 API Key': 'Sign in via device code, then choose the connection under Account connection in the editor; no API key needed',
+  '已填充登录类预设：请在「登录连接（OAuth）」完成设备码登录，再在编辑器「账号连接」选择连接': 'Login preset applied: complete a device-code login under Logins (OAuth), then pick the connection in Account connection',
   '新密钥已生成（点击复制）': 'New key generated (click to copy)',
   '暂无 API 密钥': 'No API keys yet',
   '暂无请求日志': 'No request logs yet',
@@ -2122,7 +2299,7 @@ function applyTab(name){
   else if (name === 'accounts') loadAccounts();
   else if (name === 'logs') loadRequestLogs(true);
   else if (name === 'routing') { loadModels().then(() => { loadConfig(); if (routingActiveSub() === 'combos') loadCombos(); }); }
-  else if (name === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); loadProviders(); }
+  else if (name === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); loadProviders(); loadConnections(); }
   else if (name === 'security') { loadKeys(); loadConfig(); }
 }
 
@@ -3159,7 +3336,7 @@ async function loadProviders() {
     box.innerHTML = '<table class="action-table"><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th class="num-col">优先级</th><th>状态</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
       list.map(p =>
         '<tr>' +
-          '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + '</td>' +
+          '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + (p.connectionId ? ' <span style="color:var(--accent);font-size:11px">token</span>' : '') + '</td>' +
           '<td class="mono" style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(p.baseURL) + '</td>' +
           '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc((p.modelIds || []).join(', ')) + '</td>' +
           '<td class="num-col">' + p.priority + '</td>' +
@@ -3212,6 +3389,8 @@ function showProviderEditor(p) {
   _('provHeaders').value = p ? Object.entries(p.headers || {}).map(([k, v]) => k + ': ' + v).join('\n') : '';
   _('provEnabled').value = p ? String(p.enabled !== false) : 'true';
   _('provFree').value = p ? String(!!p.free) : 'true';
+  fillConnectionSelect(p ? (p.connectionId || '') : '');
+  if (!_connList.length) loadConnections().then(() => fillConnectionSelect(p ? (p.connectionId || '') : ''));
   const testOut = _('provTestResult');
   if (testOut) testOut.innerHTML = '';
   _('providerEditor').style.display = '';
@@ -3233,6 +3412,7 @@ async function saveProvider(btn) {
     headers: parseHeaderText(_('provHeaders').value),
     enabled: _('provEnabled').value === 'true',
     free: _('provFree').value === 'true',
+    connectionId: _('provConnection') ? _('provConnection').value : '',
   };
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
@@ -3443,36 +3623,347 @@ function provPickerConfirm() {
   closeProvModelPicker();
 }
 
+// ========== 预设选择弹窗（/providers/presets，按接入成本分组） ==========
+let _presetList = [];
+const _presetKinds = [
+  {kind:'free',     label:'免密钥直连', desc:'无需 API Key；应用后自动拉取模型',        badge:'免密钥',  cls:'model-source-badge custom'},
+  {kind:'freeTier', label:'免费额度',   desc:'注册领取免费 API Key',                    badge:'免费额度', cls:'model-source-badge zen'},
+  {kind:'hasFree',  label:'含免费模型', desc:'混合目录：需 Key，部分模型免费',           badge:'含免费',  cls:'model-source-badge provider'},
+  {kind:'local',    label:'本地服务',   desc:'本机推理端点（LM Studio、llama.cpp 等）', badge:'本地',    cls:'model-source-badge'},
+  {kind:'other',    label:'其他',       desc:'',                                       badge:'',       cls:'model-source-badge'},
+];
+
 async function loadProviderPresets() {
-  const box = _('providerPresets');
-  if (box.style.display !== 'none') { box.style.display = 'none'; return; }
   try {
-    const d = await api('GET', '/providers/presets');
-    const presets = d.data.presets || [];
-    box.innerHTML = '<div style="font-weight:600;margin-bottom:8px">' + t('点击预设快速填充') + ':</div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:8px">' + presets.map(p =>
-        '<button class="btn btn-sm" title="' + esc(p.notes) + '" onclick=\'applyPreset("' + p.key + '")\'>' +
-        esc(p.name) + (p.freeTier ? ' 🆓' : '') + '</button>'
-      ).join('') + '</div>' +
-      '<div style="font-size:11px;color:var(--text3);margin-top:8px">🆓 = 提供免费额度（需自行注册 API Key）</div>';
-    box.style.display = '';
-    box.dataset.presets = JSON.stringify(presets);
+    if (!_presetList.length) {
+      const d = await api('GET', '/providers/presets');
+      _presetList = d.data.presets || [];
+    }
+    if (!_presetList.length) { toast(t('加载失败'), 'error'); return; }
+    _('presetSearch').value = '';
+    renderPresetPickerList();
+    _('presetPickerModal').style.display = 'flex';
+    try { _('presetSearch').focus(); } catch (e) {}
   } catch (e) {
-    box.innerHTML = '<div class="empty">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
-    box.style.display = '';
+    toast(t('加载失败') + ': ' + esc(e.message), 'error');
   }
 }
 
+function closePresetPicker() {
+  _('presetPickerModal').style.display = 'none';
+}
+
+function renderPresetPickerList() {
+  const q = (_('presetSearch').value || '').trim().toLowerCase();
+  const list = _presetList.filter(p =>
+    !q || p.key.toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q) || (p.baseURL || '').toLowerCase().includes(q));
+  _('presetCount').textContent = list.length + ' / ' + _presetList.length;
+  if (!list.length) {
+    _('presetPickerList').innerHTML = '<div class="empty">' + t('没有匹配的预设') + '</div>';
+    return;
+  }
+  _('presetPickerList').innerHTML = _presetKinds.map(g => {
+    const items = list.filter(p => (p.kind || 'other') === g.kind).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    if (!items.length) return '';
+    return '<div class="preset-group-title">' + t(g.label) +
+      (g.desc ? '<span class="preset-group-desc">· ' + t(g.desc) + '</span>' : '') + '</div>' +
+      items.map(p =>
+        '<div class="preset-row" onclick="applyPreset(\'' + esc(p.key) + '\')" title="' + esc(p.baseURL || '') + '">' +
+        '<span class="preset-name">' + esc(p.name) + '</span>' +
+        '<span class="preset-key">' + esc(p.baseURL || p.key) + '</span>' +
+        '<span style="display:inline-flex;gap:6px;align-items:center;flex-shrink:0">' +
+        (p.loginFlow ? '<span class="model-source-badge zen" title="' + t('设备码登录后，在编辑器「账号连接」中选择连接；无需 API Key') + '">' + t('需登录') + '</span>' : (g.badge ? '<span class="' + g.cls + '">' + t(g.badge) + '</span>' : '')) +
+        (p.modelIDs && p.modelIDs.length ? '<span class="model-source-badge">' + p.modelIDs.length + ' ' + t('个模型') + '</span>' : '') +
+        '</span></div>').join('');
+  }).join('');
+}
+
 function applyPreset(key) {
-  const presets = JSON.parse(_('providerPresets').dataset.presets || '[]');
-  const p = presets.find(x => x.key === key);
+  const p = _presetList.find(x => x.key === key);
   if (!p) return;
+  closePresetPicker();
   showProviderEditor(null);
   _('provName').value = p.name;
   _('provBaseURL').value = p.baseURL;
   _('provHeaders').value = Object.entries(p.headers || {}).map(([k, v]) => k + ': ' + v).join('\n');
-  _('providerPresets').style.display = 'none';
-  toast(t('已填充预设，请补 API Key 和模型 ID'), 'info');
+  _('provModels').value = (p.modelIDs || []).join(', ');
+  // hasFree/other 是混合目录：整源标 free 会把付费模型误标为免费（审计 §9.2 缺口），默认标为付费。
+  const freeSource = p.kind === 'free' || p.kind === 'freeTier' || p.kind === 'local';
+  _('provFree').value = freeSource ? 'true' : 'false';
+  if (p.loginFlow) {
+    toast(t('已填充登录类预设：请在「登录连接（OAuth）」完成设备码登录，再在编辑器「账号连接」选择连接'), 'info');
+  } else if (p.kind === 'free') {
+    // 免密钥源：直接走上游探测，弹出模型多选
+    toast(t('免密钥预设：正在自动拉取模型…'), 'info');
+    fetchProviderModels(_('provFetchModelsBtn'));
+  } else {
+    toast(t('已填充预设，请补 API Key 和模型 ID'), 'info');
+  }
+}
+
+// ========== §9.3 受控导入：preview → 勾选 → apply ==========
+let _importBatch = null;
+
+const _tierSignals = {
+  'pricing-zero': '定价为 0', 'suffix-free': 'id 后缀 free', 'allowlist': '免费标签/白名单',
+  'provider-free': '整源免费', 'paid-default': '无免费信号 → 付费',
+};
+
+async function previewModelImport(btn) {
+  if (!_editingProviderId) { toast(t('请先保存 Provider 再分级导入'), 'info'); return; }
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('扫描中...'); }
+  try {
+    const d = await api('POST', '/models/import/preview', { id: _editingProviderId });
+    const r = d.data || {};
+    if (r.error) { toast(t('上游拉取失败') + ': ' + r.error, 'error'); return; }
+    _importBatch = r.batch;
+    renderImportPreviewList();
+    _('importPreviewModal').style.display = 'flex';
+  } catch (e) {
+    toast(t('加载失败') + ': ' + esc(e.message), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+function closeImportPreview() {
+  _('importPreviewModal').style.display = 'none';
+}
+
+function renderImportPreviewList() {
+  const items = (_importBatch && _importBatch.items) || [];
+  const cnt = a => items.filter(x => x.action === a).length;
+  _('importPreviewProv').textContent = _importBatch ? _importBatch.providerName : '';
+  _('importPreviewSummary').textContent =
+    t('新增') + ' ' + cnt('add') + ' · ' + t('层级变化') + ' ' + cnt('tier_change') +
+    ' · ' + t('无变化') + ' ' + cnt('nochange') + ' · ' + t('受保护') + ' ' + cnt('protected');
+  if (!items.length) {
+    _('importPreviewList').innerHTML = '<div class="empty">' + t('没有可导入的模型') + '</div>';
+    _('importPreviewCount').textContent = '';
+    return;
+  }
+  _('importPreviewList').innerHTML = items.map(it => {
+    const selectable = it.action === 'add' || it.action === 'tier_change';
+    const tierBadge = it.tier === 'free'
+      ? '<span class="model-source-badge custom">' + t('免费') + '</span>'
+      : '<span class="model-source-badge provider">' + t('付费') + '</span>';
+    let action;
+    if (it.action === 'add') action = '<span class="model-source-badge zen">' + t('新增') + '</span>';
+    else if (it.action === 'tier_change') action = '<span class="model-source-badge provider">' + t('层级变化') + ': ' + esc(it.oldTier === 'free' ? t('免费') : t('付费')) + ' → ' + esc(it.tier === 'free' ? t('免费') : t('付费')) + '</span>';
+    else if (it.action === 'protected') action = '<span class="model-source-badge" title="' + esc(it.reason || '') + '">' + t('受保护') + '</span>';
+    else action = '<span class="model-source-badge" style="opacity:.6">' + t('无变化') + '</span>';
+    const sig = '<span style="font-size:11px;color:var(--text3)">' + esc(t(_tierSignals[it.signal] || it.signal)) + '</span>';
+    return '<label class="combo-pick-row" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px">' +
+      '<input type="checkbox" class="import-approve" onchange="updateImportCount()" value="' + esc(it.modelId) + '" ' + (it.action === 'add' ? 'checked' : '') + (selectable ? '' : ' disabled') + '>' +
+      '<span class="combo-pick-id">' + esc(it.modelId) + '</span>' + tierBadge + sig + action + '</label>';
+  }).join('');
+  updateImportCount();
+}
+
+function updateImportCount() {
+  const n = document.querySelectorAll('#importPreviewList .import-approve:checked').length;
+  _('importPreviewCount').textContent = n + ' ' + t('个已选');
+}
+
+async function importPreviewApply(btn) {
+  if (!_importBatch) return;
+  const approve = Array.from(document.querySelectorAll('#importPreviewList .import-approve:checked')).map(el => el.value);
+  if (!approve.length) { toast(t('请先勾选要导入的模型'), 'info'); return; }
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('导入中...'); }
+  try {
+    const d = await api('POST', '/models/import/apply', { batchId: _importBatch.id, approve: approve });
+    const r = d.data || {};
+    toast(t('已导入 ') + (r.added || 0) + t(' 个新模型，调整 ') + (r.changed || 0) + t(' 个层级'), 'success');
+    closeImportPreview();
+    _importBatch = null;
+    loadProviders();
+    loadModels();
+  } catch (e) {
+    toast(t('导入失败: ') + esc(e.message), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// ========== §8.3 登录连接：设备码登录 / 粘贴 token / 列表·测试·删除 ==========
+let _connFlows = [];
+let _connList = [];
+let _loginSessionId = '';
+let _loginPollTimer = null;
+
+async function loadConnections() {
+  try {
+    const d = await api('GET', '/connections');
+    const r = d.data || {};
+    _connFlows = r.flows || [];
+    _connList = r.connections || [];
+  } catch (e) {
+    _connFlows = []; _connList = [];
+  }
+  renderConnectionsList();
+  const dl = _('connProviderList');
+  if (dl) dl.innerHTML = _connFlows.map(p => '<option value="' + esc(p) + '">').join('');
+  const ed = _('providerEditor');
+  if (ed && ed.style.display !== 'none') fillConnectionSelect(_('provConnection') ? _('provConnection').value : '');
+}
+
+function renderConnectionsList() {
+  const box = _('connectionsList');
+  if (!box) return;
+  if (!_connList.length) { box.innerHTML = '<div class="empty" style="padding:10px;color:var(--text3)">' + t('暂无登录连接') + '</div>'; return; }
+  box.innerHTML = '<table class="action-table"><thead><tr><th>' + t('服务') + '</th><th>' + t('方式') + '</th><th>' + t('账号') + '</th><th>' + t('状态') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
+    _connList.map(c =>
+      '<tr>' +
+        '<td>' + esc(c.provider) + '</td>' +
+        '<td style="font-size:11px;color:var(--text3)">' + esc(c.authType === 'device_code' ? t('设备码登录') : c.authType === 'import_token' ? t('导入 Token') : (c.authType || '')) + '</td>' +
+        '<td style="font-size:12px">' + esc(c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : '—')) + '</td>' +
+        '<td>' + (c.status === 'active'
+          ? '<span class="status active"><span class="status-dot active"></span>' + t('已登录') + '</span>'
+          : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('需重新登录') + '</span>') + '</td>' +
+        '<td><button class="btn btn-sm" onclick=\'testConnection("' + c.id + '", this)\'>' + t('测试') + '</button> ' +
+            '<span class="conn-row-test-out"></span> ' +
+            '<button class="btn btn-sm btn-danger" onclick=\'deleteConnection("' + c.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
+      '</tr>'
+    ).join('') + '</tbody></table>';
+}
+
+function openDeviceLogin() {
+  const sel = _('connLoginProvider');
+  if (sel) {
+    sel.innerHTML = _connFlows.length
+      ? _connFlows.map(p => '<option value="' + esc(p) + '">' + esc(p) + '</option>').join('')
+      : '<option value="kilocode">kilocode</option>';
+  }
+  _('connLoginStep1').style.display = '';
+  _('connLoginStep2').style.display = 'none';
+  _('connLoginModal').style.display = 'flex';
+}
+
+function closeDeviceLogin() {
+  if (_loginPollTimer) { clearInterval(_loginPollTimer); _loginPollTimer = null; }
+  _loginSessionId = '';
+  const m = _('connLoginModal');
+  if (m) m.style.display = 'none';
+}
+
+async function beginDeviceLogin(btn) {
+  const provider = (_('connLoginProvider') && _('connLoginProvider').value) || 'kilocode';
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('发起中...'); }
+  try {
+    const d = await api('POST', '/connections/login/start', { provider: provider });
+    const r = d.data || {};
+    if (r.error) { toast(t('发起登录失败: ') + r.error, 'error'); return; }
+    _loginSessionId = r.sessionId;
+    _('connLoginCode').textContent = r.userCode || '';
+    const a = _('connLoginUrl');
+    a.href = r.authUrl || '#'; a.textContent = r.authUrl || '';
+    _('connLoginStatus').innerHTML = '<span class="loading"></span> ' + t('等待授权...');
+    _('connLoginStep1').style.display = 'none';
+    _('connLoginStep2').style.display = '';
+    if (_loginPollTimer) clearInterval(_loginPollTimer);
+    _loginPollTimer = setInterval(pollDeviceLogin, 2000);
+  } catch (e) {
+    toast(t('发起登录失败: ') + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+async function pollDeviceLogin() {
+  if (!_loginSessionId) return;
+  try {
+    const d = await api('GET', '/connections/login/status?sessionId=' + encodeURIComponent(_loginSessionId));
+    const r = d.data || {};
+    if (!r.done) return;
+    clearInterval(_loginPollTimer); _loginPollTimer = null;
+    if (r.success) {
+      toast(t('登录成功') + ': ' + (r.userCode || ''), 'success');
+      closeDeviceLogin();
+      loadConnections();
+    } else {
+      _('connLoginStatus').innerHTML = renderTestResultHTML(false, r.error || t('登录失败'));
+    }
+  } catch (e) { /* 网络抖动下轮询继续 */ }
+}
+
+function copyDeviceCode() {
+  const code = (_('connLoginCode') && _('connLoginCode').textContent) || '';
+  if (!code) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(code); }
+    else {
+      const ta = document.createElement('textarea'); ta.value = code; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    toast(t('代码已复制'), 'info');
+  } catch (e) {}
+}
+
+function showConnectionImport() {
+  _('connImpProvider').value = (_connFlows[0]) || '';
+  _('connImpToken').value = ''; _('connImpEmail').value = ''; _('connImpOrg').value = '';
+  _('connImportModal').style.display = 'flex';
+  try { _('connImpToken').focus(); } catch (e) {}
+}
+
+function hideConnectionImport() { _('connImportModal').style.display = 'none'; }
+
+async function submitConnectionImport(btn) {
+  const body = {
+    provider: _('connImpProvider').value.trim(),
+    accessToken: _('connImpToken').value.trim(),
+    email: _('connImpEmail').value.trim(),
+    orgId: _('connImpOrg').value.trim(),
+  };
+  if (!body.provider || !body.accessToken) { toast(t('服务与 Token 必填'), 'error'); return; }
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
+  try {
+    await api('POST', '/connections/import', body);
+    toast(t('连接已保存'), 'success');
+    hideConnectionImport();
+    loadConnections();
+  } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
+}
+
+async function testConnection(id, cell) {
+  const out = cell && cell.closest ? cell.closest('td').querySelector('.conn-row-test-out') : null;
+  const orig = cell ? cell.innerHTML : '';
+  if (cell) { cell.disabled = true; cell.innerHTML = '<span class="loading"></span> ' + t('测试中...'); }
+  if (out) out.innerHTML = '';
+  try {
+    const d = await api('POST', '/connections/test', { id });
+    const r = d.data || {};
+    if (out) out.innerHTML = renderTestResultHTML(r.ok, r.ok ? (t('可用') + ' · HTTP ' + r.status) : (r.error || t('失败')));
+    loadConnections();
+  } catch (e) {
+    if (out) out.innerHTML = renderTestResultHTML(false, friendlyTestError(e));
+  } finally {
+    if (cell) { cell.disabled = false; cell.innerHTML = orig; }
+  }
+}
+
+async function deleteConnection(id) {
+  if (!(await showConfirm(t('确定删除该连接？绑定它的 Provider 将不再注入 token。')))) return;
+  try {
+    await api('POST', '/connections/delete', { id });
+    toast(t('已删除'), 'success');
+    loadConnections();
+  } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
+}
+
+// fillConnectionSelect Provider 编辑器「账号连接」下拉：列出服务端连接，保留当前选择。
+function fillConnectionSelect(selected) {
+  const sel = _('provConnection');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">' + t('不使用连接') + '</option>' +
+    _connList.map(c => '<option value="' + esc(c.id) + '"' + (c.id === selected ? ' selected' : '') + '>' +
+      esc(c.provider + (c.email ? ' · ' + c.email : '')) + (c.status === 'active' ? '' : ' (' + t('需重新登录') + ')') +
+      '</option>').join('');
 }
 
 async function saveHeaders(btn) {
@@ -4485,7 +4976,7 @@ function renderModelRow(m) {
   let actions = '<span class="model-test-out" title="' + (prevTest && !prevTest.ok ? escAttr(prevTest.text) : '') + '" ' +
       (prevTest ? 'data-tested="1"' : '') + '>' + (prevTest ? renderTestResultHTML(prevTest.ok, prevTest.text) : '') + '</span>' +
     '<button class="btn btn-sm" style="padding:2px 6px" onclick="testModelRow(\'' + escAttr(m.id) + '\', this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">' + t('测试') + '</button>' +
-    '<button class="btn btn-sm" style="padding:2px 6px" onclick="editModelMeta(\'' + esc(m.id) + '\',' + m.context + ',' + m.output + ')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
+    '<button class="btn btn-sm" style="padding:2px 6px" onclick="editModelMeta(\'' + esc(m.id) + '\',' + m.context + ',' + m.output + ',\'' + esc(m.cost || '') + '\',\'' + esc(m.tierSignal || '') + '\')" title="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '" aria-label="' + t('上下文窗口 / 最大输出 (token)，点击⚙修改') + '">⚙</button>';
   if (m._customAny || m._delistedAny) {
     actions += '<button class="btn btn-sm btn-danger" style="padding:2px 6px" onclick="deleteModel(\'' + esc(m.id) + '\')" title="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '" aria-label="' + (m._delistedAny ? t('移除（已下架模型支持手动移除）') : t('删除')) + '">✕</button>';
   }
@@ -4696,10 +5187,19 @@ document.addEventListener('click', e => {
 });
 
 // 修改模型上下文/最大输出：压缩阈值按此计算，设置后 zen 同步保留该值
-function showModelMetaEditor(id, ctx, out) {
+let _mmTierWasManual = false;
+function showModelMetaEditor(id, ctx, out, cost, tierSignal) {
   _('mmId').value = id;
   _('mmCtx').value = ctx || 200000;
   _('mmOut').value = out || 32768;
+  const tier = _('mmTier');
+  _mmTierWasManual = tierSignal === 'manual';
+  tier.value = _mmTierWasManual ? (cost || 'auto') : 'auto';
+  let note = '';
+  if (tierSignal && tierSignal !== 'manual') note = t('当前判定') + ': ' + esc(t(_tierSignals[tierSignal] || tierSignal));
+  else if (tierSignal === 'manual') note = t('当前判定') + ': ' + t('手动设置');
+  else if (cost) note = t('当前判定') + ': ' + (cost === 'free' ? t('免费') : t('付费')) + ' · ' + t('自动');
+  _('mmTierNote').textContent = note;
   _('modelMetaEditor').style.display = 'flex';
   try { _('modelMetaEditor').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
 }
@@ -4710,10 +5210,13 @@ async function saveModelMeta(btn) {
   const id = _('mmId').value;
   const c = parseInt(_('mmCtx').value, 10) || 0;
   const o = parseInt(_('mmOut').value, 10) || 0;
+  const tier = _('mmTier').value;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
     await api('POST', '/models/context', { id: id, context: c, output: o });
+    if (tier !== 'auto') { await api('POST', '/models/cost', { id: id, cost: tier }); }
+    else if (_mmTierWasManual) { await api('POST', '/models/cost', { id: id, cost: '' }); }
     toast(t('已保存') + ': ' + id + ' ctx=' + formatTokenCount(c), 'success');
     hideModelMetaEditor();
     await loadModels();
@@ -4740,12 +5243,16 @@ document.addEventListener('keydown', e => {
   if (_('confirmModal') && _('confirmModal').style.display === 'flex') { resolveConfirm(false); return; }
   if (_('modelMetaEditor') && _('modelMetaEditor').style.display === 'flex') { hideModelMetaEditor(); return; }
   if (_('provPickerModal') && _('provPickerModal').style.display === 'flex') { closeProvModelPicker(); return; }
+  if (_('presetPickerModal') && _('presetPickerModal').style.display === 'flex') { closePresetPicker(); return; }
+  if (_('importPreviewModal') && _('importPreviewModal').style.display === 'flex') { closeImportPreview(); return; }
+  if (_('connLoginModal') && _('connLoginModal').style.display === 'flex') { closeDeviceLogin(); return; }
+  if (_('connImportModal') && _('connImportModal').style.display === 'flex') { hideConnectionImport(); return; }
   if (_('comboTestModal') && _('comboTestModal').style.display === 'flex') { closeComboTest(); return; }
   if (_('modelSyncOverlay') && _('modelSyncOverlay').style.display === 'flex') { closeModelSyncModal(); }
 });
 
-function editModelMeta(id, ctx, out) {
-  showModelMetaEditor(id, ctx, out);
+function editModelMeta(id, ctx, out, cost, tierSignal) {
+  showModelMetaEditor(id, ctx, out, cost, tierSignal);
 }
 
 // 模型分组渲染已迁移至 renderModelList（按提供商分组 + 筛选 + 批量启停）

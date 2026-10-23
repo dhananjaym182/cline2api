@@ -101,6 +101,17 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/providers/test", auth(handleProviderTest))
 	mux.HandleFunc("/admin/api/providers/models", auth(handleProviderModels))
 	mux.HandleFunc("/admin/api/providers/presets", auth(handleProviderPresets))
+	mux.HandleFunc("/admin/api/models/import/preview", auth(handleModelImportPreview))
+	mux.HandleFunc("/admin/api/models/import/apply", auth(handleModelImportApply))
+	mux.HandleFunc("/admin/api/models/import/pending", auth(handleModelImportPending))
+	mux.HandleFunc("/admin/api/models/import/discard", auth(handleModelImportDiscard))
+	mux.HandleFunc("/admin/api/models/cost", auth(handleAdminModelCost))
+	mux.HandleFunc("/admin/api/connections", auth(handleConnectionsList))
+	mux.HandleFunc("/admin/api/connections/login/start", auth(handleConnectionLoginStart))
+	mux.HandleFunc("/admin/api/connections/login/status", auth(handleConnectionLoginStatus))
+	mux.HandleFunc("/admin/api/connections/import", auth(handleConnectionImport))
+	mux.HandleFunc("/admin/api/connections/delete", auth(handleConnectionDelete))
+	mux.HandleFunc("/admin/api/connections/test", auth(handleConnectionTest))
 	mux.HandleFunc("/admin/api/combos", auth(handleCombosList))
 	mux.HandleFunc("/admin/api/combos/save", auth(handleComboSave))
 	mux.HandleFunc("/admin/api/combos/delete", auth(handleComboDelete))
@@ -119,11 +130,11 @@ func requireAdminAuth(next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
-			c, err := r.Cookie(adminSessionCookie)
-			if err != nil {
-				writeAPI(w, http.StatusUnauthorized, apiResponse{Error: tAPI(r, "login_required")})
-				return
-			}
+		c, err := r.Cookie(adminSessionCookie)
+		if err != nil {
+			writeAPI(w, http.StatusUnauthorized, apiResponse{Error: tAPI(r, "login_required")})
+			return
+		}
 		adminSessionsMu.Lock()
 		expiry, ok := adminSessions[c.Value]
 		if ok {
@@ -134,8 +145,8 @@ func requireAdminAuth(next http.HandlerFunc) http.HandlerFunc {
 			}
 			delete(adminSessions, c.Value)
 		}
-			adminSessionsMu.Unlock()
-			writeAPI(w, http.StatusUnauthorized, apiResponse{Error: tAPI(r, "session_expired")})
+		adminSessionsMu.Unlock()
+		writeAPI(w, http.StatusUnauthorized, apiResponse{Error: tAPI(r, "session_expired")})
 	}
 }
 
@@ -189,32 +200,32 @@ func randomHex(n int) string {
 
 // POST /admin/api/login  body: {password}
 func handleAdminLogin(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
-			return
-		}
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
-			return
-		}
-		defer r.Body.Close()
-		var req struct {
-			Password string `json:"password"`
-		}
-		if err := json.Unmarshal(body, &req); err != nil {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
-			return
-		}
-		if loadPool().AdminPasswordHash == "" {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "password_not_enabled")})
-			return
-		}
-		if !verifyAdminPassword(req.Password) {
-			time.Sleep(500 * time.Millisecond) // 防爆破
-			writeAPI(w, http.StatusUnauthorized, apiResponse{Error: tAPI(r, "wrong_password")})
-			return
-		}
+	if r.Method != "POST" {
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
+		return
+	}
+	defer r.Body.Close()
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
+		return
+	}
+	if loadPool().AdminPasswordHash == "" {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "password_not_enabled")})
+		return
+	}
+	if !verifyAdminPassword(req.Password) {
+		time.Sleep(500 * time.Millisecond) // 防爆破
+		writeAPI(w, http.StatusUnauthorized, apiResponse{Error: tAPI(r, "wrong_password")})
+		return
+	}
 	token := randomHex(32)
 	adminSessionsMu.Lock()
 	adminSessions[token] = time.Now().Add(adminSessionTTL)
@@ -227,45 +238,45 @@ func handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(adminSessionTTL.Seconds()),
 	})
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "login_ok")})
-	}
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "login_ok")})
+}
 
-	// POST /admin/api/logout
-	func handleAdminLogout(w http.ResponseWriter, r *http.Request) {
-		if c, err := r.Cookie(adminSessionCookie); err == nil {
-			adminSessionsMu.Lock()
-			delete(adminSessions, c.Value)
-			adminSessionsMu.Unlock()
-		}
-		http.SetCookie(w, &http.Cookie{Name: adminSessionCookie, Value: "", Path: "/admin", MaxAge: -1})
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "logout_ok")})
+// POST /admin/api/logout
+func handleAdminLogout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(adminSessionCookie); err == nil {
+		adminSessionsMu.Lock()
+		delete(adminSessions, c.Value)
+		adminSessionsMu.Unlock()
 	}
+	http.SetCookie(w, &http.Cookie{Name: adminSessionCookie, Value: "", Path: "/admin", MaxAge: -1})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "logout_ok")})
+}
 
 // POST /admin/api/password  body: {password}（空 = 清除密码，恢复无密码访问）
 func handleAdminPassword(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
-			return
-		}
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
-			return
-		}
-		defer r.Body.Close()
-		var req struct {
-			Password string `json:"password"`
-		}
-		if err := json.Unmarshal(body, &req); err != nil {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
-			return
-		}
-		setAdminPassword(req.Password)
-		if req.Password == "" {
-			writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "password_cleared")})
-		} else {
-			writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "password_updated")})
-		}
+	if r.Method != "POST" {
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
+		return
+	}
+	defer r.Body.Close()
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
+		return
+	}
+	setAdminPassword(req.Password)
+	if req.Password == "" {
+		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "password_cleared")})
+	} else {
+		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "password_updated")})
+	}
 }
 
 func adminStaticHandler(w http.ResponseWriter, r *http.Request) {
@@ -320,10 +331,10 @@ func handleAdminAccountAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		if req.RefreshToken == "" {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "refresh_token_required")})
-			return
-		}
+	if req.RefreshToken == "" {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "refresh_token_required")})
+		return
+	}
 
 	// 去重：该 refreshToken 已存在时直接返回，不重复添加
 	if existing := findAccountByRefreshToken(req.RefreshToken); existing != nil {
@@ -340,12 +351,12 @@ func handleAdminAccountAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		// Validate by refreshing
-		resp, err := refreshClineToken(req.RefreshToken)
-		if err != nil {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_refresh_token", err.Error())})
-			return
-		}
+	// Validate by refreshing
+	resp, err := refreshClineToken(req.RefreshToken)
+	if err != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_refresh_token", err.Error())})
+		return
+	}
 
 	if req.Email == "" {
 		req.Email = fmt.Sprintf("user_%d", len(loadPool().Accounts)+1)
@@ -367,9 +378,9 @@ func handleAdminAccountAdd(w http.ResponseWriter, r *http.Request) {
 	addAccount(acc)
 	log.Printf("Account added via API: %s", req.Email)
 
-		writeAPI(w, http.StatusOK, apiResponse{
-			Success: true,
-			Message: tAPI(r, "account_added", req.Email),
+	writeAPI(w, http.StatusOK, apiResponse{
+		Success: true,
+		Message: tAPI(r, "account_added", req.Email),
 		Data: map[string]any{
 			"accountId": acc.AccountID,
 			"email":     acc.Email,
@@ -399,16 +410,16 @@ func handleAdminAccountDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		if req.AccountID == "" {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "account_id_required")})
-			return
-		}
+	if req.AccountID == "" {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "account_id_required")})
+		return
+	}
 
-		if removeAccount(req.AccountID) {
-			writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "account_deleted")})
-		} else {
-			writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "account_not_found")})
-		}
+	if removeAccount(req.AccountID) {
+		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "account_deleted")})
+	} else {
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "account_not_found")})
+	}
 }
 
 // POST /admin/api/oauth/start  -- Start OAuth device login, returns URL
@@ -625,11 +636,11 @@ func handleSSOImport(w http.ResponseWriter, r *http.Request) {
 		result["errors"] = errors
 	}
 
-		writeAPI(w, http.StatusOK, apiResponse{
-			Success: true,
-			Message: tAPI(r, "imported_accounts", imported, len(errors), duplicates),
-			Data:    result,
-		})
+	writeAPI(w, http.StatusOK, apiResponse{
+		Success: true,
+		Message: tAPI(r, "imported_accounts", imported, len(errors), duplicates),
+		Data:    result,
+	})
 }
 
 // POST /admin/api/batch-import  body: { tokens: [{ refreshToken, email }] }
@@ -656,10 +667,10 @@ func handleBatchImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		if len(req.Tokens) == 0 {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "tokens_empty")})
-			return
-		}
+	if len(req.Tokens) == 0 {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "tokens_empty")})
+		return
+	}
 
 	imported := 0
 	duplicates := 0
@@ -698,9 +709,9 @@ func handleBatchImport(w http.ResponseWriter, r *http.Request) {
 		imported++
 	}
 
-		writeAPI(w, http.StatusOK, apiResponse{
-			Success: true,
-			Message: tAPI(r, "imported_accounts", imported, len(errors), duplicates),
+	writeAPI(w, http.StatusOK, apiResponse{
+		Success: true,
+		Message: tAPI(r, "imported_accounts", imported, len(errors), duplicates),
 		Data: map[string]any{
 			"imported":   imported,
 			"failed":     len(errors),
@@ -766,15 +777,15 @@ func handleExportAccounts(w http.ResponseWriter, r *http.Request) {
 // GET /admin/api/open-external?url=... — 用系统默认浏览器打开外部链接
 func handleOpenExternal(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Query().Get("url")
-		if url == "" {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "url_required")})
-			return
-		}
-		// 仅允许 http/https，防止任意命令执行
-		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "url_http_only")})
-			return
-		}
+	if url == "" {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "url_required")})
+		return
+	}
+	// 仅允许 http/https，防止任意命令执行
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "url_http_only")})
+		return
+	}
 	if err := openBrowser(url); err != nil {
 		writeAPI(w, http.StatusInternalServerError, apiResponse{Error: err.Error()})
 		return
@@ -796,7 +807,7 @@ func handleAdminRefreshAll(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	poolMu.Unlock()
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "tokens_refreshed")})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "tokens_refreshed")})
 }
 
 // POST /admin/api/accounts/delete-all
@@ -809,7 +820,7 @@ func handleAdminDeleteAll(w http.ResponseWriter, r *http.Request) {
 	pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}}
 	poolMu.Unlock()
 	savePool()
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "accounts_deleted")})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "accounts_deleted")})
 }
 
 // POST /admin/api/accounts/reset  body: { accountId }
@@ -833,20 +844,20 @@ func handleAdminAccountReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		acc := getAccountByID(req.AccountID)
-		if acc == nil {
-			writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "account_not_found")})
-			return
-		}
+	acc := getAccountByID(req.AccountID)
+	if acc == nil {
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "account_not_found")})
+		return
+	}
 
-		// Reset status to active and refresh token, but preserve usage/token statistics.
-		acc.Status = "active"
-		if err := refreshAccountToken(acc); err != nil {
-			writeAPI(w, http.StatusInternalServerError, apiResponse{Error: tAPI(r, "reset_failed", err.Error())})
-			return
-		}
+	// Reset status to active and refresh token, but preserve usage/token statistics.
+	acc.Status = "active"
+	if err := refreshAccountToken(acc); err != nil {
+		writeAPI(w, http.StatusInternalServerError, apiResponse{Error: tAPI(r, "reset_failed", err.Error())})
+		return
+	}
 
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "account_reset")})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "account_reset")})
 }
 
 // POST /admin/api/accounts/test  body: { accountId?: "" }
@@ -871,10 +882,10 @@ func handleAdminAccountTest(w http.ResponseWriter, r *http.Request) {
 	var targets []*Account
 	if req.AccountID != "" {
 		acc := getAccountByID(req.AccountID)
-			if acc == nil {
-				writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "account_not_found")})
-				return
-			}
+		if acc == nil {
+			writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "account_not_found")})
+			return
+		}
 		targets = []*Account{acc}
 	} else {
 		poolMu.Lock()
@@ -1021,7 +1032,7 @@ func handleAdminDeleteKey(w http.ResponseWriter, r *http.Request) {
 	}
 	poolMu.Unlock()
 	savePool()
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "key_deleted")})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "key_deleted")})
 }
 
 // GET /admin/api/config
@@ -1081,7 +1092,7 @@ func handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			cfg.Strategy = req.Strategy
 			changed = true
 		default:
-				writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_strategy")})
+			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_strategy")})
 			return
 		}
 	}
@@ -1138,7 +1149,7 @@ func handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !found {
-				writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_default_model")})
+			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_default_model")})
 			return
 		}
 		p := loadPool()
@@ -1160,7 +1171,7 @@ func handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !valid {
-				writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_host")})
+			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_host")})
 			return
 		}
 		p := loadPool()
@@ -1185,14 +1196,14 @@ func handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
-		"strategy":         cfg.Strategy,
-		"headers":          cfg.Headers,
-		"onlyFree":         cfg.OnlyFree,
-		"defaultModel":     getDefaultModel(),
-		"host":             listenHost,
-		"address":          fmt.Sprintf("%s:%d", effectiveAdminHost(listenHost), listenPort),
-		"restarting":       restarting,
-		"chainUnverified":  chainUnverified,
+		"strategy":        cfg.Strategy,
+		"headers":         cfg.Headers,
+		"onlyFree":        cfg.OnlyFree,
+		"defaultModel":    getDefaultModel(),
+		"host":            listenHost,
+		"address":         fmt.Sprintf("%s:%d", effectiveAdminHost(listenHost), listenPort),
+		"restarting":      restarting,
+		"chainUnverified": chainUnverified,
 	}})
 }
 
@@ -1235,18 +1246,18 @@ func handleAdminModelAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		if req.ID == "" {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "model_id_required")})
+	if req.ID == "" {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "model_id_required")})
+		return
+	}
+
+	// 校验不与已有模型重复
+	for _, m := range getAllModels() {
+		if m.ID == req.ID {
+			writeAPI(w, http.StatusConflict, apiResponse{Error: tAPI(r, "model_exists")})
 			return
 		}
-
-		// 校验不与已有模型重复
-		for _, m := range getAllModels() {
-			if m.ID == req.ID {
-				writeAPI(w, http.StatusConflict, apiResponse{Error: tAPI(r, "model_exists")})
-				return
-			}
-		}
+	}
 
 	// cost 默认为 pass
 	cost := req.Cost
@@ -1275,7 +1286,7 @@ func handleAdminModelAdd(w http.ResponseWriter, r *http.Request) {
 	poolMu.Unlock()
 	savePool()
 
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "model_added")})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "model_added")})
 }
 
 // POST /admin/api/models/delete  body: { id }
@@ -1299,32 +1310,32 @@ func handleAdminModelDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		if req.ID == "" {
-			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "model_id_required")})
-			return
-		}
+	if req.ID == "" {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "model_id_required")})
+		return
+	}
 
-		p := loadPool()
-		poolMu.Lock()
-		found := false
-		for i, m := range p.Models {
-			if m.ID == req.ID {
-				// 自定义模型可删；同步打上 Delisted 标记的下架模型支持手动移除
-				if !m.Custom && !m.Delisted {
-					poolMu.Unlock()
-					writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "cannot_delete_builtin")})
-					return
-				}
-				p.Models = append(p.Models[:i], p.Models[i+1:]...)
-				found = true
-				break
+	p := loadPool()
+	poolMu.Lock()
+	found := false
+	for i, m := range p.Models {
+		if m.ID == req.ID {
+			// 自定义模型可删；同步打上 Delisted 标记的下架模型支持手动移除
+			if !m.Custom && !m.Delisted {
+				poolMu.Unlock()
+				writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "cannot_delete_builtin")})
+				return
 			}
+			p.Models = append(p.Models[:i], p.Models[i+1:]...)
+			found = true
+			break
 		}
-		if !found {
-			poolMu.Unlock()
-			writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "model_not_found")})
-			return
-		}
+	}
+	if !found {
+		poolMu.Unlock()
+		writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "model_not_found")})
+		return
+	}
 	// 若删除的是当前默认模型，则清空回退到内置默认
 	if p.DefaultModel == req.ID {
 		p.DefaultModel = ""
@@ -1332,7 +1343,7 @@ func handleAdminModelDelete(w http.ResponseWriter, r *http.Request) {
 	poolMu.Unlock()
 	savePool()
 
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "model_deleted")})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "model_deleted")})
 }
 
 // POST /admin/api/models/context  body: { id, context, output }
@@ -1511,7 +1522,7 @@ func handleAdminRequestLogs(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("limit"); v != "" {
 		var n int
 		if _, err := fmt.Sscanf(v, "%d", &n); err != nil || n <= 0 {
-				writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_limit")})
+			writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_limit")})
 			return
 		}
 		limit = n
@@ -1573,18 +1584,18 @@ func handleOpenCodeConfigUpdate(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	var req struct {
-		Enabled         *bool             `json:"enabled"`
-		Key             *string           `json:"key"`
-		BaseURL         *string           `json:"baseURL"`
-		Proxies         []string          `json:"proxies"`
-		ProxyStrategy   *string           `json:"proxyStrategy"`
-		MaxConcurrency  *int              `json:"maxConcurrency"`
-		Retries         *int              `json:"retries"`
-		Failover        *bool             `json:"failover"`
-		FailoverCount   *int              `json:"failoverCount"`
-		FailoverMinutes *int              `json:"failoverMinutes"`
+		Enabled         *bool              `json:"enabled"`
+		Key             *string            `json:"key"`
+		BaseURL         *string            `json:"baseURL"`
+		Proxies         []string           `json:"proxies"`
+		ProxyStrategy   *string            `json:"proxyStrategy"`
+		MaxConcurrency  *int               `json:"maxConcurrency"`
+		Retries         *int               `json:"retries"`
+		Failover        *bool              `json:"failover"`
+		FailoverCount   *int               `json:"failoverCount"`
+		FailoverMinutes *int               `json:"failoverMinutes"`
 		ZenHeaders      *map[string]string `json:"zenHeaders"`
-		Compaction      *zenCompactConfig `json:"compaction"`
+		Compaction      *zenCompactConfig  `json:"compaction"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})

@@ -31,12 +31,15 @@ type CustomProvider struct {
 	ModelIDs   []string          `json:"modelIds"`          // 该上游暴露的模型 ID（如 "z-ai/glm-5.3-flash"）
 	Headers    map[string]string `json:"headers,omitempty"` // 自定义请求头（如 OpenRouter 的 HTTP-Referer）
 	Enabled    bool              `json:"enabled"`
-	Priority   int               `json:"priority"`                    // 越小越优先（同模型多上游时）
-	TimeoutSec int               `json:"timeoutSec,omitempty"`        // 默认 300
-	Free       bool              `json:"free"`                        // 标记免费来源（供统计/兜底）
-	RpmLimit   int               `json:"rpmLimit,omitempty"`          // 每分钟请求上限（0 = 不限）
-	DailyLimit int               `json:"dailyRequestLimit,omitempty"` // 每日请求上限（0 = 不限）
-	CreatedAt  time.Time         `json:"createdAt"`
+	Priority   int               `json:"priority"`             // 越小越优先（同模型多上游时）
+	TimeoutSec int               `json:"timeoutSec,omitempty"` // 默认 300
+	Free       bool              `json:"free"`                 // 标记免费来源（供统计/兜底）
+	// ConnectionID 绑定一个 provider 登录连接（§8.3，OAuth/粘贴 token）；非空时
+	// 派发用连接 accessToken 覆盖 apiKey，且连接失效/过期的 provider 不入候选。
+	ConnectionID string    `json:"connectionId,omitempty"`
+	RpmLimit     int       `json:"rpmLimit,omitempty"`          // 每分钟请求上限（0 = 不限）
+	DailyLimit   int       `json:"dailyRequestLimit,omitempty"` // 每日请求上限（0 = 不限）
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 // providerRegistry 内存态 + 落盘（.cline-providers.json）。
@@ -196,6 +199,10 @@ func resolveProvidersForModel(model string) []*CustomProvider {
 			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit) {
 				break
 			}
+			// 绑定了登录连接的 provider：连接缺失/过期/待重登时不入候选（回退链接管）
+			if p.ConnectionID != "" && activeConnectionForProvider(p) == nil {
+				break
+			}
 			cs = append(cs, providerCand{p: *p})
 			break
 		}
@@ -301,6 +308,22 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 		}
 		req.Header.Set(k, v)
 	}
+	// §8.3：绑定登录连接时用连接 token 鉴权，并注入连接级动态头（如 Kilo 组织头）
+	if conn := activeConnectionForProvider(p); conn != nil {
+		spec, hasSpec := providerDeviceFlows[conn.Provider]
+		if hasSpec {
+			req.Header.Set("Authorization", "Bearer "+connectionBearer(conn, spec))
+		} else {
+			req.Header.Set("Authorization", "Bearer "+conn.AccessToken)
+		}
+		if hasSpec && spec.OrgHeader != "" {
+			if oid := conn.ProviderSpecificData["orgId"]; oid != "" {
+				req.Header.Set(spec.OrgHeader, oid)
+			}
+		}
+	} else if p.ConnectionID != "" {
+		return nil, fmt.Errorf("provider %s: connection unavailable (expired or reauth required)", p.Name)
+	}
 
 	timeout := time.Duration(p.TimeoutSec) * time.Second
 	if timeout <= 0 {
@@ -327,6 +350,10 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 	recordProviderOutcome(p.ID, modelKey, false, latency)
 	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
 	bodyStr := string(bodyBytes)
+	// 连接被上游拒绝（401/403）→ 标注重登，后续派发不再选中该 provider 直到重登
+	if p.ConnectionID != "" && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+		markConnectionReauth(p.ConnectionID)
+	}
 	if until := providerCooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); !until.IsZero() {
 		setProviderCooldown(p.ID, modelKey, until)
 	}
@@ -798,6 +825,33 @@ type providerPreset struct {
 	Headers  map[string]string
 	Notes    string
 	FreeTier bool
+	// ModelIDs 预填的种子模型列表（来自上游目录快照；可为空）。
+	ModelIDs []string
+	// ModelsFetcher 可选的 /v1/models 元数据（用于后续按需拉全量模型列表）。
+	ModelsFetcher *modelsFetcher
+	// Kind 是 UI 分组优先级："free"(免密钥) | "freeTier"(免费额度) | "hasFree"(含免费模型) | "local" | "other"。
+	// 留空时由 FreeTier 推导（true→freeTier，false→other）。
+	Kind string
+	// LoginFlow true = 无 API Key，靠设备码登录连接鉴权（kilocode/github/qwen）。
+	LoginFlow bool
+}
+
+// modelsFetcher 描述 preset 对应上游的模型目录端点（目前仅 openai 兼容格式）。
+type modelsFetcher struct {
+	URL  string `json:"url"`
+	Type string `json:"type"` //当前仅 "openai"
+}
+
+// mergePresets 把 src 合入 dst，冲突时保留手写的运行时 preset。
+func mergePresets(dst, src map[string]providerPreset) map[string]providerPreset {
+	out := make(map[string]providerPreset, len(dst)+len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	for k, v := range dst {
+		out[k] = v
+	}
+	return out
 }
 
 // providerPresets 常见 OpenAI 兼容上游预设。Key 为前端展示名。
@@ -857,6 +911,29 @@ var providerPresets = map[string]providerPreset{
 		BaseURL:  "http://127.0.0.1:8000/v1",
 		Notes:    "Self-hosted OpenAI-compatible server (no key needed usually)",
 		FreeTier: true,
+	},
+	// §8.3 登录类免费源：无 API Key，用「登录连接（OAuth）」设备码授权后在编辑器绑定连接
+	"kilocode": {
+		Name:      "Kilo Code (Free)",
+		BaseURL:   "https://api.kilo.ai/api/openrouter",
+		Notes:     "设备码登录（无需 API Key）；登录后在编辑器「账号连接」选连接，组织头自动注入",
+		FreeTier:  true,
+		LoginFlow: true,
+	},
+	"github-copilot": {
+		Name:          "GitHub Copilot (Free plan)",
+		BaseURL:       "https://api.githubcopilot.com",
+		Notes:         "设备码登录 GitHub → 自动兑换 Copilot 作业票（免 Key）；Copilot Free 计划含少量高级请求配额",
+		FreeTier:      true,
+		LoginFlow:     true,
+		ModelsFetcher: &modelsFetcher{URL: "https://api.githubcopilot.com/models", Type: "openai"},
+	},
+	"qwen-chat": {
+		Name:      "Qwen Chat (Free)",
+		BaseURL:   "https://portal.qwen.ai/v1",
+		Notes:     "设备码登录 Qwen Chat（PKCE，无需 API Key）；OpenAI 兼容端点",
+		FreeTier:  true,
+		LoginFlow: true,
 	},
 }
 
@@ -921,8 +998,12 @@ func syncProviderModels() {
 			// 已有条目：provider 条目刷新归属与计费（其他来源条目不动）
 			for i := range kept {
 				if kept[i].ID == id && kept[i].Source == "provider" {
-					if kept[i].Provider != c.name || kept[i].Cost != c.cost {
+					if kept[i].Provider != c.name {
 						kept[i].Provider = c.name
+						changed = true
+					}
+					// §9.3：分级器批准过的模型保留逐模型层级，不被整源层级覆盖
+					if kept[i].TierSignal == "" && kept[i].Cost != c.cost {
 						kept[i].Cost = c.cost
 						changed = true
 					}
@@ -1189,6 +1270,7 @@ func handleProviderDelete(w http.ResponseWriter, r *http.Request) {
 //   - {id, model?}            → 已保存的 provider（model 非空时覆盖默认 ModelIDs[0]）
 //   - {baseURL, apiKey?, headers?, model?} → 未保存配置的临时测试：构造临时
 //     CustomProvider 走同一 callProvider 路径，不落盘、不产生新状态。
+//
 // 上游失败 ≠ API 失败：一律 200 包裹 {success:true, data:{ok:false, error:...}}。
 func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
@@ -1289,22 +1371,35 @@ func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
 
 func handleProviderPresets(w http.ResponseWriter, r *http.Request) {
 	type presetOut struct {
-		Key      string            `json:"key"`
-		Name     string            `json:"name"`
-		BaseURL  string            `json:"baseURL"`
-		Headers  map[string]string `json:"headers"`
-		Notes    string            `json:"notes"`
-		FreeTier bool              `json:"freeTier"`
+		Key           string            `json:"key"`
+		Name          string            `json:"name"`
+		BaseURL       string            `json:"baseURL"`
+		ModelIDs      []string          `json:"modelIDs,omitempty"`
+		ModelsFetcher *modelsFetcher    `json:"modelsFetcher,omitempty"`
+		Headers       map[string]string `json:"headers,omitempty"`
+		Notes         string            `json:"notes,omitempty"`
+		FreeTier      bool              `json:"freeTier"`
+		Kind          string            `json:"kind"`
+		LoginFlow     bool              `json:"loginFlow,omitempty"`
 	}
-	keys := make([]string, 0, len(providerPresets))
-	for k := range providerPresets {
+	presets := mergePresets(providerPresets, providerPresetsImported)
+	keys := make([]string, 0, len(presets))
+	for k := range presets {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	out := make([]presetOut, 0, len(keys))
 	for _, k := range keys {
-		p := providerPresets[k]
-		out = append(out, presetOut{Key: k, Name: p.Name, BaseURL: p.BaseURL, Headers: p.Headers, Notes: p.Notes, FreeTier: p.FreeTier})
+		p := presets[k]
+		kind := p.Kind
+		if kind == "" {
+			if p.FreeTier {
+				kind = "freeTier"
+			} else {
+				kind = "other"
+			}
+		}
+		out = append(out, presetOut{Key: k, Name: p.Name, BaseURL: p.BaseURL, Headers: p.Headers, Notes: p.Notes, FreeTier: p.FreeTier, ModelIDs: p.ModelIDs, ModelsFetcher: p.ModelsFetcher, Kind: kind, LoginFlow: p.LoginFlow})
 	}
 	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"presets": out}})
 }
