@@ -1,0 +1,1038 @@
+</head>
+<body>
+<div class="layout">
+<div class="sidebar">
+  <div class="sidebar-header">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+      <div>
+        <div class="brand-name">Cline 代理</div>
+        <div class="brand-sub">多账号轮询 · 双协议</div>
+      </div>
+    </div>
+  </div>
+  <div class="sidebar-nav">
+  <div class="nav-section">
+    <div class="nav-section-label">概览</div>
+    <div class="nav-item active" data-tab="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span class="nav-label">仪表盘</span>
+    </div>
+    <div class="nav-item" data-tab="logs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+      <span class="nav-label">请求日志</span>
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">账户</div>
+    <div class="nav-item" data-tab="accounts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span class="nav-label">账号管理</span>
+    </div>
+    <div class="nav-item" data-tab="import">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span class="nav-label">导入账号</span>
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">配置</div>
+    <div class="nav-item" data-tab="routing">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v3a3 3 0 0 0 3 3h6"/></svg>
+      <span class="nav-label">路由与模型</span>
+    </div>
+    <div class="nav-item" data-tab="upstreams">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      <span class="nav-label">上游服务</span>
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">系统</div>
+    <div class="nav-item" data-tab="security">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span class="nav-label">密钥与安全</span>
+    </div>
+    <div class="nav-item" data-tab="about">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      <span class="nav-label">关于</span>
+    </div>
+  </div>
+  </div>
+  <div class="sidebar-footer">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+      <span style="font-weight:600;color:var(--text)">Cline2API</span>
+      <span id="footerVersion" style="font-size:11px;opacity:0.7">dev</span>
+    </div>
+    <div style="margin-bottom:4px">API: <span id="footerApiAddr">127.0.0.1:3457</span></div>
+    <div><a href="#" onclick="openExternal('https://github.com/luawei1/cline2api');return false">GitHub</a> · <a href="#" onclick="openExternal('https://github.com/luawei1/cline2api/issues');return false">反馈</a> · MIT</div>
+  </div>
+  <div class="sidebar-lang">
+    <div class="lang-switch">
+      <button type="button" id="langZh" onclick="setLang('zh')">中文</button>
+      <button type="button" id="langEn" onclick="setLang('en')">English</button>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+<div class="content-shell">
+
+<div id="tab-dashboard" class="tab-panel">
+  <div class="large-title">仪表盘</div>
+  <div class="large-subtitle">查看账号池状态与快捷操作</div>
+  <div class="metric-section">
+    <div class="metric-heading">账号状态</div>
+    <div class="cards">
+      <div class="card blue">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="num" id="statTotal">-</div><div class="label">账号总数</div>
+    </div>
+    <div class="card green">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+      <div class="num" id="statActive">-</div><div class="label">活跃</div>
+    </div>
+    <div class="card yellow">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+      <div class="num" id="statCooldown">-</div><div class="label">冷却</div>
+    </div>
+    <div class="card red">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div>
+      <div class="num" id="statExpired">-</div><div class="label">已过期</div>
+    </div>
+  </div>
+  </div>
+  <div class="metric-section">
+    <div class="metric-heading">Token 用量</div>
+    <div class="cards tokens">
+    <div class="card blue">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="num" id="statPromptTokens">-</div><div class="label">累计输入 Token</div>
+    </div>
+    <div class="card green">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="num" id="statCompletionTokens">-</div><div class="label">累计输出 Token</div>
+    </div>
+    <div class="card yellow">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="num" id="statTotalTokens">-</div><div class="label">累计总 Token</div>
+    </div>
+    <div class="card blue">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></div>
+      <div class="num" id="statCachedTokens">-</div><div class="label">缓存 Token</div>
+    </div>
+    </div>
+  </div>
+  <div class="metric-section">
+    <div class="metric-heading">opencode 免费模型 · 今日用量</div>
+    <div class="cards tokens">
+      <div class="card yellow">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+      <div class="num" id="statOcRequests">-</div><div class="label">今日请求数</div>
+    </div>
+    <div class="card blue">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="num" id="statOcInputTokens">-</div><div class="label">今日输入 Token</div>
+    </div>
+    <div class="card green">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="num" id="statOcOutputTokens">-</div><div class="label">今日输出 Token</div>
+    </div>
+    <div class="card yellow">
+      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="num" id="statOcTotalTokens">-</div><div class="label">今日总 Token</div>
+    </div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>快捷操作</div>
+    <div class="section-body action-row">
+      <button class="btn btn-primary" onclick="switchTab('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
+      <button class="btn" onclick="refreshAllTokens(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新全部 Token</button>
+      <button class="btn" onclick="document.getElementById('fileInput').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>从文件导入</button>
+      <input type="file" id="fileInput" accept=".json,.txt" style="display:none" onchange="handleFileImport(event)">
+      <button class="btn" onclick="switchTab('security');switchPageSubTab('security','keys')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>API 密钥</button>
+    </div>
+  </div>
+</div>
+
+<div id="tab-accounts" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">账号管理</div>
+      <div class="large-subtitle">管理 Cline 账号池中的所有账号</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="testAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>测试全部</button>
+      <button class="btn btn-sm" onclick="exportAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出全部</button>
+      <button class="btn btn-sm" onclick="loadAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+      <button class="btn btn-primary btn-sm" onclick="switchTab('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-body flush">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border2)">
+        <input type="text" id="accSearch" placeholder="搜索邮箱..." oninput="onAccSearch(this.value)" style="flex:1;max-width:320px;min-width:0;padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px">
+        <span id="accSearchCount" style="font-size:12px;color:var(--text3)"></span>
+        <!-- 勾选后可用的批量操作：集中在勾选区旁，表头只保留全局操作 -->
+        <span style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+          <button class="btn btn-sm" onclick="exportSelectedAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出选中<span id="selCount"></span></button>
+          <button class="btn btn-sm" onclick="resetSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>重置选中<span id="resetCount"></span></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteSelectedAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除选中<span id="delCount"></span></button>
+        </span>
+      </div>
+      <table class="account-table">
+        <thead>
+          <tr><th style="width:30px;text-align:center"><input type="checkbox" id="accSelAll" onchange="toggleAllAccountSel(this)" title="全选本页"></th><th style="width:40px">#</th><th onclick="onAccSort('email')" style="cursor:pointer" title="点击排序">邮箱</th><th onclick="onAccSort('status')" style="cursor:pointer" title="点击排序">状态</th><th onclick="onAccSort('usage')" style="cursor:pointer" title="点击排序">请求</th><th>输入</th><th>输出</th><th onclick="onAccSort('total')" style="cursor:pointer" title="点击排序">总 Token</th><th onclick="onAccSort('cached')" style="cursor:pointer" title="点击排序">缓存</th><th onclick="onAccSort('lastUsed')" style="cursor:pointer" title="点击排序">最后使用</th><th onclick="onAccSort('createdAt')" style="cursor:pointer" title="点击排序">创建时间</th><th>操作</th></tr>
+        </thead>
+        <tbody id="accountTableBody">
+          <tr><td colspan="12" class="empty">加载中...</td></tr>
+        </tbody>
+      </table>
+      <div id="accountPager" style="display:none;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;border-top:1px solid var(--border2)"></div>
+      <div id="accountCards" class="account-cards"></div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-import" class="tab-panel" style="display:none">
+  <div class="large-title">导入账号</div>
+  <div class="large-subtitle">通过 OAuth 登录、手动 Token 或批量文件添加账号</div>
+  <div class="section">
+    <div class="tabs" id="importTabs">
+      <div class="tab active" data-tab="oauth">OAuth 浏览器登录</div>
+      <div class="tab" data-tab="token">手动输入 Token</div>
+      <div class="tab" data-tab="batch">批量导入</div>
+    </div>
+
+    <div id="import-oauth" class="tab-content active">
+      <p style="color:var(--text2);margin-bottom:16px">通过浏览器完成 OAuth 认证，支持 Google/GitHub/邮箱登录，自动获取 refreshToken。</p>
+      <button class="btn btn-primary" onclick="startOAuth()" id="oauthBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>开始 OAuth 登录</button>
+      <div id="oauthProgress" style="display:none;margin-top:16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="loading"></div>
+          <div>
+            <div style="font-weight:600" id="oauthStatus">等待浏览器授权...</div>
+            <div style="color:var(--text2);font-size:13px;margin-top:4px">
+              点击链接（系统浏览器打开）: <a href="#" id="oauthUrl" style="color:var(--accent);cursor:pointer"></a><br>
+              并输入代码: <strong id="oauthUserCode"></strong>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="oauthResult" style="display:none;margin-top:16px"></div>
+    </div>
+
+    <div id="import-token" class="tab-content">
+      <p style="color:var(--text2);margin-bottom:16px">输入已有的 Cline refreshToken，系统会自动验证并加入池。</p>
+      <div class="form-row">
+        <div class="field">
+          <label>Refresh Token *</label>
+          <input type="text" id="tokenInput" placeholder="粘贴 refreshToken">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>邮箱（可选，留空自动生成）</label>
+          <input type="text" id="tokenEmail" placeholder="user@example.com">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="addByToken(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
+      </div>
+      <div id="tokenResult" style="margin-top:8px"></div>
+    </div>
+
+    <div id="import-batch" class="tab-content">
+      <p style="color:var(--text2);margin-bottom:16px">批量导入多个账号。支持 JSON 数组或每行一个 token。</p>
+      <div class="form-row">
+        <div class="field">
+          <label>JSON 数组格式：[{"refreshToken":"...","email":"..."}]</label>
+          <textarea id="batchInput" placeholder='[{"refreshToken":"xxx","email":"u1@x.com"},{"refreshToken":"yyy","email":"u2@x.com"}]'></textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="batchImport(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导入全部</button>
+        <button class="btn" onclick="document.getElementById('fileInput2').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>选择文件</button>
+        <input type="file" id="fileInput2" accept=".json,.txt" style="display:none" onchange="handleFileImport(event)">
+      </div>
+      <div id="batchResult" style="margin-top:8px"></div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-logs" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">请求日志</div>
+      <div class="large-subtitle">查看每次请求的 Token 消耗、缓存、耗时与流式速度</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sm" onclick="loadRequestLogs(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-body flush">
+      <table class="log-table">
+        <thead>
+          <tr><th>时间</th><th>账号</th><th>协议</th><th>模型</th><th>输入</th><th>输出</th><th>缓存</th><th>总</th><th>耗时</th><th>TTFT</th><th>tok/s</th><th>状态</th></tr>
+        </thead>
+        <tbody id="logTableBody">
+          <tr><td colspan="12" class="empty">加载中...</td></tr>
+        </tbody>
+      </table>
+      <div id="logCards" class="log-cards"></div>
+    </div>
+  </div>
+  <div id="logLoadMore" style="display:none;text-align:center;padding:16px">
+    <button class="btn btn-primary" onclick="loadRequestLogs(false)">加载更多</button>
+  </div>
+</div>
+
+<div id="tab-security" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">密钥与安全</div>
+      <div class="large-subtitle">API 密钥、访问控制与危险操作</div>
+    </div>
+  </div>
+
+  <div class="subtabs page-subtabs" data-page="security">
+    <div class="subtab active" data-sub="keys">API 密钥</div>
+    <div class="subtab" data-sub="access">访问设置</div>
+    <div class="subtab" data-sub="danger">危险操作</div>
+  </div>
+
+  <div class="page-subpage" data-subpage="keys">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>API 密钥管理</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
+        <button class="btn btn-sm btn-success" onclick="generateKey(this)">生成新密钥</button>
+      </span>
+    </div>
+    <div class="section-desc">生成的密钥可用于客户端访问代理 API（作为 x-api-key 或 Authorization 头）。</div>
+    <div class="section-body">
+      <div id="keysList"></div>
+      <div id="keyGenResult" style="margin-top:8px"></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="access" style="display:none">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>访问设置</div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="field">
+          <label>监听地址</label>
+          <select id="settingListenHost" onchange="saveListenHost()">
+            <option value="127.0.0.1">127.0.0.1（仅本机）</option>
+            <option value="0.0.0.0">0.0.0.0（所有网卡）</option>
+          </select>
+        </div>
+        <div class="field"><label>当前地址</label><input type="text" id="settingAddr" disabled></div>
+      </div>
+      <div id="listenWarn" class="warn-box" style="display:none">⚠️ 当前监听非本机回环地址（0.0.0.0 或局域网 IP），管理后台无鉴权，局域网内任何设备都可访问。请确认网络环境安全，或配合防火墙限制端口。</div>
+      <div id="localIPsRow" class="form-row" style="display:none">
+        <div class="field" style="flex:1">
+          <label>本机 IP（局域网访问地址）</label>
+          <div id="localIPsList"></div>
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <div class="field" style="flex:1">
+          <label>管理后台密码（<span id="passwordStatus">未启用</span>）</label>
+          <div style="display:flex;gap:8px">
+            <input type="password" id="settingPassword" placeholder="留空保存 = 清除密码" autocomplete="new-password" style="flex:1">
+            <button class="btn btn-primary" onclick="savePassword(this)">保存</button>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">设置后访问管理后台需输入密码，默认无密码</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="danger" style="display:none">
+  <div class="section danger-zone">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>危险操作</div>
+    <div class="section-desc">以下操作会删除全部数据，且删除后无法恢复；每个按钮点击后都会先弹出确认框。</div>
+    <div class="section-body">
+      <div class="action-row">
+        <button class="btn btn-danger" onclick="deleteAllAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除全部账号</button>
+        <button class="btn btn-danger" onclick="deleteAllKeys()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除全部密钥</button>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div id="tab-routing" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">路由与模型</div>
+      <div class="large-subtitle">默认模型、轮询策略、回退链与可用模型</div>
+    </div>
+  </div>
+
+  <div class="subtabs page-subtabs" data-page="routing">
+    <div class="subtab active" data-sub="config">路由配置</div>
+    <div class="subtab" data-sub="models">模型管理</div>
+    <div class="subtab" data-sub="combos">模型组合</div>
+  </div>
+
+  <div class="page-subpage" data-subpage="config">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>代理配置</div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="field"><label>默认模型</label><select id="settingDefModel" onchange="updateConfig()"><option value="">加载中...</option></select></div>
+        <div class="field">
+          <label>轮询策略</label>
+          <select id="settingStrategy" onchange="updateConfig()">
+            <option value="round_robin">轮询 (round_robin)</option>
+            <option value="fill">填满 (fill)</option>
+            <option value="random">随机 (random)</option>
+            <option value="quality">质量优先 (quality)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>回退模型链</label>
+          <input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()">
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">逗号分隔模型 ID，可用 <code>free</code> 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>只显示免费模型</label>
+          <select id="settingOnlyFree" onchange="updateConfig()">
+            <option value="false">关闭（返回全部模型）</option>
+            <option value="true">开启（/models 仅返回免费模型）</option>
+          </select>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">影响 /models、/v1/models 对客户端返回的模型列表，不影响管理页模型管理</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>引擎版本</label><input type="text" id="settingVersion" disabled></div>
+        <div class="field"><label>账号文件</label><input type="text" id="settingPoolPath" disabled></div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="models" style="display:none">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/></svg><span>模型管理</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px;font-weight:400;color:var(--text3)">
+        <span><span>上次同步</span>: <span id="modelSyncTime">-</span></span>
+      </span>
+    </div>
+    <div class="section-desc">管理从 Cline / opencode 同步的模型与自定义模型。停用的模型不会出现在客户端模型列表（/v1/models）中，直接请求也会被拒绝。</div>
+    <div class="section-body">
+      <div id="modelStatsBar" class="model-stats-bar"></div>
+      <div class="model-toolbar">
+        <input type="text" id="modelSearch" placeholder="搜索模型 ID..." oninput="onModelFilterChange('search', this.value)">
+        <select id="modelFilterProvider" onchange="onModelFilterChange('provider', this.value)"><option value="">全部来源</option></select>
+        <select id="modelFilterCost" onchange="onModelFilterChange('cost', this.value)">
+          <option value="">全部计费</option>
+          <option value="free">免费</option>
+          <option value="pass">付费</option>
+        </select>
+        <select id="modelFilterStatus" onchange="onModelFilterChange('status', this.value)">
+          <option value="">全部状态</option>
+          <option value="enabled">已启用</option>
+          <option value="disabled">已停用</option>
+        </select>
+        <button class="btn btn-sm" onclick="toggleAddModelRow()">＋ 添加模型</button>
+        <!-- 低频批量操作收入「更多」，避免工具栏两行铺满；保留筛选 / 同步一键直达 -->
+        <div class="toolbar-more" id="modelBulkMore">
+          <button class="btn btn-sm" onclick="toggleToolbarMore(event)">更多操作 ▾</button>
+          <div class="toolbar-more-menu">
+            <button class="btn btn-sm" id="bulkEnableFreeBtn" onclick="bulkModelToggle('free')">启用全部免费</button>
+            <button class="btn btn-sm" id="bulkDisablePaidBtn" onclick="bulkModelToggle('paid')">停用全部付费</button>
+          </div>
+        </div>
+        <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
+        <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 opencode 同步模型</span></button>
+      </div>
+      <div id="modelAddRow" class="model-toolbar" style="display:none">
+        <div class="field" style="flex:2;min-width:220px">
+          <label>添加模型</label>
+          <input type="text" id="newModelId" placeholder="如 deepseek/deepseek-v4-flash" style="font-family:ui-monospace,monospace">
+        </div>
+        <div class="field" style="flex:1;min-width:120px">
+          <label>计费</label>
+          <select id="newModelCost">
+            <option value="pass">付费 (pass)</option>
+            <option value="free">免费 (free)</option>
+          </select>
+        </div>
+        <button class="btn btn-success" onclick="addModel(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
+      </div>
+      <div id="modelsList" class="model-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="combos" style="display:none">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>模型组合</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
+        <button class="btn btn-sm btn-primary" onclick="showComboEditor()">＋ 新建组合</button>
+      </span>
+    </div>
+    <div class="section-desc">把多个模型按优先级编排成组合（Combo）：命中组合时按顺序依次尝试，一个模型失败（限流/不可用）就自动切到下一个。停用的条目会被直接跳过。</div>
+    <!-- 测试数据清理：暂无「清空全部组合」接口（/admin/api/combos/* 仅 list/save/delete/toggle/clone）。
+         调试用组合请在列表中逐个 Delete 按钮删除；不影响的组合可先 toggle 停用保留配置。 -->
+    <div class="section-body">
+      <div id="combosList"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+
+      <div id="comboEditor" class="inline-editor" style="display:none">
+        <div class="inline-editor-title" id="comboEditorTitle">新建组合</div>
+        <div class="form-row">
+          <div class="field"><label>组合 ID *</label><input type="text" id="comboId" placeholder="premium-coding" style="font-family:ui-monospace,monospace"></div>
+          <div class="field"><label>名称 *</label><input type="text" id="comboName" placeholder="Premium Coding"></div>
+        </div>
+        <div class="form-row">
+          <div class="field" style="flex:2"><label>描述</label><input type="text" id="comboDesc" placeholder="可选"></div>
+          <div class="field"><label>分类</label><input type="text" id="comboCategory" placeholder="coding（可选）"></div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>启用</label>
+            <select id="comboEnabled"><option value="true">启用</option><option value="false">停用</option></select>
+          </div>
+          <div class="field" style="justify-content:flex-end">
+            <label>紧急回退</label>
+            <label class="combo-check"><input type="checkbox" id="comboEmergency" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer"> <span>允许跳出组合回退</span></label>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin:-6px 0 12px">开启「紧急回退」后，仅当组合内所有条目都失败时，才允许继续回退到配置的全局回退链 / 内置免费链；关闭则组合内失败即结束。</div>
+
+        <div style="font-size:13px;color:var(--text2);font-weight:500;margin-bottom:2px">模型条目（按优先级从上到下）</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">顺序即优先级：第 1 个最优先尝试（1st tried → 2nd → …），拖动行首 ⠿ 手柄或用 ↑↓ 按钮调整顺序。</div>
+        <div id="comboEntries"></div>
+        <div class="form-actions" style="margin-top:10px">
+          <button class="btn btn-sm btn-primary" onclick="openComboModelPicker()">⊕ 多选添加模型</button>
+          <button class="btn btn-sm" onclick="addComboEntry()">＋ 添加条目</button>
+          <span style="font-size:12px;color:var(--text3)">从模型目录勾选多个模型，确认后按勾选顺序追加。</span>
+        </div>
+
+        <div class="combo-preview-box">
+          <div class="combo-preview-title">优先级预览</div>
+          <div id="comboPreview" class="combo-preview">（暂无启用的条目）</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">仅显示已启用的条目，停用的条目会被跳过。</div>
+        </div>
+
+        <div class="form-actions" style="margin-top:14px">
+          <button class="btn btn-sm btn-success" onclick="saveCombo()">保存组合</button>
+          <button class="btn btn-sm" onclick="hideComboEditor()">取消</button>
+          <span id="comboSaveResult" style="font-size:12px;margin-left:8px"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div id="tab-upstreams" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">上游服务</div>
+      <div class="large-subtitle">opencode zen、Cline 出口代理、请求头与自定义 Provider</div>
+    </div>
+  </div>
+  <div class="subtabs page-subtabs" data-page="upstreams">
+    <div class="subtab active" data-sub="zen">opencode Zen</div>
+    <div class="subtab" data-sub="cline">Cline 出口代理</div>
+    <div class="subtab" data-sub="headers">请求头配置</div>
+    <div class="subtab" data-sub="providers">自定义 Provider</div>
+  </div>
+
+  <div class="page-subpage" data-subpage="zen">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>opencode 免费模型</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px;font-weight:400;color:var(--text3)">
+        <span id="ocRuntimeStatus">-</span>
+      </span>
+    </div>
+    <div class="section-desc">接入 opencode（zen）免费模型。按请求中的模型名自动分流：免费模型走 opencode 上游，付费模型直接拒绝，其余走 Cline 账号池。</div>
+    <div class="section-body">
+      <div class="form-group-label">基础连接</div>
+      <div class="form-row">
+        <div class="field" style="max-width:220px">
+          <label>启用 opencode</label>
+          <select id="ocEnabled" onchange="saveOcConfig()">
+            <option value="true">启用</option>
+            <option value="false">停用</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1"><label>API Key</label><input type="text" id="ocKey" placeholder="public" onchange="saveOcConfig()"></div>
+        <div class="field" style="flex:1.4"><label>Base URL</label><input type="text" id="ocBaseURL" placeholder="https://opencode.ai/zen/v1" style="font-family:ui-monospace,monospace" onchange="saveOcConfig()"></div>
+      </div>
+      <div class="form-group-label">请求调优</div>
+      <div class="form-row">
+        <div class="field"><label>最大并发</label><input type="number" id="ocMaxConcurrency" min="1" max="64" onchange="saveOcConfig()"></div>
+        <div class="field"><label>重试次数</label><input type="number" id="ocRetries" min="0" max="10" onchange="saveOcConfig()"></div>
+      </div>
+      <div class="form-group-label">故障转移</div>
+      <div class="form-row">
+        <div class="field"><label>故障转移</label>
+          <select id="ocFailover" onchange="saveOcConfig()">
+            <option value="true">开启（连续失败后暂走 Cline 池）</option>
+            <option value="false">关闭</option>
+          </select>
+        </div>
+        <div class="field"><label>失败阈值（次）</label><input type="number" id="ocFailoverCount" min="1" max="20" onchange="saveOcConfig()"></div>
+        <div class="field"><label>转移窗口（分钟）</label><input type="number" id="ocFailoverMinutes" min="1" max="120" onchange="saveOcConfig()"></div>
+      </div>
+      <div class="form-group-label">上下文压缩</div>
+      <div class="form-row">
+        <div class="field"><label>自动上下文压缩</label>
+          <select id="ocCompactAuto" onchange="saveOcConfig()">
+            <option value="true">开启（超限自动摘要）</option>
+            <option value="false">关闭</option>
+          </select>
+        </div>
+        <div class="field"><label>压缩缓冲 Token</label><input type="number" id="ocCompactBuffer" min="0" onchange="saveOcConfig()"></div>
+        <div class="field"><label>尾部保留 Token</label><input type="number" id="ocCompactKeepTokens" min="0" onchange="saveOcConfig()"></div>
+        <div class="field"><label>摘要最大 Token</label><input type="number" id="ocCompactMaxSummary" min="0" onchange="saveOcConfig()"></div>
+      </div>
+      <div class="form-actions" style="margin-top:14px">
+        <button class="btn btn-primary" onclick="saveOcConfig(this)">手动保存 opencode 配置</button>
+      </div>
+      <div id="ocSaveResult" style="margin-top:8px"></div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px">上述字段改动后会自动保存，也可点按钮手动触发。</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>opencode 出口代理</div>
+    <div class="section-desc">发往 opencode 的请求可经代理池轮询出口；命中限流时冷却当前出口并自动跳过。支持 http / https / socks5 / socks5h，每行一个，如 <span class="mono">socks5://127.0.0.1:1080</span>。</div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="field" style="max-width:260px">
+          <label>代理策略</label>
+          <select id="ocProxyStrategy" onchange="saveOcConfig()">
+            <option value="round_robin">轮询 (round_robin)</option>
+            <option value="random">随机 (random)</option>
+            <option value="fill">填满 (fill)</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1"><label>出口冷却状态</label><div id="ocProxyCooldowns" style="font-size:12px;color:var(--text3)">-</div></div>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>代理列表</label>
+        <textarea id="ocProxies" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080" onchange="saveOcConfig()"></textarea>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <div class="page-subpage" data-subpage="cline" style="display:none">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Cline 出口代理</div>
+    <div class="section-desc">国内直连 Cline 上游会被跨区限制；配置后所有发往 Cline 的请求（对话、登录/令牌刷新、模型同步）经代理池轮询出去。支持 http / https / socks5 / socks5h，每行一个，如 <span class="mono">socks5://127.0.0.1:1080</span>。回环 / 内网地址（本机 Ollama 等自定义 Provider）始终直连；未配置时依次尝试环境变量代理、直连。</div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="field" style="max-width:260px">
+          <label>代理策略</label>
+          <select id="clineProxyStrategy">
+            <option value="round_robin">轮询 (round_robin)</option>
+            <option value="random">随机 (random)</option>
+            <option value="fill">填满 (fill)</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>代理列表</label>
+        <textarea id="clineProxies" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080"></textarea>
+      </div>
+      <div class="form-actions" style="margin-top:14px">
+        <button class="btn btn-primary" onclick="saveClineProxyConfig(this)">保存 Cline 代理</button>
+      </div>
+      <div id="clineProxySaveResult" style="margin-top:8px"></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="headers" style="display:none">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>Cline 请求头</div>
+    <div class="section-desc">这些请求头会附加到所有转发给 Cline API 的请求中，以模拟官方客户端行为。</div>
+    <div class="section-body xscroll">
+      <table class="action-table">
+        <thead><tr><th style="width:240px">请求头</th><th>值</th><th>操作</th></tr></thead>
+        <tbody id="headersTableBody">
+          <tr><td colspan="3" class="empty">加载中...</td></tr>
+        </tbody>
+      </table>
+      <div class="form-actions" style="margin-top:14px">
+        <button class="btn btn-sm" onclick="addHeaderRow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加请求头</button>
+        <button class="btn btn-sm btn-primary" onclick="saveHeaders(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存请求头</button>
+        <button class="btn btn-sm" onclick="bulkEditHeaders()">批量编辑</button>
+      </div>
+      <div id="headerSaveResult" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">opencode 请求头</div>
+    <div class="section-desc">附加到发往 opencode zen 的请求。特殊值：$session / $request / $project / $client 会注入每请求的动态身份；留空删除该头。</div>
+    <div class="section-body">
+      <div class="field">
+        <label>请求头（每行一个，格式 Key: Value）</label>
+        <textarea id="zenHeadersBulk" rows="6" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="User-Agent: opencode/1.18.31&#10;x-opencode-project: global&#10;x-custom-header: my-value"></textarea>
+      </div>
+      <div class="form-actions" style="margin-top:10px">
+        <button class="btn btn-sm btn-primary" onclick="saveZenHeaders(this)">保存 opencode 请求头</button>
+      </div>
+      <div id="zenHeaderSaveResult" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  </div>
+
+  <div class="page-subpage" data-subpage="providers" style="display:none">
+  <div class="section">
+    <div class="section-title"><span>自定义 Provider（OpenAI 兼容）</span>
+      <!-- 新增入口与「＋ 新建组合」同位：区块标题右侧， body 只放列表与编辑卡片 -->
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
+        <button class="btn btn-sm" onclick="loadProviderPresets()">从预设添加 Provider</button>
+        <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
+      </span>
+    </div>
+    <div class="section-desc">接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini / Mistral / Together / 自建 vLLM 等）。模型命中自定义 Provider 时优先走该上游，失败自动按回退链降级，最终兜底 Cline 池。</div>
+    <div class="section-body xscroll">
+      <div id="providersList"></div>
+      <div id="providerEditor" class="inline-editor" style="display:none">
+        <div class="inline-editor-title" id="providerEditorTitle">添加 Provider</div>
+        <div class="form-row">
+          <div class="field"><label>名称 *</label><input type="text" id="provName" placeholder="OpenRouter"></div>
+          <div class="field" style="flex:1.6"><label>Base URL *</label><input type="text" id="provBaseURL" placeholder="https://openrouter.ai/api/v1" style="font-family:ui-monospace,monospace"></div>
+        </div>
+        <div class="form-row">
+          <div class="field" style="flex:1.4"><label>API Key</label><input type="password" id="provKey" placeholder="sk-...（本地服务器可留空）"></div>
+          <div class="field"><label>优先级（小=优先）</label><input type="number" id="provPriority" value="10" min="0" max="1000"></div>
+          <div class="field"><label>超时(秒)</label><input type="number" id="provTimeout" value="300" min="5" max="600"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>分钟请求上限（0=不限）</label><input type="number" id="provRpmLimit" value="0" min="0" max="100000"></div>
+          <div class="field"><label>每日请求上限（0=不限）</label><input type="number" id="provDailyLimit" value="0" min="0" max="1000000"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">配额提示：填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
+        <div class="form-row">
+          <div class="field" style="flex:1"><label>模型 ID（逗号分隔，如 z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash）</label><input type="text" id="provModels" style="font-family:ui-monospace,monospace"></div>
+        </div>
+        <div class="form-row">
+          <div class="field" style="flex:1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)"></textarea></div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>启用</label>
+            <select id="provEnabled"><option value="true">启用</option><option value="false">停用</option></select>
+          </div>
+          <div class="field">
+            <label>免费来源（供统计）</label>
+            <select id="provFree"><option value="true">免费</option><option value="false">付费</option></select>
+          </div>
+          <div class="field">
+            <label>账号连接（可选）</label>
+            <select id="provConnection"><option value="">不使用连接</option></select>
+          </div>
+        </div>
+        <div class="form-actions" style="margin-top:10px">
+          <button class="btn btn-sm btn-primary" onclick="saveProvider(this)">保存 Provider</button>
+          <button class="btn btn-sm" onclick="hideProviderEditor()">取消</button>
+          <button class="btn btn-sm" onclick="testProvider(this)">测试连通性</button>
+          <button id="provFetchModelsBtn" class="btn btn-sm" onclick="fetchProviderModels(this)">拉取模型</button>
+          <button class="btn btn-sm" onclick="previewModelImport(this)">导入分级预览</button>
+          <span id="provTestResult" style="font-size:12px;margin-left:8px"></span>
+        </div>
+      </div>
+      <!-- 预设选择弹窗：按接入成本分组（免密钥 → 免费额度 → 含免费模型 → 本地 → 其他），顶部搜索即时过滤 -->
+      <div id="presetPickerModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closePresetPicker()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:640px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="font-size:15px;font-weight:600;color:var(--text)">从预设添加 Provider</div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">来自 ExtremeRouter 目录，按接入成本分组。点击预设填充表单；免密钥源会自动拉取模型。</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="presetSearch" placeholder="搜索预设..." oninput="renderPresetPickerList()" onkeydown="if(event.key==='Escape')closePresetPicker()" style="flex:1;min-width:0">
+            <span id="presetCount" style="font-size:12px;color:var(--text2);white-space:nowrap"></span>
+          </div>
+          <div id="presetPickerList" class="combo-picker-list" style="margin-top:10px"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button class="btn btn-sm" onclick="closePresetPicker()">取消</button>
+          </div>
+        </div>
+      </div>
+      <!-- §9.3 受控导入：预览批次（新模型 / 层级变化 / protected），勾选批准后写入池 -->
+      <div id="importPreviewModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeImportPreview()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:640px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="font-size:15px;font-weight:600;color:var(--text)">导入分级预览 <span id="importPreviewProv" class="mono" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
+          <div id="importPreviewSummary" style="font-size:12px;color:var(--text3);margin:4px 0 10px"></div>
+          <div id="importPreviewList" class="combo-picker-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+            <span id="importPreviewCount" style="font-size:12px;color:var(--text2);margin-right:auto"></span>
+            <button class="btn btn-sm" onclick="closeImportPreview()">取消</button>
+            <button class="btn btn-sm btn-primary" onclick="importPreviewApply(this)">批准导入所选</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><span>登录连接（OAuth）</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
+        <button class="btn btn-sm" onclick="showConnectionImport()">导入 Token</button>
+        <button class="btn btn-sm btn-primary" onclick="openDeviceLogin()">设备码登录</button>
+      </span>
+    </div>
+    <div class="section-desc">为需要登录签票的上游（如 Kilo Code）做设备码授权。登录成功后，在 Provider 编辑器的「账号连接」里选中该连接，派发时自动注入 Bearer 与组织头；Token 只存服务端，不写进 Provider。</div>
+    <div class="section-body">
+      <div id="connectionsList"></div>
+    </div>
+  </div>
+
+  <!-- 设备码登录弹窗：选择 provider → 展示 user code + 验证链接 → 轮询状态 -->
+  <div id="connLoginModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeDeviceLogin()">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:480px;width:100%;box-shadow:var(--shadow-lg)">
+      <div style="font-size:15px;font-weight:600;color:var(--text)">设备码登录</div>
+      <div id="connLoginStep1" style="margin-top:12px">
+        <div class="field"><label>选择服务</label><select id="connLoginProvider" style="width:100%"></select></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+          <button class="btn btn-sm" onclick="closeDeviceLogin()">取消</button>
+          <button class="btn btn-sm btn-primary" onclick="beginDeviceLogin(this)">开始登录</button>
+        </div>
+      </div>
+      <div id="connLoginStep2" style="display:none;margin-top:12px">
+        <div style="font-size:12px;color:var(--text3)" id="connLoginHint">在浏览器中打开下面的地址并输入此代码，然后保持本窗口打开。</div>
+        <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
+          <div id="connLoginCode" class="mono" style="font-size:26px;font-weight:700;letter-spacing:2px;color:var(--text);background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px 16px"></div>
+          <button class="btn btn-sm" onclick="copyDeviceCode()">复制</button>
+        </div>
+        <div style="margin-bottom:10px"><a id="connLoginUrl" href="#" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent);word-break:break-all"></a></div>
+        <div id="connLoginStatus" style="font-size:12px;color:var(--text2)"><span class="loading"></span> 等待授权...</div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+          <button class="btn btn-sm" onclick="closeDeviceLogin()">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 粘贴 token 导入弹窗（无刷新上游的备用登录路径） -->
+  <div id="connImportModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)hideConnectionImport()">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:480px;width:100%;box-shadow:var(--shadow-lg)">
+      <div style="font-size:15px;font-weight:600;color:var(--text)">导入 Token</div>
+      <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">粘贴已有的访问令牌（适合 Kilo 这类不签发刷新令牌的上游；过期后需重新导入或重新登录）。</div>
+      <div class="field" style="margin-bottom:8px"><label>服务 *</label><input type="text" id="connImpProvider" placeholder="kilocode" list="connProviderList" style="font-family:ui-monospace,monospace"><datalist id="connProviderList"></datalist></div>
+      <div class="field" style="margin-bottom:8px"><label>Access Token *</label><input type="password" id="connImpToken" placeholder="粘贴令牌（只存服务端，不外泄）"></div>
+      <div class="form-row">
+        <div class="field"><label>邮箱（可选，用于去重）</label><input type="text" id="connImpEmail" placeholder="dev@example.com"></div>
+        <div class="field"><label>Org ID（可选）</label><input type="text" id="connImpOrg" placeholder="org-..." style="font-family:ui-monospace,monospace"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn btn-sm" onclick="hideConnectionImport()">取消</button>
+        <button class="btn btn-sm btn-primary" onclick="submitConnectionImport(this)">保存连接</button>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div id="tab-about" class="tab-panel" style="display:none">
+  <div class="large-title">关于</div>
+  <div class="large-subtitle">应用信息、使用指南与开源协议</div>
+
+  <div class="section">
+    <div class="section-title">应用信息</div>
+    <div class="section-body">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+        <div style="width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#4F46E5,#7C3AED);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <div>
+          <div style="font-size:20px;font-weight:700;color:var(--text)">Cline2API</div>
+          <div style="font-size:13px;color:var(--text2);margin-top:2px">Cline API 反向代理 · 多账号轮询 · 双协议兼容</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px"><span id="aboutVersion">版本 dev</span> · MIT License · Go 1.25 + Wails v2</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">快速上手</div>
+    <div class="section-body">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">1</div>
+          <div>
+            <div style="font-weight:600;color:var(--text)">添加 Cline 账号</div>
+            <div style="font-size:13px;color:var(--text2);margin-top:2px">前往「导入账号」页面，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">2</div>
+          <div>
+            <div style="font-weight:600;color:var(--text)">生成 API Key</div>
+            <div style="font-size:13px;color:var(--text2);margin-top:2px">前往「密钥与安全」页面生成密钥。如不配置任何密钥，代理允许匿名访问。</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">3</div>
+          <div>
+            <div style="font-weight:600;color:var(--text)">配置客户端</div>
+            <div style="font-size:13px;color:var(--text2);margin-top:2px">在 Claude Code、Cline 等客户端中设置：</div>
+            <div style="font-family:ui-monospace,monospace;font-size:12px;background:var(--surface2);padding:8px 12px;border-radius:6px;margin-top:6px;color:var(--text2)">
+              Base URL: http://127.0.0.1:3457/v1<br>
+              API Key: &lt;生成的密钥&gt;<br>
+              Model: cline-free/glm-5.2
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">功能特性</div>
+    <div class="section-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:13px;color:var(--text2)">
+        <div>✅ 多账号轮询（轮询/填满/随机）</div>
+        <div>✅ OpenAI & Anthropic 双协议</div>
+        <div>✅ 429 冷却自动恢复</div>
+        <div>✅ 账号导出/导入（跨设备迁移）</div>
+        <div>✅ OAuth 系统浏览器登录</div>
+        <div>✅ 请求日志与统计</div>
+        <div>✅ System Prompt 覆盖</div>
+        <div>✅ 跨平台桌面端（Win/Mac/Linux）</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">项目链接</div>
+    <div class="section-body">
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:14px">
+        <div><span style="color:var(--text3);display:inline-block;width:80px">仓库地址</span><a href="#" onclick="openExternal('https://github.com/luawei1/cline2api');return false" style="color:var(--accent);cursor:pointer">github.com/luawei1/cline2api</a></div>
+        <div><span style="color:var(--text3);display:inline-block;width:80px">问题反馈</span><a href="#" onclick="openExternal('https://github.com/luawei1/cline2api/issues');return false" style="color:var(--accent);cursor:pointer">github.com/luawei1/cline2api/issues</a></div>
+        <div><span style="color:var(--text3);display:inline-block;width:80px">下载更新</span><a href="#" onclick="openExternal('https://github.com/luawei1/cline2api/releases');return false" style="color:var(--accent);cursor:pointer">github.com/luawei1/cline2api/releases</a></div>
+        <div><span style="color:var(--text3);display:inline-block;width:80px">开源协议</span>MIT License © 2026 luawei1</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">数据与隐私</div>
+    <div class="section-body">
+      <div style="font-size:13px;color:var(--text2);line-height:1.8">
+        <div>• 本程序仅在本地运行，默认监听 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px">127.0.0.1:3457</code>，不对外暴露。</div>
+        <div>• 账号凭据（refreshToken）存储在数据目录的 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px">.cline-accounts.json</code>（Docker 中位于 /app/data，可用 CLINE2API_DATA_DIR 配置）中，明文保存，请注意保护。</div>
+        <div>• 所有 API 请求通过本机代理转发至 Cline 官方服务器，不经过任何第三方。</div>
+        <div>• 关闭窗口即停止服务，无后台驻留进程。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(248,250,252,0.96);align-items:center;justify-content:center">
+  <div style="width:min(360px,calc(100vw - 40px));padding:32px;background:var(--surface);border-radius:14px;border:1px solid var(--border2);text-align:center;box-shadow:0 10px 40px rgba(15,23,42,0.12)">
+    <h2 style="margin:0 0 6px;font-size:20px;color:var(--text)">Cline2API 管理后台</h2>
+    <p style="margin:0 0 22px;color:var(--text2);font-size:13px">该后台已启用访问密码，请输入密码登录</p>
+    <input type="password" id="loginPassword" placeholder="访问密码" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:14px" onkeydown="if(event.key==='Enter')submitLogin()">
+    <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="submitLogin()">登 录</button>
+    <div id="loginError" style="color:var(--red);font-size:13px;margin-top:12px"></div>
+  </div>
+</div>
+
+<div id="modelSyncOverlay" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(15,23,42,0.45);align-items:center;justify-content:center">
+  <div id="modelSyncModal" style="width:min(480px,calc(100vw - 40px));padding:24px;background:var(--surface);border-radius:14px;border:1px solid var(--border2);box-shadow:0 10px 40px rgba(15,23,42,0.2)"></div>
+</div>
+
+      <div id="modelMetaEditor" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:500px;width:100%;box-shadow:var(--shadow-lg)">
+        <div class="form-row">
+          <div class="field"><label>模型 ID</label><input type="text" id="mmId" disabled style="font-family:ui-monospace,monospace"></div>
+          <div class="field"><label>上下文窗口 (token)</label><input type="number" id="mmCtx" value="200000" min="1000" max="2000000"></div>
+          <div class="field"><label>最大输出 (token)</label><input type="number" id="mmOut" value="32768" min="256" max="200000"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>层级（免费/付费）</label><select id="mmTier"><option value="auto">自动</option><option value="free">免费</option><option value="pass">付费</option></select></div>
+          <div class="field" style="flex:1.6"><label>&nbsp;</label><div id="mmTierNote" style="font-size:12px;color:var(--text3)"></div></div>
+        </div>
+        <div class="form-actions" style="margin-top:10px">
+          <button class="btn btn-sm btn-primary" onclick="saveModelMeta(this)">保存</button>
+          <button class="btn btn-sm" onclick="hideModelMetaEditor()">取消</button>
+        </div>
+        </div>
+      </div>
+      <div id="confirmModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:420px;width:100%;box-shadow:var(--shadow-lg)">
+          <div id="confirmMsg" style="font-size:14px;margin-bottom:16px;white-space:pre-wrap"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm" onclick="resolveConfirm(false)">取消</button>
+            <button class="btn btn-sm btn-danger" onclick="resolveConfirm(true)">确认</button>
+          </div>
+        </div>
+      </div>
+      <!-- 组合编辑：从模型目录多选并追加（也支持一键替换整组条目） -->
+      <div id="comboModelPicker" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeComboModelPicker()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:560px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="font-size:15px;font-weight:600;color:var(--text)">选择模型</div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">勾选多个模型；确认后按勾选顺序追加到组合，勾选顺序即尝试优先级。</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="comboPickerSearch" placeholder="搜索模型 / Provider..." oninput="renderComboPickerList()" onkeydown="if(event.key==='Escape')closeComboModelPicker()" style="flex:1;min-width:0">
+            <button class="btn btn-sm" onclick="comboPickerSelectAllShown()">全选</button>
+            <button class="btn btn-sm" onclick="comboPickerClear()">清空</button>
+          </div>
+          <div id="comboPickerList" class="combo-picker-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+            <span id="comboPickerCount" style="font-size:12px;color:var(--text2);margin-right:auto"></span>
+            <button class="btn btn-sm" onclick="closeComboModelPicker()">取消</button>
+            <button id="comboPickerReplaceBtn" class="btn btn-sm" style="display:none" onclick="comboPickerConfirm(true)">替换整表</button>
+            <button class="btn btn-sm btn-primary" onclick="comboPickerConfirm(false)">确认追加</button>
+          </div>
+        </div>
+      </div>
+      <!-- Provider 编辑器：/providers/models 拉取到的模型多选弹窗（视觉对齐 #comboModelPicker） -->
+      <div id="provPickerModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeProvModelPicker()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:560px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="font-size:15px;font-weight:600;color:var(--text)">选择模型</div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">来自上游 /models 接口；确认后追加到下方「模型 ID」输入框，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="provPickerSearch" placeholder="搜索模型..." oninput="renderProvPickerList()" onkeydown="if(event.key==='Escape')closeProvModelPicker()" style="flex:1;min-width:0">
+            <button class="btn btn-sm" onclick="provPickerSelectAllShown()">全选</button>
+            <button class="btn btn-sm" onclick="provPickerClear()">清空</button>
+          </div>
+          <div id="provPickerList" class="combo-picker-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+            <span id="provPickerCount" style="font-size:12px;color:var(--text2);margin-right:auto"></span>
+            <button class="btn btn-sm" onclick="closeProvModelPicker()">取消</button>
+            <button class="btn btn-sm btn-primary" onclick="provPickerConfirm()">确认添加</button>
+          </div>
+        </div>
+      </div>
+      <!-- 组合连通性测试弹窗：逐条目结果 + 行内启停/移除（工作副本，保存更改后经既存 /combos/save 落盘） -->
+      <div id="comboTestModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeComboTest()">
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:620px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:15px;font-weight:600;color:var(--text)">组合测试</span>
+            <span id="comboTestSummary" class="model-source-badge zen" style="display:none"></span>
+            <span id="comboTestId" class="mono" style="font-size:12px;color:var(--text3)"></span>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin:4px 0 10px">按优先级逐条探测；可在结果中直接启停/移除条目，保存更改后才实际落盘，取消即放弃修改。</div>
+          <div id="comboTestList" class="combo-picker-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+            <span id="comboTestResult" style="font-size:12px;color:var(--text2);margin-right:auto"></span>
+            <button class="btn btn-sm" onclick="closeComboTest()">取消</button>
+            <button id="comboTestSaveBtn" class="btn btn-sm btn-primary" style="display:none" onclick="comboTestSave(this)">保存更改</button>
+          </div>
+        </div>
+      </div>
