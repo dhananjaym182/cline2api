@@ -368,7 +368,14 @@ async function bulkModelToggle(mode) {
 function toggleAddModelRow() {
   const row = _('modelAddRow');
   row.style.display = (row.style.display === 'none') ? 'flex' : 'none';
-  if (row.style.display === 'flex') _('newModelId').focus();
+  if (row.style.display === 'flex') { setModelCost(_('newModelCost').value || 'pass'); _('newModelId').focus(); }
+}
+
+// 计费分段按钮：真值写入保留的隐藏 select#newModelCost（addModel 读取路径不变）
+function setModelCost(v) {
+  const sel = _('newModelCost');
+  if (sel) sel.value = v;
+  document.querySelectorAll('#modelCostSeg button').forEach(b => b.classList.toggle('active', b.dataset.cost === v));
 }
 
 // ===== 模型工具栏「更多」溢出菜单：开关 + 点击外部收起（vanilla，无外部库） =====

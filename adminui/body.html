@@ -49,6 +49,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
       <span class="nav-label">自定义 Provider</span>
     </div>
+    <div class="nav-item" data-tab="combos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <span class="nav-label">模型组合</span>
+    </div>
   </div>
   <div class="nav-section">
     <div class="nav-section-label">系统</div>
@@ -391,7 +395,6 @@
   <div class="subtabs page-subtabs" data-page="routing">
     <div class="subtab active" data-sub="config">路由配置</div>
     <div class="subtab" data-sub="models">模型管理</div>
-    <div class="subtab" data-sub="combos">模型组合</div>
   </div>
 
   <div class="page-subpage" data-subpage="config">
@@ -470,85 +473,97 @@
         <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
         <button class="sync-btn" id="syncOcModelsBtn" onclick="syncOcModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 opencode 同步模型</span></button>
       </div>
-      <div id="modelAddRow" class="model-toolbar" style="display:none">
-        <div class="field" style="flex:2;min-width:220px">
-          <label>添加模型</label>
-          <input type="text" id="newModelId" placeholder="如 deepseek/deepseek-v4-flash" style="font-family:ui-monospace,monospace">
+      <div id="modelAddRow" class="model-composer" style="display:none">
+        <input type="text" id="newModelId" class="composer-input" placeholder="模型 ID，如 deepseek/deepseek-v4-flash" onkeydown="if(event.key==='Enter')addModel()">
+        <div class="seg cost-seg" id="modelCostSeg" role="group" aria-label="计费">
+          <button type="button" data-cost="pass" class="active" onclick="setModelCost('pass')">付费</button>
+          <button type="button" data-cost="free" onclick="setModelCost('free')">免费</button>
         </div>
-        <div class="field" style="flex:1;min-width:120px">
-          <label>计费</label>
-          <select id="newModelCost">
-            <option value="pass">付费 (pass)</option>
-            <option value="free">免费 (free)</option>
-          </select>
-        </div>
-        <button class="btn btn-success" onclick="addModel(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
+        <button class="btn btn-sm btn-success" onclick="addModel(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
+        <span class="composer-hint">添加后用行内 ⚙ 可设置上下文窗口与层级</span>
+        <select id="newModelCost" style="display:none"><option value="pass">付费 (pass)</option><option value="free">免费 (free)</option></select>
       </div>
       <div id="modelsList" class="model-list"><div class="empty"><span class="loading"></span> 加载中...</div></div>
     </div>
   </div>
   </div>
 
-  <div class="page-subpage" data-subpage="combos" style="display:none">
-  <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>模型组合</span>
-      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
-        <button class="btn btn-sm btn-primary" onclick="showComboEditor()">＋ 新建组合</button>
-      </span>
+</div>
+<div id="tab-combos" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">模型组合</div>
+      <div class="large-subtitle">把多个模型按优先级编排成回退链：命中组合按序尝试，失败（限流/不可用）自动切到下一个，停用条目直接跳过</div>
     </div>
-    <div class="section-desc">把多个模型按优先级编排成组合（Combo）：命中组合时按顺序依次尝试，一个模型失败（限流/不可用）就自动切到下一个。停用的条目会被直接跳过。</div>
-    <!-- 测试数据清理：暂无「清空全部组合」接口（/admin/api/combos/* 仅 list/save/delete/toggle/clone）。
-         调试用组合请在列表中逐个 Delete 按钮删除；不影响的组合可先 toggle 停用保留配置。 -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="loadCombos()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+      <button class="btn btn-sm btn-primary" onclick="showComboEditor()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>新建组合</button>
+    </div>
+  </div>
+  <div id="combosStats" class="model-stats-bar"></div>
+  <div class="section">
     <div class="section-body">
+      <!-- 测试数据清理：暂无「清空全部组合」接口（/admin/api/combos/* 仅 list/save/delete/toggle/clone）。
+           调试用组合请在列表中逐个 Delete 按钮删除；不影响的组合可先 toggle 停用保留配置。 -->
       <div id="combosList"><div class="empty"><span class="loading"></span> 加载中...</div></div>
+    </div>
+  </div>
+</div>
 
-      <div id="comboEditor" class="inline-editor" style="display:none">
-        <div class="inline-editor-title" id="comboEditorTitle">新建组合</div>
-        <div class="form-row">
-          <div class="field"><label>组合 ID *</label><input type="text" id="comboId" placeholder="premium-coding" style="font-family:ui-monospace,monospace"></div>
-          <div class="field"><label>名称 *</label><input type="text" id="comboName" placeholder="Premium Coding"></div>
+<!-- 组合编辑器抽屉（body 级浮层，不随标签页隐藏） -->
+<div id="comboEditorOverlay" class="drawer-overlay" onclick="hideComboEditor()"></div>
+<aside id="comboEditor" class="drawer" role="dialog" aria-modal="true" aria-labelledby="comboEditorTitle">
+  <div class="drawer-header">
+    <div class="drawer-title" id="comboEditorTitle">新建组合</div>
+    <button type="button" class="drawer-close" onclick="hideComboEditor()" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-group">
+      <div class="form-group-label">基本信息</div>
+      <div class="form-row">
+        <div class="field"><label>组合 ID *</label><input type="text" id="comboId" placeholder="premium-coding" style="font-family:ui-monospace,monospace"></div>
+        <div class="field"><label>名称 *</label><input type="text" id="comboName" placeholder="Premium Coding"></div>
+      </div>
+      <div class="form-row">
+        <div class="field" style="flex:2"><label>描述</label><input type="text" id="comboDesc" placeholder="可选"></div>
+        <div class="field"><label>分类</label><input type="text" id="comboCategory" placeholder="coding（可选）"></div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>启用</label>
+          <select id="comboEnabled"><option value="true">启用</option><option value="false">停用</option></select>
         </div>
-        <div class="form-row">
-          <div class="field" style="flex:2"><label>描述</label><input type="text" id="comboDesc" placeholder="可选"></div>
-          <div class="field"><label>分类</label><input type="text" id="comboCategory" placeholder="coding（可选）"></div>
+        <div class="field" style="justify-content:flex-end">
+          <label>紧急回退</label>
+          <label class="combo-check"><input type="checkbox" id="comboEmergency" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer"> <span>允许跳出组合回退</span></label>
         </div>
-        <div class="form-row">
-          <div class="field">
-            <label>启用</label>
-            <select id="comboEnabled"><option value="true">启用</option><option value="false">停用</option></select>
-          </div>
-          <div class="field" style="justify-content:flex-end">
-            <label>紧急回退</label>
-            <label class="combo-check"><input type="checkbox" id="comboEmergency" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer"> <span>允许跳出组合回退</span></label>
-          </div>
-        </div>
-        <div style="font-size:12px;color:var(--text3);margin:-6px 0 12px">开启「紧急回退」后，仅当组合内所有条目都失败时，才允许继续回退到配置的全局回退链 / 内置免费链；关闭则组合内失败即结束。</div>
-
-        <div style="font-size:13px;color:var(--text2);font-weight:500;margin-bottom:2px">模型条目（按优先级从上到下）</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">顺序即优先级：第 1 个最优先尝试（1st tried → 2nd → …），拖动行首 ⠿ 手柄或用 ↑↓ 按钮调整顺序。</div>
-        <div id="comboEntries"></div>
-        <div class="form-actions" style="margin-top:10px">
-          <button class="btn btn-sm btn-primary" onclick="openComboModelPicker()">⊕ 多选添加模型</button>
-          <button class="btn btn-sm" onclick="addComboEntry()">＋ 添加条目</button>
-          <span style="font-size:12px;color:var(--text3)">从模型目录勾选多个模型，确认后按勾选顺序追加。</span>
-        </div>
-
-        <div class="combo-preview-box">
-          <div class="combo-preview-title">优先级预览</div>
-          <div id="comboPreview" class="combo-preview">（暂无启用的条目）</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:6px">仅显示已启用的条目，停用的条目会被跳过。</div>
-        </div>
-
-        <div class="form-actions" style="margin-top:14px">
-          <button class="btn btn-sm btn-success" onclick="saveCombo()">保存组合</button>
-          <button class="btn btn-sm" onclick="hideComboEditor()">取消</button>
-          <span id="comboSaveResult" style="font-size:12px;margin-left:8px"></span>
-        </div>
+      </div>
+      <div class="field-hint">开启「紧急回退」后，仅当组合内所有条目都失败时，才允许继续回退到配置的全局回退链 / 内置免费链；关闭则组合内失败即结束。</div>
+    </div>
+    <div class="drawer-group">
+      <div class="form-group-label">模型条目（按优先级从上到下）</div>
+      <div class="field-hint">顺序即优先级：第 1 个最优先尝试（1st tried → 2nd → …），拖动行首 ⠿ 手柄或用 ↑↓ 按钮调整顺序。</div>
+      <div id="comboEntries"></div>
+      <div class="form-actions">
+        <button class="btn btn-sm btn-primary" onclick="openComboModelPicker()">⊕ 多选添加模型</button>
+        <button class="btn btn-sm" onclick="addComboEntry()">＋ 添加条目</button>
+        <span style="font-size:12px;color:var(--text3)">从模型目录勾选多个模型，确认后按勾选顺序追加。</span>
+      </div>
+    </div>
+    <div class="drawer-group">
+      <div class="form-group-label">优先级预览</div>
+      <div class="combo-preview-box">
+        <div id="comboPreview" class="combo-preview">（暂无启用的条目）</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px">仅显示已启用的条目，停用的条目会被跳过。</div>
       </div>
     </div>
   </div>
+  <div class="drawer-footer">
+    <button class="btn btn-sm btn-success" onclick="saveCombo()">保存组合</button>
+    <button class="btn btn-sm" onclick="hideComboEditor()">取消</button>
+    <span id="comboSaveResult" style="font-size:12px;margin-left:8px"></span>
   </div>
-</div>
+</aside>
 
 <div id="tab-upstreams" class="tab-panel" style="display:none">
   <div class="page-header">
@@ -727,51 +742,75 @@
     </div>
     <div class="section-body xscroll">
       <div id="providersList"></div>
-      <div id="providerEditor" class="inline-editor" style="display:none">
-        <div class="inline-editor-title" id="providerEditorTitle">添加 Provider</div>
-        <div class="form-row">
-          <div class="field"><label>名称 *</label><input type="text" id="provName" placeholder="OpenRouter"></div>
-          <div class="field" style="flex:1.6"><label>Base URL *</label><input type="text" id="provBaseURL" placeholder="https://openrouter.ai/api/v1" style="font-family:ui-monospace,monospace"></div>
+    </div>
+  </div>
+
+<!-- Provider 编辑器抽屉（fixed 浮层，与本页预设/导入弹窗同级） -->
+<div id="providerEditorOverlay" class="drawer-overlay" onclick="hideProviderEditor()"></div>
+<aside id="providerEditor" class="drawer" role="dialog" aria-modal="true" aria-labelledby="providerEditorTitle">
+  <div class="drawer-header">
+    <div class="drawer-title" id="providerEditorTitle">添加 Provider</div>
+    <button type="button" class="drawer-close" onclick="hideProviderEditor()" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-group">
+      <div class="form-group-label">基本信息</div>
+      <div class="form-row">
+        <div class="field"><label>名称 *</label><input type="text" id="provName" placeholder="OpenRouter"></div>
+        <div class="field" style="flex:1.6"><label>Base URL *</label><input type="text" id="provBaseURL" placeholder="https://openrouter.ai/api/v1" style="font-family:ui-monospace,monospace"></div>
+      </div>
+      <div class="form-row">
+        <div class="field" style="flex:1.4"><label>API Key</label><input type="password" id="provKey" placeholder="sk-...（本地服务器可留空）"></div>
+      </div>
+    </div>
+    <div class="drawer-group">
+      <div class="form-group-label">调度与限额</div>
+      <div class="form-row">
+        <div class="field"><label>优先级（小=优先）</label><input type="number" id="provPriority" value="10" min="0" max="1000"></div>
+        <div class="field"><label>超时(秒)</label><input type="number" id="provTimeout" value="300" min="5" max="600"></div>
+        <div class="field"><label>分钟请求上限（0=不限）</label><input type="number" id="provRpmLimit" value="0" min="0" max="100000"></div>
+        <div class="field"><label>每日请求上限（0=不限）</label><input type="number" id="provDailyLimit" value="0" min="0" max="1000000"></div>
+      </div>
+      <div class="field-hint">配额提示：填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
+    </div>
+    <div class="drawer-group">
+      <div class="form-group-label">模型与请求头</div>
+      <div class="form-row">
+        <div class="field" style="flex:1"><label>模型 ID（逗号分隔，如 z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash）</label><input type="text" id="provModels" style="font-family:ui-monospace,monospace" oninput="renderProvModelChips()"></div>
+      </div>
+      <div id="provModelsChips" class="chip-row" style="display:none"></div>
+      <div class="form-row">
+        <div class="field" style="flex:1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
+      </div>
+    </div>
+    <div class="drawer-group">
+      <div class="form-group-label">行为与连接</div>
+      <div class="form-row">
+        <div class="field">
+          <label>启用</label>
+          <select id="provEnabled"><option value="true">启用</option><option value="false">停用</option></select>
         </div>
-        <div class="form-row">
-          <div class="field" style="flex:1.4"><label>API Key</label><input type="password" id="provKey" placeholder="sk-...（本地服务器可留空）"></div>
-          <div class="field"><label>优先级（小=优先）</label><input type="number" id="provPriority" value="10" min="0" max="1000"></div>
-          <div class="field"><label>超时(秒)</label><input type="number" id="provTimeout" value="300" min="5" max="600"></div>
+        <div class="field">
+          <label>免费来源（供统计）</label>
+          <select id="provFree"><option value="true">免费</option><option value="false">付费</option></select>
         </div>
-        <div class="form-row">
-          <div class="field"><label>分钟请求上限（0=不限）</label><input type="number" id="provRpmLimit" value="0" min="0" max="100000"></div>
-          <div class="field"><label>每日请求上限（0=不限）</label><input type="number" id="provDailyLimit" value="0" min="0" max="1000000"></div>
-        </div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">配额提示：填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错</div>
-        <div class="form-row">
-          <div class="field" style="flex:1"><label>模型 ID（逗号分隔，如 z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash）</label><input type="text" id="provModels" style="font-family:ui-monospace,monospace"></div>
-        </div>
-        <div class="form-row">
-          <div class="field" style="flex:1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label>启用</label>
-            <select id="provEnabled"><option value="true">启用</option><option value="false">停用</option></select>
-          </div>
-          <div class="field">
-            <label>免费来源（供统计）</label>
-            <select id="provFree"><option value="true">免费</option><option value="false">付费</option></select>
-          </div>
-          <div class="field">
-            <label>账号连接（可选）</label>
-            <select id="provConnection"><option value="">不使用连接</option></select>
-          </div>
-        </div>
-        <div class="form-actions" style="margin-top:10px">
-          <button class="btn btn-sm btn-primary" onclick="saveProvider(this)">保存 Provider</button>
-          <button class="btn btn-sm" onclick="hideProviderEditor()">取消</button>
-          <button class="btn btn-sm" onclick="testProvider(this)">测试连通性</button>
-          <button id="provFetchModelsBtn" class="btn btn-sm" onclick="fetchProviderModels(this)">拉取模型</button>
-          <button class="btn btn-sm" onclick="previewModelImport(this)">导入分级预览</button>
-          <span id="provTestResult" style="font-size:12px;margin-left:8px"></span>
+        <div class="field">
+          <label>账号连接（可选）</label>
+          <select id="provConnection"><option value="">不使用连接</option></select>
         </div>
       </div>
+    </div>
+  </div>
+  <div class="drawer-footer">
+    <button class="btn btn-sm btn-primary" onclick="saveProvider(this)">保存 Provider</button>
+    <button class="btn btn-sm" onclick="hideProviderEditor()">取消</button>
+    <span class="drawer-footer-sep"></span>
+    <button class="btn btn-sm" onclick="testProvider(this)">测试连通性</button>
+    <button id="provFetchModelsBtn" class="btn btn-sm" onclick="fetchProviderModels(this)">拉取模型</button>
+    <button class="btn btn-sm" onclick="previewModelImport(this)">导入分级预览</button>
+    <span id="provTestResult" style="font-size:12px;margin-left:8px"></span>
+  </div>
+</aside>
       <!-- 预设选择弹窗：按接入成本分组（免密钥 → 免费额度 → 含免费模型 → 本地 → 其他），顶部搜索即时过滤 -->
       <div id="presetPickerModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closePresetPicker()">
         <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:640px;width:100%;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;max-height:calc(100vh - 60px)">
@@ -800,8 +839,6 @@
           </div>
         </div>
       </div>
-    </div>
-  </div>
 
   <div class="section">
     <div class="section-title"><span>登录连接（OAuth）</span>

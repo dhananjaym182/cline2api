@@ -642,6 +642,16 @@ const I18N = {
   '浅色': 'Light',
   '深色': 'Dark',
   '主题': 'Theme',
+  // 抽屉编辑器 + 组合独立页
+  '基本信息': 'Basics',
+  '调度与限额': 'Scheduling & Limits',
+  '模型与请求头': 'Models & Headers',
+  '行为与连接': 'Behavior & Connections',
+  '把多个模型按优先级编排成回退链：命中组合按序尝试，失败（限流/不可用）自动切到下一个，停用条目直接跳过': 'Arrange models into a priority-ordered fallback chain: a matched combo is tried in order; on failure (rate-limit/unavailable) it moves to the next; disabled entries are skipped',
+  '个组合': 'combos',
+  '启用中': 'enabled',
+  '条目总数': 'entries in total',
+  '添加后用行内 ⚙ 可设置上下文窗口与层级': 'After adding, use the inline gear to set context window and tier',
 };
 let LANG = 'zh';
 const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
@@ -753,7 +763,8 @@ function applyTab(name){
   if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); }
   else if (name === 'accounts') loadAccounts();
   else if (name === 'logs') loadRequestLogs(true);
-  else if (name === 'routing') { loadModels().then(() => { loadConfig(); if (routingActiveSub() === 'combos') loadCombos(); }); }
+  else if (name === 'routing') { loadModels().then(() => { loadConfig(); }); }
+  else if (name === 'combos') { loadCombos(); }
   else if (name === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); }
   else if (name === 'providers') { loadProviders(); loadConnections(); }
   else if (name === 'security') { loadKeys(); loadConfig(); }
@@ -838,16 +849,7 @@ function switchPageSubTab(page, sub, skipSave) {
 }
 
 // 子页显示时的按需加载钩子（用户点击切换时触发；首次进入由 applyTab 处理）
-function onPageSubTabShown(page, sub) {
-  if (page === 'routing' && sub === 'combos') loadCombos();
-}
-
-// 读取 routing 页当前激活的子页名（用于顶层标签切换后按需加载）
-function routingActiveSub() {
-  const nav = document.querySelector('.page-subtabs[data-page="routing"]');
-  const el = nav && nav.querySelector('.subtab.active');
-  return el ? el.dataset.sub : '';
-}
+function onPageSubTabShown(page, sub) {}
 document.querySelectorAll('.page-subtabs').forEach(nav => {
   nav.querySelectorAll('.subtab').forEach(el => {
     el.addEventListener('click', () => switchPageSubTab(nav.dataset.page, el.dataset.sub));
@@ -934,6 +936,27 @@ function setTheme(theme) {
   applyTheme(theme);
 }
 applyTheme(document.documentElement.dataset.theme || 'light');
+
+// ========== 抽屉（右侧滑出编辑器） ==========
+const _openDrawers = [];
+function openDrawer(name) {
+  const ov = _(name + 'Overlay'), dr = _(name);
+  if (!dr) return;
+  if (ov) ov.classList.add('open');
+  dr.classList.add('open');
+  if (!_openDrawers.includes(name)) _openDrawers.push(name);
+}
+function closeDrawer(name) {
+  const ov = _(name + 'Overlay'), dr = _(name);
+  if (ov) ov.classList.remove('open');
+  if (dr) dr.classList.remove('open');
+  const i = _openDrawers.indexOf(name);
+  if (i >= 0) _openDrawers.splice(i, 1);
+}
+// ESC 关闭最上层抽屉（弹窗自身的 Esc 处理保持不变，抽屉在最外层时无冲突）
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _openDrawers.length) closeDrawer(_openDrawers[_openDrawers.length - 1]);
+});
 
 // ========== 侧栏收起 ==========
 const NAV_COLLAPSE_KEY = 'cline_admin_nav';

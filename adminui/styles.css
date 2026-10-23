@@ -163,6 +163,37 @@ html[data-nav="collapsed"] .nav-section{padding:10px 8px 4px}
 html[data-nav="collapsed"] .nav-item{justify-content:center;padding:9px 0;gap:0}
 html[data-nav="collapsed"] .sidebar-lang{padding:0 10px 14px;border-top:none}
 
+/* ===== 抽屉编辑器（Provider / 组合：右侧滑入 + 遮罩，ESC/点遮罩关闭） ===== */
+.drawer-overlay{position:fixed;inset:0;z-index:10001;background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px);opacity:0;pointer-events:none;transition:opacity 0.2s var(--ease)}
+.drawer-overlay.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;z-index:10002;width:min(560px,100vw);display:flex;flex-direction:column;background:var(--surface);border-left:1px solid var(--border2);box-shadow:var(--shadow-lg);transform:translateX(102%);pointer-events:none;transition:transform 0.25s var(--ease)}
+.drawer.open{transform:translateX(0);pointer-events:auto}
+.drawer-header{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--border2);flex-shrink:0}
+.drawer-title{font-size:var(--fs-lg);font-weight:600;color:var(--text)}
+.drawer-close{margin-left:auto;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--radius-xs);background:transparent;color:var(--text3);cursor:pointer;transition:all 0.15s var(--ease);flex-shrink:0}
+.drawer-close:hover{color:var(--text);background:var(--surface2)}
+.drawer-close svg{width:16px;height:16px}
+.drawer-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--sp-5);display:flex;flex-direction:column;gap:var(--sp-5)}
+.drawer-body .form-row:last-child{margin-bottom:0}
+.drawer-group{display:flex;flex-direction:column}
+.drawer-group>.form-group-label{font-size:var(--fs-sm);font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin:0 0 var(--sp-3);padding-bottom:6px;border-bottom:1px solid var(--border2)}
+.drawer-footer{flex-shrink:0;display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center;padding:var(--sp-4) var(--sp-5);border-top:1px solid var(--border2);background:var(--surface)}
+.drawer-footer-sep{width:1px;height:22px;background:var(--border2);margin:0 6px}
+.field-hint{font-size:var(--fs-sm);line-height:1.6;color:var(--text3);margin-top:2px}
+.chip-row{display:flex;flex-wrap:wrap;gap:4px;margin:-4px 0 10px}
+.chip-row .model-tag{margin:0}
+@media (max-width:760px){.drawer{width:100vw;border-left:none}}
+/* 抽屉之上仍需可用的弹窗（从抽屉内打开）与全局 Toast */
+#provPickerModal,#importPreviewModal,#comboModelPicker,#presetPickerModal{z-index:10003}
+.toast{z-index:10100}
+
+/* ===== 模型添加行（组合页统计条复用 .model-stats-bar） ===== */
+.model-composer{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
+.model-composer .composer-input{flex:2;min-width:200px;font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:var(--fs-sm);background:var(--surface)}
+.model-composer .cost-seg{width:auto;flex-shrink:0;background:var(--surface)}
+.model-composer .cost-seg button{padding:6px 14px;font-size:var(--fs-sm)}
+.model-composer .composer-hint{font-size:var(--fs-xs);color:var(--text3)}
+
 /* ===== Section / Grouped ===== */
 .section{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);margin-bottom:var(--sp-5);overflow:hidden;box-shadow:var(--shadow-sm)}
 .section-title{padding:var(--sp-4) var(--sp-4) var(--sp-2);font-weight:600;font-size:var(--fs-lg);line-height:1.35;display:flex;align-items:center;gap:var(--sp-2);color:var(--text)}

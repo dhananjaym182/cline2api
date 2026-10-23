@@ -68,10 +68,21 @@ function showProviderEditor(p) {
   if (!_connList.length) loadConnections().then(() => fillConnectionSelect(p ? (p.connectionId || '') : ''));
   const testOut = _('provTestResult');
   if (testOut) testOut.innerHTML = '';
-  _('providerEditor').style.display = '';
+  renderProvModelChips();
+  openDrawer('providerEditor');
 }
 
-function hideProviderEditor() { _('providerEditor').style.display = 'none'; }
+function hideProviderEditor() { closeDrawer('providerEditor'); }
+
+// 模型 ID 输入实时回显为芯片（真值仍是输入框文本，保存逻辑不变）
+function renderProvModelChips() {
+  const box = _('provModelsChips');
+  if (!box) return;
+  const ids = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean);
+  if (!ids.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = '';
+  box.innerHTML = ids.map(id => '<span class="model-tag mono">' + esc(id) + '</span>').join('');
+}
 
 async function saveProvider(btn) {
   const payload = {
@@ -291,6 +302,7 @@ function provPickerConfirm() {
   }
   if (added) {
     _('provModels').value = cur.join(', ');
+    renderProvModelChips();
     toast(t('已按勾选顺序追加 ') + added + t(' 个模型'), 'success');
   } else {
     toast(t('所选模型均已在 Provider 中'), 'info');
@@ -362,6 +374,7 @@ function applyPreset(key) {
   _('provBaseURL').value = p.baseURL;
   _('provHeaders').value = Object.entries(p.headers || {}).map(([k, v]) => k + ': ' + v).join('\n');
   _('provModels').value = (p.modelIDs || []).join(', ');
+  renderProvModelChips();
   // hasFree/other 是混合目录：整源标 free 会把付费模型误标为免费（审计 §9.2 缺口），默认标为付费。
   const freeSource = p.kind === 'free' || p.kind === 'freeTier' || p.kind === 'local';
   _('provFree').value = freeSource ? 'true' : 'false';
@@ -481,7 +494,7 @@ async function loadConnections() {
   const dl = _('connProviderList');
   if (dl) dl.innerHTML = _connFlows.map(p => '<option value="' + esc(p) + '">').join('');
   const ed = _('providerEditor');
-  if (ed && ed.style.display !== 'none') fillConnectionSelect(_('provConnection') ? _('provConnection').value : '');
+  if (ed && ed.classList.contains('open')) fillConnectionSelect(_('provConnection') ? _('provConnection').value : '');
 }
 
 function renderConnectionsList() {

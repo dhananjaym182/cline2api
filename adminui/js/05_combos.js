@@ -21,9 +21,9 @@ async function loadCombos() {
     _comboCatalog = d.data.modelCatalog || [];
     _comboReserved = d.data.reservedAliases || [];
     renderCombosList();
-    // 编辑面板打开时目录可能已更新，重绘条目下拉（不丢失当前编辑内容）
+    // 编辑抽屉打开时目录可能已更新，重绘条目下拉（不丢失当前编辑内容）
     const ed = _('comboEditor');
-    if (ed && ed.style.display !== 'none') renderComboEntries();
+    if (ed && ed.classList.contains('open')) renderComboEntries();
   } catch (e) {
     const box = _('combosList');
     if (box) box.innerHTML = '<div class="empty">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
@@ -38,6 +38,18 @@ function comboCatalogEntry(id) {
 function renderCombosList() {
   const box = _('combosList');
   if (!box) return;
+  const stats = _('combosStats');
+  if (stats) {
+    if (!_comboList.length) {
+      stats.innerHTML = '';
+    } else {
+      const on = _comboList.filter(c => c.enabled !== false).length;
+      const entryCount = _comboList.reduce((n, c) => n + ((c.entries || []).length), 0);
+      stats.innerHTML = '<span><b>' + _comboList.length + '</b> ' + t('个组合') + '</span>' +
+        '<span><span class="dot g"></span><b>' + on + '</b> ' + t('启用中') + '</span>' +
+        '<span><b>' + entryCount + '</b> ' + t('条目总数') + '</span>';
+    }
+  }
   if (!_comboList.length) {
     box.innerHTML = listEmptyState(ICON_COMBOS, t('暂无模型组合'));
     return;
@@ -85,12 +97,11 @@ function showComboEditor(c) {
   _comboEntries = c ? (c.entries || []).map(e => ({ model: e.model || '', disabled: !!e.disabled, source: e.source || '', provider: e.provider || '' })) : [];
   _('comboSaveResult').textContent = '';
   renderComboEntries();
-  _('comboEditor').style.display = '';
-  try { _('comboEditor').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+  openDrawer('comboEditor');
 }
 
 function hideComboEditor() {
-  _('comboEditor').style.display = 'none';
+  closeDrawer('comboEditor');
   _editingComboId = '';
   _comboEntries = [];
 }
