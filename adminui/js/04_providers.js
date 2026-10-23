@@ -14,7 +14,7 @@ async function loadProviders() {
     const box = _('providersList');
     renderProviderSyncBanner(list);
     if (!list.length) { box.innerHTML = listEmptyState(ICON_PROVIDERS, t('暂无自定义 Provider')); return; }
-    box.innerHTML = '<table class="action-table"><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th class="num-col">优先级</th><th>状态</th><th>' + t('最近检测') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
+    box.innerHTML = '<table class="action-table"><thead><tr><th>' + t('名称') + '</th><th>Base URL</th><th>' + t('模型') + '</th><th class="num-col">' + t('优先级') + '</th><th>' + t('状态') + '</th><th>' + t('最近检测') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
       list.map(p =>
         '<tr>' +
           '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + (function () { const n = (p.connectionIds || []).length || (p.connectionId ? 1 : 0); return n ? ' <span style="color:var(--accent);font-size:11px" title="' + t('连接池轮转派发') + '">token×' + n + '</span>' : ''; })() + '</td>' +
@@ -25,7 +25,7 @@ async function loadProviders() {
             ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
             : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') + '</td>' +
           '<td style="white-space:nowrap">' + (p.enabled ? provSyncCellHTML(p.id) : '<span style="font-size:11px;color:var(--text3)">—</span>') + '</td>' +
-          '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">编辑</button> ' +
+          '<td><button class="btn btn-sm" onclick="editProvider(\'' + p.id + '\')">' + t('编辑') + '</button> ' +
               '<button class="btn btn-sm" onclick=\'testProviderById("' + p.id + '", this)\'>' + t('测试') + '</button> ' +
               '<span class="prov-row-test-out"></span> ' +
               '<button class="btn btn-sm" onclick=\'recheckProvider("' + p.id + '", this)\'>' + t('重新检测') + '</button> ' +
@@ -726,7 +726,7 @@ const _flowLabels = {
   'kimi-coding': 'Kimi for Coding', 'codebuddy-cn': 'CodeBuddy CN（腾讯）',
   'codebuddy-intl': 'CodeBuddy Intl', workbuddy: 'WorkBuddy',
 };
-function flowLabel(p) { return _flowLabels[p] || p; }
+function flowLabel(p) { return t(_flowLabels[p] || p); }
 
 async function loadConnections() {
   try {

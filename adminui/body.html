@@ -30,10 +30,6 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       <span class="nav-label">账号与连接</span>
     </div>
-    <div class="nav-item" data-tab="import">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      <span class="nav-label">导入账号</span>
-    </div>
   </div>
   <div class="nav-section">
     <div class="nav-section-label">配置</div>
@@ -164,7 +160,7 @@
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>快捷操作</div>
     <div class="section-body action-row">
-      <button class="btn btn-primary" onclick="switchTab('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
+      <button class="btn btn-primary" onclick="showAccountLogin('oauth')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
       <button class="btn" onclick="refreshAllTokens(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新全部 Token</button>
       <button class="btn" onclick="document.getElementById('fileInput').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>从文件导入</button>
       <input type="file" id="fileInput" accept=".json,.txt" style="display:none" onchange="handleFileImport(event)">
@@ -183,7 +179,7 @@
       <button class="btn btn-sm" onclick="testAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>测试全部</button>
       <button class="btn btn-sm" onclick="exportAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出全部</button>
       <button class="btn btn-sm" onclick="loadAccounts()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
-      <button class="btn btn-primary btn-sm" onclick="switchTab('import')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
+      <button class="btn btn-primary btn-sm" onclick="showAccountLogin('oauth')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
     </div>
   </div>
   <div class="section">
@@ -223,71 +219,69 @@
       <div id="connectionsList"></div>
     </div>
   </div>
-</div>
+  <div class="section" id="loginImportSection">
+    <div class="section-title"><button class="btn btn-sm btn-icon" id="loginImportToggle" onclick="toggleLoginImport()" title="展开" aria-label="展开">▸</button><span>登录与导入（Cline 账号）</span></div>
+    <div id="loginImportBody" style="display:none">
+      <div class="section-desc">为上方「Cline 账号池」添加账号：OAuth 浏览器登录、粘贴 refreshToken 或批量文件。第三方服务（Kilo、GitHub Copilot 等）的登录请使用「OAuth 连接池」。</div>
+      <div class="tabs" id="importTabs">
+        <div class="tab active" data-tab="oauth">OAuth 浏览器登录</div>
+        <div class="tab" data-tab="token">手动输入 Token</div>
+        <div class="tab" data-tab="batch">批量导入</div>
+      </div>
 
-<div id="tab-import" class="tab-panel" style="display:none">
-  <div class="large-title">导入账号</div>
-  <div class="large-subtitle">通过 OAuth 登录、手动 Token 或批量文件添加账号</div>
-  <div style="font-size:12px;color:var(--text3);margin:-6px 0 12px">第三方服务的登录连接（设备码 / 粘贴 Token）在「账号与连接」页统一管理，本页仅导入 Cline 账号</div>
-  <div class="section">
-    <div class="tabs" id="importTabs">
-      <div class="tab active" data-tab="oauth">OAuth 浏览器登录</div>
-      <div class="tab" data-tab="token">手动输入 Token</div>
-      <div class="tab" data-tab="batch">批量导入</div>
-    </div>
-
-    <div id="import-oauth" class="tab-content active">
-      <p style="color:var(--text2);margin-bottom:16px">通过浏览器完成 OAuth 认证，支持 Google/GitHub/邮箱登录，自动获取 refreshToken。</p>
-      <button class="btn btn-primary" onclick="startOAuth()" id="oauthBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>开始 OAuth 登录</button>
-      <div id="oauthProgress" style="display:none;margin-top:16px">
-        <div style="display:flex;align-items:center;gap:12px">
-          <div class="loading"></div>
-          <div>
-            <div style="font-weight:600" id="oauthStatus">等待浏览器授权...</div>
-            <div style="color:var(--text2);font-size:13px;margin-top:4px">
-              点击链接（系统浏览器打开）: <a href="#" id="oauthUrl" style="color:var(--accent);cursor:pointer"></a><br>
-              并输入代码: <strong id="oauthUserCode"></strong>
+      <div id="import-oauth" class="tab-content active">
+        <p style="color:var(--text2);margin-bottom:16px">通过浏览器完成 OAuth 认证，支持 Google/GitHub/邮箱登录，自动获取 refreshToken。</p>
+        <button class="btn btn-primary" onclick="startOAuth()" id="oauthBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>开始 OAuth 登录</button>
+        <div id="oauthProgress" style="display:none;margin-top:16px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="loading"></div>
+            <div>
+              <div style="font-weight:600" id="oauthStatus">等待浏览器授权...</div>
+              <div style="color:var(--text2);font-size:13px;margin-top:4px">
+                点击链接（系统浏览器打开）: <a href="#" id="oauthUrl" style="color:var(--accent);cursor:pointer"></a><br>
+                并输入代码: <strong id="oauthUserCode"></strong>
+              </div>
             </div>
           </div>
         </div>
+        <div id="oauthResult" style="display:none;margin-top:16px"></div>
       </div>
-      <div id="oauthResult" style="display:none;margin-top:16px"></div>
-    </div>
 
-    <div id="import-token" class="tab-content">
-      <p style="color:var(--text2);margin-bottom:16px">输入已有的 Cline refreshToken，系统会自动验证并加入池。</p>
-      <div class="form-row">
-        <div class="field">
-          <label>Refresh Token *</label>
-          <input type="text" id="tokenInput" placeholder="粘贴 refreshToken">
+      <div id="import-token" class="tab-content">
+        <p style="color:var(--text2);margin-bottom:16px">输入已有的 Cline refreshToken，系统会自动验证并加入池。</p>
+        <div class="form-row">
+          <div class="field">
+            <label>Refresh Token *</label>
+            <input type="text" id="tokenInput" placeholder="粘贴 refreshToken">
+          </div>
         </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label>邮箱（可选，留空自动生成）</label>
-          <input type="text" id="tokenEmail" placeholder="user@example.com">
+        <div class="form-row">
+          <div class="field">
+            <label>邮箱（可选，留空自动生成）</label>
+            <input type="text" id="tokenEmail" placeholder="user@example.com">
+          </div>
         </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="addByToken(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
+        </div>
+        <div id="tokenResult" style="margin-top:8px"></div>
       </div>
-      <div class="form-actions">
-        <button class="btn btn-primary" onclick="addByToken(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加账号</button>
-      </div>
-      <div id="tokenResult" style="margin-top:8px"></div>
-    </div>
 
-    <div id="import-batch" class="tab-content">
-      <p style="color:var(--text2);margin-bottom:16px">批量导入多个账号。支持 JSON 数组或每行一个 token。</p>
-      <div class="form-row">
-        <div class="field">
-          <label>JSON 数组格式：[{"refreshToken":"...","email":"..."}]</label>
-          <textarea id="batchInput" placeholder='[{"refreshToken":"xxx","email":"u1@x.com"},{"refreshToken":"yyy","email":"u2@x.com"}]'></textarea>
+      <div id="import-batch" class="tab-content">
+        <p style="color:var(--text2);margin-bottom:16px">批量导入多个账号。支持 JSON 数组或每行一个 token。</p>
+        <div class="form-row">
+          <div class="field">
+            <label>JSON 数组格式：[{"refreshToken":"...","email":"..."}]</label>
+            <textarea id="batchInput" placeholder='[{"refreshToken":"xxx","email":"u1@x.com"},{"refreshToken":"yyy","email":"u2@x.com"}]'></textarea>
+          </div>
         </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="batchImport(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导入全部</button>
+          <button class="btn" onclick="document.getElementById('fileInput2').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>选择文件</button>
+          <input type="file" id="fileInput2" accept=".json,.txt" style="display:none" onchange="handleFileImport(event)">
+        </div>
+        <div id="batchResult" style="margin-top:8px"></div>
       </div>
-      <div class="form-actions">
-        <button class="btn btn-primary" onclick="batchImport(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导入全部</button>
-        <button class="btn" onclick="document.getElementById('fileInput2').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>选择文件</button>
-        <input type="file" id="fileInput2" accept=".json,.txt" style="display:none" onchange="handleFileImport(event)">
-      </div>
-      <div id="batchResult" style="margin-top:8px"></div>
     </div>
   </div>
 </div>
@@ -431,7 +425,7 @@
         <div class="field">
           <label>回退模型链</label>
           <input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()">
-          <div style="font-size:12px;color:var(--text3);margin-top:4px">逗号分隔模型 ID，可用 <code>free</code> 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">逗号分隔模型 ID，可用 free 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
           <div class="field-hint" style="margin-top:2px"><a href="#" onclick="switchTab('combos');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">组合的回退顺序与紧急回退在「模型组合」页管理 →</a></div>
         </div>
       </div>
@@ -687,7 +681,7 @@
   <div class="page-subpage" data-subpage="cline" style="display:none">
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Cline 出口代理</div>
-    <div class="section-desc">国内直连 Cline 上游会被跨区限制；配置后所有发往 Cline 的请求（对话、登录/令牌刷新、模型同步）经代理池轮询出去。支持 http / https / socks5 / socks5h，每行一个，如 <span class="mono">socks5://127.0.0.1:1080</span>。回环 / 内网地址（本机 Ollama 等自定义 Provider）始终直连；未配置时依次尝试环境变量代理、直连。</div>
+    <div class="section-desc">国内直连 Cline 上游会被跨区限制；配置后所有发往 Cline 的请求（对话、登录/令牌刷新、模型同步）经代理池轮询出去。支持 http / https / socks5 / socks5h，每行一个，如 socks5://127.0.0.1:1080。回环 / 内网地址（本机 Ollama 等自定义 Provider）始终直连；未配置时依次尝试环境变量代理、直连。</div>
     <div class="section-body">
       <div class="form-row">
         <div class="field" style="max-width:260px">
@@ -949,7 +943,7 @@
           <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">1</div>
           <div>
             <div style="font-weight:600;color:var(--text)">添加 Cline 账号</div>
-            <div style="font-size:13px;color:var(--text2);margin-top:2px">前往「导入账号」页面，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。</div>
+            <div style="font-size:13px;color:var(--text2);margin-top:2px">在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。</div>
           </div>
         </div>
         <div style="display:flex;gap:12px;align-items:flex-start">

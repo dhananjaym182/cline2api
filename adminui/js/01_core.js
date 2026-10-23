@@ -43,7 +43,6 @@ const I18N = {
   '创建时间': 'Created',
   '操作': 'Actions',
   '加载中...': 'Loading...',
-  '通过 OAuth 登录、手动 Token 或批量文件添加账号': 'Add accounts via OAuth login, manual token, or batch file',
   'OAuth 浏览器登录': 'OAuth Browser Login',
   '手动输入 Token': 'Manual Token',
   '批量导入': 'Batch Import',
@@ -87,8 +86,7 @@ const I18N = {
   '默认模型': 'Default Model',
   '轮询策略': 'Rotation Strategy',
   '回退模型链': 'Fallback Model Chain',
-  '逗号分隔模型 ID，可用': 'Comma-separated model IDs; you can use ',
-  '表示内置免费回退链；留空则自动回退到内置免费链。': ' for the built-in free fallback chain. Leave blank to use it automatically.',
+  '逗号分隔模型 ID，可用 free 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过': 'Comma-separated model IDs; use free for the built-in free fallback chain, or leave blank to fall back to it automatically. IDs outside the list above are allowed (if an unlisted model still works in practice, add it directly; the synced list is only a reference); dead entries are skipped by cooldown and failover automatically.',
   '轮询 (round_robin)': 'Round robin',
   '填满 (fill)': 'Fill',
   '随机 (random)': 'Random',
@@ -110,7 +108,7 @@ const I18N = {
   'Cline API 反向代理 · 多账号轮询 · 双协议兼容': 'Cline API reverse proxy · multi-account rotation · dual protocol',
   '快速上手': 'Quick Start',
   '添加 Cline 账号': 'Add a Cline account',
-  '前往「导入账号」页面，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。': 'Go to Import and add via OAuth or a pasted refreshToken. Batch import supported.',
+  '在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。': 'On the Accounts page, expand the Cline Login and Import section and add via OAuth or a pasted refreshToken. Batch import supported.',
   '生成 API Key': 'Generate an API Key',
   '前往「密钥与安全」页面生成密钥。如不配置任何密钥，代理允许匿名访问。': 'Generate a key in Keys & Security. With no keys, the proxy allows anonymous access.',
   '配置客户端': 'Configure your client',
@@ -407,8 +405,7 @@ const I18N = {
   '接入 opencode（zen）免费模型。按请求中的模型名自动分流：免费模型走 opencode 上游，付费模型直接拒绝，其余走 Cline 账号池。': 'Integrates opencode (zen) free models. Requests are routed automatically by model name: free models go to the opencode upstream, paid models are rejected, everything else goes to the Cline account pool.',
   // Cline 出口代理
   'Cline 出口代理': 'Cline Egress Proxies',
-  '国内直连 Cline 上游会被跨区限制；配置后所有发往 Cline 的请求（对话、登录/令牌刷新、模型同步）经代理池轮询出去。支持 http / https / socks5 / socks5h，每行一个，如 ': 'Cline upstream is region-restricted from mainland China; once configured, all requests to Cline (chat, login/token refresh, model sync) egress through a rotating proxy pool. Supports http / https / socks5 / socks5h, one per line, e.g. ',
-  '。回环 / 内网地址（本机 Ollama 等自定义 Provider）始终直连；未配置时依次尝试环境变量代理、直连。': '. Loopback / private addresses (local Ollama and other custom providers) always connect directly; without config, env proxies then direct connection are tried.',
+  '国内直连 Cline 上游会被跨区限制；配置后所有发往 Cline 的请求（对话、登录/令牌刷新、模型同步）经代理池轮询出去。支持 http / https / socks5 / socks5h，每行一个，如 socks5://127.0.0.1:1080。回环 / 内网地址（本机 Ollama 等自定义 Provider）始终直连；未配置时依次尝试环境变量代理、直连。': 'Cline upstream is region-restricted from mainland China; once configured, all requests to Cline (chat, login/token refresh, model sync) egress through a rotating proxy pool. Supports http / https / socks5 / socks5h, one per line, e.g. socks5://127.0.0.1:1080. Loopback / private addresses (local Ollama and other custom providers) always connect directly; without config, env proxies then direct connection are tried.',
   '保存 Cline 代理': 'Save Cline proxies',
   'Cline 代理配置已保存': 'Cline proxy config saved',
   // 模型分组
@@ -603,7 +600,8 @@ const I18N = {
   'Cline 账号池': 'Cline Account Pool',
   'OAuth 连接池': 'OAuth Connection Pool',
   '所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与轮转派发；Token 只存服务端，不写进 Provider。': 'All upstream accounts that need a login (OAuth device code / pasted token) are managed here: each connection tracks the models and usage it served, grouped by provider. Tick logins in the provider editor pool to join round-robin dispatch; tokens stay server-side and are never copied into providers.',
-  '第三方服务的登录连接（设备码 / 粘贴 Token）在「账号与连接」页统一管理，本页仅导入 Cline 账号': 'Third-party logins (device code / pasted token) live on the Accounts and Connections page; this page only imports Cline accounts',
+  '登录与导入（Cline 账号）': 'Cline Login and Import',
+  '为上方「Cline 账号池」添加账号：OAuth 浏览器登录、粘贴 refreshToken 或批量文件。第三方服务（Kilo、GitHub Copilot 等）的登录请使用「OAuth 连接池」。': 'Add accounts to the Cline pool above: OAuth browser login, a pasted refreshToken, or a batch file. For third-party services (Kilo, GitHub Copilot, etc.) use the OAuth connection pool above.',
   '账号连接池': 'Account connection pool',
   '勾选多个登录连接后轮转派发，被限流/待重登的连接自动跳过由兄弟连接顶上；不勾选 = 仅用 API Key。连接的增删在「账号与连接」页管理。': 'Tick multiple logins for round-robin dispatch; rate-limited or reauth-pending ones are skipped while siblings take over. Tick none to use the API key only. Connections are added and removed on the Accounts and Connections page.',
   '复制': 'Copy',
@@ -703,6 +701,28 @@ const I18N = {
   '手动输入模型 ID（高级）': 'Type model IDs manually (advanced)',
   '从上游目录勾选（免费 / 付费分组），确认前不写入': 'Pick from the upstream catalog (grouped free / paid); nothing is written until you confirm',
   '来自上游 /models 接口，按免费 / 付费分组；确认后写入模型列表，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。': 'From the upstream /models endpoint, grouped by free / paid; confirmed picks go into the model list, saving is still manual. Models already on this provider are pre-checked and locked. If it fails, check Base URL and API Key first.',
+  // ===== wave-5: audited static gaps =====
+  '重置选中': 'Reset selected',
+  '只显示免费模型': 'Free models only',
+  '关闭（返回全部模型）': 'Off (returns all models)',
+  '开启（/models 仅返回免费模型）': 'On (/models returns free models only)',
+  '影响 /models、/v1/models 对客户端返回的模型列表，不影响管理页模型管理': 'Affects the model lists clients get from /models and /v1/models; admin model management is unaffected',
+  '更多操作 ▾': 'More ▾',
+  '批准导入所选': 'Approve selected imports',
+  '粘贴已有访问令牌作为连接（Bearer 注入），适合 Kilo 这类不签发刷新令牌的上游，或任何无设备码流程、但你已持有 token 的服务；过期后需重新导入或登录。': 'Paste an existing access token as a connection (injected as Bearer). Fits upstreams like Kilo that never issue refresh tokens, or any service without a device-code flow where you already hold a token; re-import or re-login once it expires.',
+  '模型 ID': 'Model ID',
+  '确认': 'Confirm',
+  '池容量分布': 'Pool capacity distribution',
+  '搜索邮箱...': 'Search email...',
+  '点击排序': 'Click to sort',
+  '搜索模型 ID...': 'Search model ID...',
+  '模型 ID，如 deepseek/deepseek-v4-flash': 'Model ID, e.g. deepseek/deepseek-v4-flash',
+  'sk-...（本地服务器可留空）': 'sk-... (can be left blank for local servers)',
+  'kilocode / 任意 provider key': 'kilocode / any provider key',
+  '粘贴令牌（只存服务端，不外泄）': 'Paste token (stored server-side only, never leaked)',
+  '访问密码': 'Access password',
+  '优先级': 'Priority',
+  'CodeBuddy CN（腾讯）': 'CodeBuddy CN (Tencent)',
 };
 let LANG = 'zh';
 const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
@@ -732,9 +752,13 @@ function applyLang(){
       n.nodeValue = txt.replace(trimmed, dict[trimmed]);
     }
   }
-  document.querySelectorAll('[title]').forEach(el=>{
-    const k=(el.getAttribute('title')||'').trim();
-    if (k && dict[k]) el.setAttribute('title', dict[k]);
+  // Wave-5: placeholder/aria-label carry user-visible copy too, so they follow
+  // the same exact-match dictionary as text nodes and [title].
+  document.querySelectorAll('[title],[placeholder],[aria-label]').forEach(el=>{
+    for (const attr of ['title','placeholder','aria-label']) {
+      const k=(el.getAttribute(attr)||'').trim();
+      if (k && dict[k]) el.setAttribute(attr, dict[k]);
+    }
   });
   _('langZh').classList.toggle('active', LANG === 'zh');
   if (_('langEn')) _('langEn').classList.toggle('active', LANG === 'en');
@@ -802,7 +826,38 @@ function formatCooldown(isoTime) {
 }
 
 // ========== 导航 ==========
+// Wave-5: the standalone Import tab now lives as a collapsible section inside
+// Accounts; old #import deep links and switchTab('import') callers resolve here.
+function normalizeTabName(name) {
+  return name === 'import' ? 'accounts' : name;
+}
+
+function toggleLoginImport(forceOpen) {
+  const body = _('loginImportBody'), btn = _('loginImportToggle');
+  if (!body || !btn) return;
+  const open = (forceOpen === undefined) ? body.style.display === 'none' : !!forceOpen;
+  body.style.display = open ? '' : 'none';
+  btn.textContent = open ? '▾' : '▸';
+  const label = open ? '收起' : '展开';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  applyLang();
+}
+
+function showAccountLogin(subtab) {
+  applyTab('accounts');
+  toggleLoginImport(true);
+  if (subtab) {
+    const tab = document.querySelector('#importTabs .tab[data-tab="' + subtab + '"]');
+    if (tab) tab.click();
+  }
+  const sec = _('loginImportSection');
+  if (sec) setTimeout(() => sec.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+}
+
 function applyTab(name){
+  const fromImport = (name === 'import');
+  name = normalizeTabName(name);
   // 非法/未知标签页（如手改 URL）回退到 dashboard，避免空白页
   if (!name || !_('tab-' + name)) name = 'dashboard';
   document.querySelectorAll('.nav-item').forEach(e => e.classList.toggle('active', e.dataset.tab === name));
@@ -813,6 +868,7 @@ function applyTab(name){
   setActiveTab(name);
   if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); }
   else if (name === 'accounts') { loadAccounts(); loadConnections(); }
+  if (fromImport) toggleLoginImport(true);
   else if (name === 'logs') loadRequestLogs(true);
   else if (name === 'routing') { loadModels().then(() => { loadConfig(); }); }
   else if (name === 'combos') { loadCombos(); }

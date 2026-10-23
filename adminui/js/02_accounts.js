@@ -77,7 +77,7 @@ async function loadAccounts() {
       updateSelCount();
       const emptyMsg = _accSearch
         ? (t('没有匹配的账号') + '："' + esc(_accSearch) + '"')
-        : (t('还没有账号') + ' — <a href="#" onclick="switchTab(\'import\')" style="color:var(--accent);cursor:pointer;text-decoration:none">' + t('导入账号') + '</a> · ' + t('支持 OAuth 登录 / 手动 Token / 批量导入'));
+        : (t('还没有账号') + ' — <a href="#" onclick="showAccountLogin();return false" style="color:var(--accent);cursor:pointer;text-decoration:none">' + t('导入账号') + '</a> · ' + t('支持 OAuth 登录 / 手动 Token / 批量导入'));
       tbody.innerHTML = '<tr><td colspan="12" class="empty">' + emptyMsg + '</td></tr>';
       cards.innerHTML = listEmptyState(ICON_ACCOUNTS, emptyMsg);
       return;

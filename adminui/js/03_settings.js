@@ -10,7 +10,7 @@ async function loadKeys() {
     }
     el.innerHTML = keys.map(k =>
       '<div class="flex" style="margin-bottom:8px">' +
-        '<span class="key-display" style="flex:1" onclick="copyText(\'' + k + '\')" title="点击复制">' + esc(k) + '</span>' +
+        '<span class="key-display" style="flex:1" onclick="copyText(\'' + k + '\')" title="' + t('点击复制') + '">' + esc(k) + '</span>' +
         '<button class="btn btn-sm btn-danger" onclick="deleteKey(\'' + k + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
       '</div>'
     ).join('');
@@ -133,10 +133,10 @@ async function bulkEditHeaders() {
   });
   const box = document.createElement('div');
   box.innerHTML =
-    '<div class="field" style="margin-top:10px"><label>批量编辑（每行 Key: Value）</label>' +
+    '<div class="field" style="margin-top:10px"><label>' + t('批量编辑（每行 Key: Value）') + '</label>' +
     '<textarea id="headersBulk" rows="10" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)">' + esc(lines.join('\n')) + '</textarea></div>' +
-    '<div class="form-actions" style="margin-top:8px"><button class="btn btn-sm btn-primary" onclick="applyBulkHeaders()">应用并保存</button>' +
-    '<button class="btn btn-sm" onclick="loadConfig()">取消</button></div>';
+    '<div class="form-actions" style="margin-top:8px"><button class="btn btn-sm btn-primary" onclick="applyBulkHeaders()">' + t('应用并保存') + '</button>' +
+    '<button class="btn btn-sm" onclick="loadConfig()">' + t('取消') + '</button></div>';
   tbody.parentElement.parentElement.querySelector('.form-actions').style.display = 'none';
   tbody.parentElement.parentElement.appendChild(box);
 }
