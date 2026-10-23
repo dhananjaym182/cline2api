@@ -1276,6 +1276,23 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 	model, _ := params["model"].(string)
 	delete(params, servedByParam)       // 归因标记按次重算，避免流重试沿用上一次结果
 	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
+	// Request-level pin "model@ProviderName": only the named provider may
+	// serve. An explicit pin must fail loudly rather than silently fall back
+	// to a redundancy sibling, the Cline pool, or the fallback chain.
+	if bare, pin := splitProviderPin(model); pin != "" {
+		params["model"] = bare // upstream body and log attribution carry the bare id
+		resp, perr, attempted, provName := callCustomProviderAPINamed(params, stream, pin)
+		switch {
+		case attempted && perr == nil:
+			params[servedByParam] = upstreamProvider
+			params[providerNameParam] = provName
+			return resp, nil, nil
+		case !attempted:
+			return nil, nil, fmt.Errorf("no enabled provider named %q serves model %q", pin, bare)
+		default:
+			return nil, nil, perr
+		}
+	}
 	if model == "free" {
 		resp, acc, err := callFreeClineAPI(params, stream)
 		if err != nil {

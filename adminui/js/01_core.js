@@ -725,6 +725,7 @@ const I18N = {
   '访问密码': 'Access password',
   '优先级': 'Priority',
   'CodeBuddy CN（腾讯）': 'CodeBuddy CN (Tencent)',
+  '多个 Provider 提供同名模型时，可在 Model 后追加 @Provider名 钉选来源，如 deepseek-chat@我的Provider（失败只报错、不悄悄换源）。': 'When several providers serve the same model id, append @ProviderName to Model to pin the source, e.g. deepseek-chat@MyProvider. A pinned request fails loudly instead of silently switching providers.',
 };
 let LANG = 'zh';
 const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';

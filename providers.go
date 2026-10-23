@@ -1134,11 +1134,26 @@ func providerNameServesModel(name, model string) bool {
 	return false
 }
 
+// splitProviderPin parses the request-level qualified name "model@ProviderName"
+// used to deliberately pick which provider serves a model id that multiple
+// providers expose. LastIndexOf so ids containing '@' keep working; the pin is
+// only honored when non-empty.
+func splitProviderPin(model string) (bare, pin string) {
+	i := strings.LastIndex(model, "@")
+	if i <= 0 {
+		return model, ""
+	}
+	bare, pin = model[:i], strings.TrimSpace(model[i+1:])
+	if pin == "" {
+		return model, ""
+	}
+	return bare, pin
+}
+
 // resolveProvidersNamedForModel 与 resolveProvidersForModel 同规则（启用、未冷却、
 // 未超预算、服务该模型），但只保留 Name 匹配给定名称（去空白、大小写不敏感）的
 // provider。用于组合条目把模型钉到某一家上游。
-func resolveProvidersNamedForModel(model, name string) []*CustomProvider {
-	loadProviders()
+func resolveProvidersNamedForModel(model, name string) []*CustomProvider {	loadProviders()
 	providersMu.Lock()
 	defer providersMu.Unlock()
 	name = strings.TrimSpace(name)
