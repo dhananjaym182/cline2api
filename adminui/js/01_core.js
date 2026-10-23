@@ -65,7 +65,7 @@ const I18N = {
   '总': 'Total',
   '耗时': 'Duration',
   '加载更多': 'Load More',
-  '管理 API 密钥、模型、代理配置与请求头': 'Manage API keys, models, proxy config & headers',
+  '路由基础': 'Routing Basics',
   'API 密钥管理': 'API Keys',
   '生成的密钥可用于客户端访问代理 API（作为 x-api-key 或 Authorization 头）。': 'Generated keys let clients call the proxy API (as x-api-key or Authorization header).',
   '生成新密钥': 'Generate New Key',
@@ -84,7 +84,6 @@ const I18N = {
   '未启用': 'Disabled',
   '保存': 'Save',
   '设置后访问管理后台需输入密码，默认无密码': 'Password required after enabling; none by default',
-  '代理配置': 'Proxy Config',
   '默认模型': 'Default Model',
   '轮询策略': 'Rotation Strategy',
   '回退模型链': 'Fallback Model Chain',
@@ -328,7 +327,7 @@ const I18N = {
   'JSON 数组格式：[{"refreshToken":"...","email":"..."}]': 'JSON array format: [{"refreshToken":"...","email":"..."}]',
   'API Key: <生成的密钥>': 'API Key: <generated key>',
   '代理策略': 'Proxy strategy',
-  '自定义 Provider（OpenAI 兼容）': 'Custom Providers (OpenAI-compatible)',
+  'Provider 列表': 'Providers',
   '批量编辑': 'Bulk Edit',
   '批量编辑（每行 Key: Value）': 'Bulk edit (one Key: Value per line)',
   '应用并保存': 'Apply & Save',
@@ -351,7 +350,7 @@ const I18N = {
   'opencode 请求头已保存': 'opencode headers saved',
   '附加到发往 opencode zen 的请求。特殊值：': 'Attached to requests sent to opencode zen. Special values: ',
   '附加到发往 opencode zen 的请求。特殊值：$session / $request / $project / $client 会注入每请求的动态身份；留空删除该头。': 'Attached to requests sent to opencode zen. Special values: $session / $request / $project / $client inject per-request dynamic identity; an empty value deletes the header.',
-  '接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini / Mistral / Together / 自建 vLLM 等）。模型命中自定义 Provider 时优先走该上游，失败自动按回退链降级，最终兜底 Cline 池。': 'Connect any OpenAI-compatible upstream (OpenRouter / Groq / Cerebras / Gemini / Mistral / Together / self-hosted vLLM, etc.). Matching models route to the provider first; failures fall back along the chain and finally to the Cline pool.',
+  '接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini / vLLM 等），含设备码登录连接；模型命中时优先走该上游，失败按回退链降级，最终兜底 Cline 池': 'Connect any OpenAI-compatible upstream (OpenRouter / Groq / Cerebras / Gemini / vLLM, etc.), including device-code logins. Matching models route to the provider first; failures fall back along the chain and finally to the Cline pool.',
   'opencode 请求头（模拟官方客户端）': 'opencode Headers (mimic official client)',
   '粘贴 refreshToken': 'Paste refreshToken',
   '如 deepseek/deepseek-v4-flash': 'e.g. deepseek/deepseek-v4-flash',
@@ -373,7 +372,7 @@ const I18N = {
   '上游服务': 'Upstreams',
   '密钥与安全': 'Keys & Security',
   '默认模型、轮询策略、回退链与可用模型': 'Default model, rotation strategy, fallback chain & models',
-  'opencode zen、Cline 出口代理、请求头与自定义 Provider': 'opencode zen, Cline egress proxies, headers & custom providers',
+  'opencode zen、Cline 出口代理与请求头': 'opencode zen, Cline egress proxies & headers',
   'Cline 请求头': 'Cline Request Headers',
   'opencode 请求头': 'OpenCode Request Headers',
   '请求头配置': 'Headers',
@@ -417,7 +416,6 @@ const I18N = {
   '点击停用该模型': 'Click to disable this model',
   '自定义': 'Custom',
   '其他': 'Other',
-  '个模型': ' models',
   '＋ 添加模型': '＋ Add Model',
   // 模型组合（Combo）
   '模型组合': 'Model Combos',
@@ -526,7 +524,6 @@ const I18N = {
   '免费额度': 'Free quota',
   '含免费模型': 'Includes free models',
   '本地服务': 'Local servers',
-  '其他': 'Other',
   '免密钥': 'No key',
   '含免费': 'Some free',
   '本地': 'Local',
@@ -547,7 +544,6 @@ const I18N = {
   '整源免费': 'Whole source free',
   '无免费信号 → 付费': 'No free signal → paid',
   '层级（免费/付费）': 'Tier (free/paid)',
-  '自动': 'Auto',
   '当前判定': 'Current decision',
   '手动设置': 'Manually set',
   '新增': 'New',
@@ -556,12 +552,10 @@ const I18N = {
   '受保护': 'Protected',
   '没有可导入的模型': 'No models to import',
   '个已选': ' selected',
-  '导入中...': 'Importing...',
   '已导入 ': 'Imported ',
   ' 个新模型，调整 ': ' new models, adjusted ',
   ' 个层级': ' tiers',
   '请先勾选要导入的模型': 'Select models to import first',
-  '导入失败: ': 'Import failed: ',
   // §8.3 登录连接（OAuth）
   '登录连接（OAuth）': 'Logins (OAuth)',
   '为需要登录签票的上游（如 Kilo Code）做设备码授权。登录成功后，在 Provider 编辑器的「账号连接」里选中该连接，派发时自动注入 Bearer 与组织头；Token 只存服务端，不写进 Provider。': 'Device-code authorization for upstreams that issue tokens by login (e.g. Kilo Code). After sign-in, choose the connection in the Account connection field of the provider editor; Bearer and org headers are injected at dispatch. Tokens stay server-side, never copied into the provider.',
@@ -738,7 +732,8 @@ function applyTab(name){
   else if (name === 'accounts') loadAccounts();
   else if (name === 'logs') loadRequestLogs(true);
   else if (name === 'routing') { loadModels().then(() => { loadConfig(); if (routingActiveSub() === 'combos') loadCombos(); }); }
-  else if (name === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); loadProviders(); loadConnections(); }
+  else if (name === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); }
+  else if (name === 'providers') { loadProviders(); loadConnections(); }
   else if (name === 'security') { loadKeys(); loadConfig(); }
 }
 

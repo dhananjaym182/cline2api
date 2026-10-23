@@ -62,7 +62,8 @@ function showProviderEditor(p) {
   _('provModels').value = p ? (p.modelIds || []).join(', ') : '';
   _('provHeaders').value = p ? Object.entries(p.headers || {}).map(([k, v]) => k + ': ' + v).join('\n') : '';
   _('provEnabled').value = p ? String(p.enabled !== false) : 'true';
-  _('provFree').value = p ? String(!!p.free) : 'true';
+  // 手动新建默认付费：整源标 free 会把付费模型误标为免费（审计 §9.2）；free 来源应由预设/导入按模型判定
+  _('provFree').value = p ? String(!!p.free) : 'false';
   fillConnectionSelect(p ? (p.connectionId || '') : '');
   if (!_connList.length) loadConnections().then(() => fillConnectionSelect(p ? (p.connectionId || '') : ''));
   const testOut = _('provTestResult');

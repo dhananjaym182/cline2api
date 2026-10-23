@@ -44,6 +44,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
       <span class="nav-label">上游服务</span>
     </div>
+    <div class="nav-item" data-tab="providers">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      <span class="nav-label">自定义 Provider</span>
+    </div>
   </div>
   <div class="nav-section">
     <div class="nav-section-label">系统</div>
@@ -381,7 +385,7 @@
 
   <div class="page-subpage" data-subpage="config">
   <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>代理配置</div>
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>路由基础</div>
     <div class="section-body">
       <div class="form-row">
         <div class="field"><label>默认模型</label><select id="settingDefModel" onchange="updateConfig()"><option value="">加载中...</option></select></div>
@@ -539,14 +543,13 @@
   <div class="page-header">
     <div>
       <div class="large-title">上游服务</div>
-      <div class="large-subtitle">opencode zen、Cline 出口代理、请求头与自定义 Provider</div>
+      <div class="large-subtitle">opencode zen、Cline 出口代理与请求头</div>
     </div>
   </div>
   <div class="subtabs page-subtabs" data-page="upstreams">
     <div class="subtab active" data-sub="zen">opencode Zen</div>
     <div class="subtab" data-sub="cline">Cline 出口代理</div>
     <div class="subtab" data-sub="headers">请求头配置</div>
-    <div class="subtab" data-sub="providers">自定义 Provider</div>
   </div>
 
   <div class="page-subpage" data-subpage="zen">
@@ -694,16 +697,23 @@
 
   </div>
 
-  <div class="page-subpage" data-subpage="providers" style="display:none">
+</div>
+
+<div id="tab-providers" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">自定义 Provider</div>
+      <div class="large-subtitle">接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini / vLLM 等），含设备码登录连接；模型命中时优先走该上游，失败按回退链降级，最终兜底 Cline 池</div>
+    </div>
+  </div>
   <div class="section">
-    <div class="section-title"><span>自定义 Provider（OpenAI 兼容）</span>
+    <div class="section-title"><span>Provider 列表</span>
       <!-- 新增入口与「＋ 新建组合」同位：区块标题右侧， body 只放列表与编辑卡片 -->
       <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
         <button class="btn btn-sm" onclick="loadProviderPresets()">从预设添加 Provider</button>
         <button class="btn btn-sm btn-primary" onclick="showProviderEditor()">＋ 添加 Provider</button>
       </span>
     </div>
-    <div class="section-desc">接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini / Mistral / Together / 自建 vLLM 等）。模型命中自定义 Provider 时优先走该上游，失败自动按回退链降级，最终兜底 Cline 池。</div>
     <div class="section-body xscroll">
       <div id="providersList"></div>
       <div id="providerEditor" class="inline-editor" style="display:none">
@@ -837,7 +847,6 @@
         <button class="btn btn-sm btn-primary" onclick="submitConnectionImport(this)">保存连接</button>
       </div>
     </div>
-  </div>
   </div>
 </div>
 
