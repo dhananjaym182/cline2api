@@ -541,8 +541,8 @@ func handleProviderModels(w http.ResponseWriter, r *http.Request) {
 				if req.Headers == nil {
 					req.Headers = p.Headers
 				}
-				// §8.3：绑定登录连接的 provider，模型发现也用连接票
-				if conn := activeConnectionForProvider(p); conn != nil {
+				// Providers bound to connections also use a connection ticket for discovery.
+				if conn := pickConnectionForProvider(p); conn != nil {
 					if spec, ok := providerDeviceFlows[conn.Provider]; ok {
 						req.APIKey = connectionBearer(conn, spec)
 					}

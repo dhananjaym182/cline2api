@@ -98,10 +98,11 @@ func recheckCreds(p *CustomProvider) (apiKey string, headers map[string]string, 
 		}
 	}
 	apiKey = p.APIKey
-	if p.ConnectionID == "" {
+	if ids := providerConnIDs(p); len(ids) == 0 {
 		return apiKey, headers, true
 	}
-	conn := activeConnectionForProvider(p)
+	// Any pooled connection works for catalog reads; the picker rotates.
+	conn := pickConnectionForProvider(p)
 	if conn == nil {
 		return "", nil, false
 	}

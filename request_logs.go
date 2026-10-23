@@ -58,6 +58,10 @@ type RequestLog struct {
 	// ProviderName 当 Upstream=="provider" 时实际服务的自定义 Provider 显示名
 	// （自动派发或条目固定都填充）；cline/opencode 无名称，为空。
 	ProviderName string `json:"providerName,omitempty"`
+	// ConnectionID / ConnectionEmail: wave-4 attribution — set when the served
+	// response was authenticated by a login connection (OAuth/pasted token).
+	ConnectionID    string `json:"connectionId,omitempty"`
+	ConnectionEmail string `json:"connectionEmail,omitempty"`
 	// Model 实际服务本次请求的模型（回退后回写的生效模型）。为兼容既有消费方，
 	// 普通请求语义不变；组合请求也填实际服务模型，另用 RequestedModel 记录原始点名。
 	Model          string  `json:"model"`

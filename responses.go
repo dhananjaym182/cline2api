@@ -380,9 +380,7 @@ func chatStreamToResponses(w http.ResponseWriter, upstream *http.Response, reqLo
 	})
 
 	if reqLog != nil {
-		if acc != nil && latestUsage.Valid {
-			recordTokenUsage(acc, reqLog.Model, latestUsage)
-		}
+		recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
 		finalizeRequestLog(reqLog, latestUsage, firstOutputAt, startedAt, true, "")
 	}
 }
@@ -547,7 +545,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		restoreToolCallsInResponse(out2, reqLog.toolNames)
 		usage := parseTokenUsage(out2["usage"])
-		recordTokenUsage(run.Acc, reqLog.Model, usage)
+		recordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
 		finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		writeJSON(w, http.StatusOK, chatToResponses(out2))
 		return
@@ -606,7 +604,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 					out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
 					restoreToolCallsInResponse(out2, reqLog.toolNames)
 					usage := parseTokenUsage(out2["usage"])
-					recordTokenUsage(fbAcc, reqLog.Model, usage)
+					recordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
 					finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 					writeJSON(w, http.StatusOK, chatToResponses(out2))
 					return
@@ -690,9 +688,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		restoreToolCallsInResponse(out2, reqLog.toolNames)
 		usage := parseTokenUsage(out2["usage"])
-		if acc != nil {
-			recordTokenUsage(acc, reqLog.Model, usage)
-		}
+		recordUsage(acc, upResp, &reqLog, reqLog.Model, usage)
 		finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		writeJSON(w, http.StatusOK, chatToResponses(out2))
 	}

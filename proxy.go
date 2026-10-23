@@ -2197,7 +2197,7 @@ func handleStreamResponse(w http.ResponseWriter, upstream *http.Response, acc *A
 		w.Write([]byte(line + "\n"))
 		flusher.Flush()
 	}
-	recordTokenUsage(acc, reqLog.Model, latestUsage)
+	recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
 	finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, true, "")
 }
 
@@ -2250,7 +2250,7 @@ func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc
 	out = normalizeOpenAIResponse(out)
 	restoreToolCallsInResponse(out, reqLog.toolNames)
 	usage := parseTokenUsage(out["usage"])
-	recordTokenUsage(acc, reqLog.Model, usage)
+	recordUsage(acc, upstream, reqLog, reqLog.Model, usage)
 	finalizeRequestLog(reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 
 	if msg, ok := getNested(out, "choices", 0, "message").(map[string]any); ok {
@@ -2845,7 +2845,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		out := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
 		usage := parseTokenUsage(out["usage"])
-		recordTokenUsage(run.Acc, reqLog.Model, usage)
+		recordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
 		finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		restoreToolCallsInResponse(out, reqLog.toolNames)
 		anthropicResp := openAIToAnthropic(out)
@@ -2917,7 +2917,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 						}
 						out2 := normalizeOpenAIResponse(unwrapDataEnvelope(raw))
 						usage := parseTokenUsage(out2["usage"])
-						recordTokenUsage(fbAcc, reqLog.Model, usage)
+						recordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
 						finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 						restoreToolCallsInResponse(out2, reqLog.toolNames)
 						anthropicResp := openAIToAnthropic(out2)
@@ -3045,7 +3045,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		out = normalizeOpenAIResponse(out)
 		usage := parseTokenUsage(out["usage"])
-		recordTokenUsage(acc, reqLog.Model, usage)
+		recordUsage(acc, resp, &reqLog, reqLog.Model, usage)
 		finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
 		restoreToolCallsInResponse(out, reqLog.toolNames)
 		anthropicResp := openAIToAnthropic(out)
@@ -3785,7 +3785,7 @@ L:
 		msgDelta["context_management"] = cmContextManagementResponse(compactionApplied)
 	}
 	emit("message_delta", msgDelta)
-	recordTokenUsage(acc, reqLog.Model, latestUsage)
+	recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
 	finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, true, "")
 
 	emit("message_stop", map[string]any{"type": "message_stop"})

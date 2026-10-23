@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,7 +21,8 @@ import (
 // 用户可接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini 兼容层 /
 // Mistral / 自建 vLLM 等）。每个 provider 声明 baseURL、apiKey、自定义请求头、
 // 模型列表；请求按模型归属路由，失败后按 回退链 → 自动兜底 降级。
-// ============================================================================// CustomProvider 一个 OpenAI 兼容上游。
+// ============================================================================
+// CustomProvider 一个 OpenAI 兼容上游。
 type CustomProvider struct {
 	ID         string            `json:"id"`                // 稳定 ID（生成）
 	Name       string            `json:"name"`              // 显示名
@@ -36,8 +36,12 @@ type CustomProvider struct {
 	Free       bool              `json:"free"`                 // 标记免费来源（供统计/兜底）
 	// ConnectionID 绑定一个 provider 登录连接（§8.3，OAuth/粘贴 token）；非空时
 	// 派发用连接 accessToken 覆盖 apiKey，且连接失效/过期的 provider 不入候选。
-	ConnectionID string    `json:"connectionId,omitempty"`
-	RpmLimit     int       `json:"rpmLimit,omitempty"`          // 每分钟请求上限（0 = 不限）
+	ConnectionID string `json:"connectionId,omitempty"`
+	// ConnectionIDs wave-4: pool several logged-in connections per provider
+	// (round-robin + failover). When set it supersedes ConnectionID for
+	// selection; when both exist the union is used (see providerConnIDs).
+	ConnectionIDs []string  `json:"connectionIds,omitempty"`
+	RpmLimit      int       `json:"rpmLimit,omitempty"`          // 每分钟请求上限（0 = 不限）
 	DailyLimit   int       `json:"dailyRequestLimit,omitempty"` // 每日请求上限（0 = 不限）
 	CreatedAt    time.Time `json:"createdAt"`
 }
@@ -199,8 +203,9 @@ func resolveProvidersForModel(model string) []*CustomProvider {
 			if providerBudgetExceeded(p.ID, model, p.RpmLimit, p.DailyLimit) {
 				break
 			}
-			// 绑定了登录连接的 provider：连接缺失/过期/待重登时不入候选（回退链接管）
-			if p.ConnectionID != "" && activeConnectionForProvider(p) == nil {
+			// Bound connections: provider stays out of candidates only when EVERY
+			// pooled connection is missing/expired/pending reauth (fallback chain takes over).
+			if len(providerConnIDs(p)) > 0 && pickConnectionForProvider(p) == nil {
 				break
 			}
 			cs = append(cs, providerCand{p: *p})
@@ -295,69 +300,100 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 	}
 
 	endpoint := strings.TrimRight(p.BaseURL, "/") + "/chat/completions"
-	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(bodyJSON))
-	if err != nil {
-		return nil, fmt.Errorf("create provider request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
-	req.Header.Set("Content-Type", "application/json")
-	for k, v := range p.Headers {
-		if v == "" {
-			req.Header.Del(k)
-			continue
-		}
-		req.Header.Set(k, v)
-	}
-	// §8.3：绑定登录连接时用连接 token 鉴权，并注入连接级动态头（如 Kilo 组织头）
-	if conn := activeConnectionForProvider(p); conn != nil {
-		spec, hasSpec := providerDeviceFlows[conn.Provider]
-		if hasSpec {
-			req.Header.Set("Authorization", "Bearer "+connectionBearer(conn, spec))
-		} else {
-			req.Header.Set("Authorization", "Bearer "+conn.AccessToken)
-		}
-		if hasSpec && spec.OrgHeader != "" {
-			if oid := conn.ProviderSpecificData["orgId"]; oid != "" {
-				req.Header.Set(spec.OrgHeader, oid)
-			}
-		}
-	} else if p.ConnectionID != "" {
-		return nil, fmt.Errorf("provider %s: connection unavailable (expired or reauth required)", p.Name)
-	}
 
 	timeout := time.Duration(p.TimeoutSec) * time.Second
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
-	// 复用全局 transport（测试/代理定制经由 httpClient.Transport 生效）
+	// Reuse the global transport (tests/proxy customization go through httpClient.Transport).
 	client := &http.Client{Transport: httpClient.Transport, Timeout: timeout}
 
 	modelKey := fmt.Sprintf("%v", params["model"])
 	log.Printf("  provider upstream: name=%s model=%v stream=%v msgs=%d", p.Name, modelKey, stream, getMsgCount(params))
-	started := time.Now()
-	// 派发即计数：RPM/日预算按「已发出的上游请求」统计，与上游侧计量口径一致。
-	recordProviderDispatch(p.ID, modelKey)
-	resp, err := client.Do(req)
-	latency := time.Since(started).Milliseconds()
-	if err != nil {
+
+	// Wave-4 connection pool: walk the usable connections in rotation order.
+	// A connection-authenticated 401/403/429 parks that connection and retries
+	// in place with the next one BEFORE the outer next-provider loop ever sees
+	// a failure. API-key-only providers make exactly one attempt, as before.
+	connIDs := providerConnIDs(p)
+	conns := usableConnectionsForProvider(p)
+	if len(connIDs) > 0 && len(conns) == 0 {
+		return nil, fmt.Errorf("provider %s: connection unavailable (expired or reauth required)", p.Name)
+	}
+	if len(conns) == 0 {
+		conns = []*Connection{nil}
+	}
+	for i, conn := range conns {
+		req, err := http.NewRequest("POST", endpoint, bytes.NewReader(bodyJSON))
+		if err != nil {
+			return nil, fmt.Errorf("create provider request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+		req.Header.Set("Content-Type", "application/json")
+		for k, v := range p.Headers {
+			if v == "" {
+				req.Header.Del(k)
+				continue
+			}
+			req.Header.Set(k, v)
+		}
+		// Bound connection: authenticate with the connection token and inject
+		// connection-level dynamic headers (e.g. the Kilo org header).
+		if conn != nil {
+			spec, hasSpec := providerDeviceFlows[conn.Provider]
+			if hasSpec {
+				req.Header.Set("Authorization", "Bearer "+connectionBearer(conn, spec))
+			} else {
+				req.Header.Set("Authorization", "Bearer "+conn.AccessToken)
+			}
+			if hasSpec && spec.OrgHeader != "" {
+				if oid := conn.ProviderSpecificData["orgId"]; oid != "" {
+					req.Header.Set(spec.OrgHeader, oid)
+				}
+			}
+		}
+		started := time.Now()
+		// Count at dispatch: RPM/daily budget measures requests actually sent upstream.
+		recordProviderDispatch(p.ID, modelKey)
+		resp, err := client.Do(req)
+		latency := time.Since(started).Milliseconds()
+		if err != nil {
+			recordProviderOutcome(p.ID, modelKey, false, latency)
+			return nil, fmt.Errorf("provider request: %w", err)
+		}
+		if resp.StatusCode == http.StatusOK {
+			recordProviderOutcome(p.ID, modelKey, true, latency)
+			tagResponseConn(resp, conn)
+			return resp, nil
+		}
 		recordProviderOutcome(p.ID, modelKey, false, latency)
-		return nil, fmt.Errorf("provider request: %w", err)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+		resp.Body.Close()
+		bodyStr := string(bodyBytes)
+		// Connection-specific failure with siblings left in the pool:
+		// park this connection (401/403 -> reauth, 429 -> timed cooldown)
+		// and retry with the next connection now instead of failing the provider.
+		connRetryable := conn != nil && (resp.StatusCode == http.StatusUnauthorized ||
+			resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests)
+		if connRetryable && i < len(conns)-1 {
+			if resp.StatusCode == http.StatusTooManyRequests {
+				setConnectionCooldown(conn.ID, time.Now().Add(connectionRateLimitCooldown))
+			} else {
+				markConnectionReauth(conn.ID)
+			}
+			log.Printf("  provider conn failover: name=%s conn=%s status=%d -> next connection", p.Name, conn.ID, resp.StatusCode)
+			continue
+		}
+		// Final failure: original marking semantics.
+		if conn != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+			markConnectionReauth(conn.ID)
+		}
+		if until := providerCooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); !until.IsZero() {
+			setProviderCooldown(p.ID, modelKey, until)
+		}
+		return nil, &clineAPIError{statusCode: resp.StatusCode, message: truncate(bodyStr, 500)}
 	}
-	if resp.StatusCode == http.StatusOK {
-		recordProviderOutcome(p.ID, modelKey, true, latency)
-		return resp, nil
-	}
-	recordProviderOutcome(p.ID, modelKey, false, latency)
-	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
-	bodyStr := string(bodyBytes)
-	// 连接被上游拒绝（401/403）→ 标注重登，后续派发不再选中该 provider 直到重登
-	if p.ConnectionID != "" && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
-		markConnectionReauth(p.ConnectionID)
-	}
-	if until := providerCooldownUntil(resp.StatusCode, resp.Header.Get("Retry-After"), bodyStr); !until.IsZero() {
-		setProviderCooldown(p.ID, modelKey, until)
-	}
-	return nil, &clineAPIError{statusCode: resp.StatusCode, message: truncate(bodyStr, 500)}
+	return nil, fmt.Errorf("provider %s: no connection attempts made", p.Name)
 }
 
 // providerRateLimitedKeys 错误体是否含明确的限流/额度类关键词（用于把换向前的
@@ -761,59 +797,6 @@ func sortProviderCands(cs []providerCand, model string) {
 	})
 }
 
-// handleProviderStreamResponse 转发 provider 的流式响应（OpenAI 格式）。
-func handleProviderStreamResponse(w http.ResponseWriter, upstream *http.Response, reqLog *RequestLog) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.WriteHeader(http.StatusOK)
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		return
-	}
-	reader := bufio.NewReader(upstream.Body)
-	var latestUsage tokenUsage
-	var firstOutputAt time.Time
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF && line != "" {
-				w.Write([]byte(line + "\n"))
-				flusher.Flush()
-			}
-			break
-		}
-		line = strings.TrimRight(line, "\r\n")
-		if strings.HasPrefix(line, "data:") {
-			payload := strings.TrimSpace(line[5:])
-			if payload == "" || payload == "[DONE]" {
-				w.Write([]byte(line + "\n\n"))
-				flusher.Flush()
-				continue
-			}
-			var obj map[string]any
-			if json.Unmarshal([]byte(payload), &obj) == nil {
-				normalized := normalizeOpenAIResponse(obj)
-				if u := parseTokenUsage(normalized["usage"]); u.Valid {
-					latestUsage = mergeTokenUsage(latestUsage, u)
-				}
-				if firstOutputAt.IsZero() && hasFirstOutput(normalized) {
-					firstOutputAt = time.Now()
-				}
-				if b, err := json.Marshal(normalized); err == nil {
-					w.Write([]byte("data: " + string(b) + "\n\n"))
-					flusher.Flush()
-					continue
-				}
-			}
-		}
-		w.Write([]byte(line + "\n"))
-		flusher.Flush()
-	}
-	recordTokenUsage(nil, reqLog.Model, latestUsage)
-	finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, true, "")
-}
 
 // ============================================================================
 // Provider 预设（市面常见免费/低成本 OpenAI 兼容上游）
@@ -1277,6 +1260,21 @@ func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.DailyLimit < 0 {
 		p.DailyLimit = 0
+	}
+	// Wave-4 pool hygiene: keep only connection IDs that still exist.
+	seenConn := map[string]bool{}
+	var cids []string
+	for _, id := range p.ConnectionIDs {
+		id = strings.TrimSpace(id)
+		if id == "" || seenConn[id] || !connectionExists(id) {
+			continue
+		}
+		seenConn[id] = true
+		cids = append(cids, id)
+	}
+	p.ConnectionIDs = cids
+	if p.ConnectionID != "" && !connectionExists(p.ConnectionID) {
+		p.ConnectionID = ""
 	}
 	saved := upsertProvider(&p)
 	syncProviderModels() // 模型列表 / 回退链立即反映变更

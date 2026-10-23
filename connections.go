@@ -39,6 +39,14 @@ type Connection struct {
 	ProviderSpecificData map[string]string `json:"providerSpecificData,omitempty"` // 如 orgId
 	Status               string            `json:"status"`                         // "active" | "reauth_required"
 	CreatedAt            time.Time         `json:"createdAt"`
+	// Wave-4 usage attribution (mirrors Account counters; provider traffic used
+	// to be recorded nowhere). Safe to omit for connections that never served.
+	UsageCount       int64                  `json:"usageCount,omitempty"`
+	PromptTokens     int64                  `json:"promptTokens,omitempty"`
+	CompletionTokens int64                  `json:"completionTokens,omitempty"`
+	TotalTokens      int64                  `json:"totalTokens,omitempty"`
+	CachedTokens     int64                  `json:"cachedTokens,omitempty"`
+	ModelStats       map[string]*ModelStat  `json:"modelStats,omitempty"`
 }
 
 var (
@@ -105,6 +113,9 @@ func upsertConnection(c *Connection) *Connection {
 			(fingerprint != "" && old.ProviderSpecificData["tokenFp"] == fingerprint))
 		if same {
 			c.ID, c.CreatedAt = old.ID, old.CreatedAt
+			// Usage history survives re-login/re-import replacements.
+			c.UsageCount, c.PromptTokens, c.CompletionTokens = old.UsageCount, old.PromptTokens, old.CompletionTokens
+			c.TotalTokens, c.CachedTokens, c.ModelStats = old.TotalTokens, old.CachedTokens, old.ModelStats
 			if c.ProviderSpecificData == nil {
 				c.ProviderSpecificData = map[string]string{}
 			}
@@ -132,15 +143,24 @@ func upsertConnection(c *Connection) *Connection {
 func removeConnection(id string) bool {
 	loadConnections()
 	connectionsMu.Lock()
-	defer connectionsMu.Unlock()
+	removed := false
 	for i, c := range connections {
 		if c.ID == id {
 			connections = append(connections[:i], connections[i+1:]...)
 			saveConnectionsLocked()
-			return true
+			removed = true
+			break
 		}
 	}
-	return false
+	connectionsMu.Unlock()
+	if removed {
+		// Wave-4: dropped connections must not linger in provider pools.
+		// Prune outside connectionsMu — pruneConnectionRefs takes
+		// providersMu, and candidate resolution holds providersMu while
+		// taking connectionsMu (reverse order would deadlock).
+		pruneConnectionRefs(id)
+	}
+	return removed
 }
 
 // markConnectionReauth 上游 401/403 且无刷新能力时调用（不锁死，用户重登即恢复）。
@@ -155,33 +175,6 @@ func markConnectionReauth(id string) {
 			return
 		}
 	}
-}
-
-// activeConnectionForProvider callProvider 用：连接存在、active、未过期才返回。
-// 过期且无 refreshToken → 就地标 reauth_required 并返回 nil。
-func activeConnectionForProvider(p *CustomProvider) *Connection {
-	if p.ConnectionID == "" {
-		return nil
-	}
-	loadConnections()
-	connectionsMu.Lock()
-	var out *Connection
-	for _, c := range connections {
-		if c.ID == p.ConnectionID && c.Status == "active" {
-			if c.ExpiresAt > 0 && time.Now().UnixMilli() >= c.ExpiresAt {
-				if c.RefreshToken == "" {
-					c.Status = "reauth_required"
-					saveConnectionsLocked()
-					break
-				}
-			}
-			cp := *c
-			out = &cp
-			break
-		}
-	}
-	connectionsMu.Unlock()
-	return out
 }
 
 // ---------- device-code 流程引擎 ----------
