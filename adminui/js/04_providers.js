@@ -486,7 +486,7 @@ async function loadConnections() {
 function renderConnectionsList() {
   const box = _('connectionsList');
   if (!box) return;
-  if (!_connList.length) { box.innerHTML = '<div class="empty" style="padding:10px;color:var(--text3)">' + t('暂无登录连接') + '</div>'; return; }
+  if (!_connList.length) { box.innerHTML = listEmptyState(ICON_LOGINS, t('暂无登录连接') + ' · ' + t('用设备码登录或导入已有 Token')); return; }
   box.innerHTML = '<table class="action-table"><thead><tr><th>' + t('服务') + '</th><th>' + t('方式') + '</th><th>' + t('账号') + '</th><th>' + t('状态') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
     _connList.map(c =>
       '<tr>' +

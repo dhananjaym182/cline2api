@@ -71,8 +71,11 @@ async function loadAccounts() {
       _accPage = 1;
       _('accountPager').style.display = 'none';
       updateSelCount();
-      tbody.innerHTML = '<tr><td colspan="12" class="empty">' + (_accSearch ? (t('没有匹配的账号') + '："' + esc(_accSearch) + '"') : ('👋 还没有账号 — 前往 <a href="#" onclick="switchTab(\'import\')" style="color:var(--accent);cursor:pointer">' + t('导入账号') + '</a> ' + t('添加你的第一个 Cline 账号'))) + '</td></tr>';
-      cards.innerHTML = '<div class="empty">' + (_accSearch ? (t('没有匹配的账号') + '："' + esc(_accSearch) + '"') : ('👋 还没有账号 — 前往 <a href="#" onclick="switchTab(\'import\')" style="color:var(--accent)">' + t('导入账号') + '</a> ' + t('添加你的第一个 Cline 账号'))) + '</div>';
+      const emptyMsg = _accSearch
+        ? (t('没有匹配的账号') + '："' + esc(_accSearch) + '"')
+        : (t('还没有账号') + ' — <a href="#" onclick="switchTab(\'import\')" style="color:var(--accent);cursor:pointer;text-decoration:none">' + t('导入账号') + '</a> · ' + t('支持 OAuth 登录 / 手动 Token / 批量导入'));
+      tbody.innerHTML = '<tr><td colspan="12" class="empty">' + emptyMsg + '</td></tr>';
+      cards.innerHTML = listEmptyState(ICON_ACCOUNTS, emptyMsg);
       return;
     }
     // 分页：前端切片，页码越界时收敛
@@ -341,9 +344,11 @@ function listEmptyState(icon, msg) {
 function listLoading() { return '<div class="empty"><span class="loading"></span> ' + t('加载中...') + '</div>'; }
 
 // 列表空状态图标（复用各区块标题图标）
+const ICON_ACCOUNTS = '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a5.5 5.5 0 0 1 0 7.75"/>';
 const ICON_COMBOS = '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>';
 const ICON_MODELS = '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="15" x2="15" y2="15"/>';
 const ICON_PROVIDERS = '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>';
+const ICON_LOGINS = '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>';
 
 // 统一日期时间格式化：默认单行；twoLine 仅账号表窄列使用（10% 固定宽 + nowrap，单行会溢出/折行）
 function formatDateTime(v, twoLine) {
