@@ -186,8 +186,8 @@ html[data-nav="collapsed"] .sidebar-lang{padding:0 10px 14px;border-top:none}
 .chip-row{display:flex;flex-wrap:wrap;gap:4px;margin:-4px 0 10px}
 .chip-row .model-tag{margin:0}
 @media (max-width:760px){.drawer{width:100vw;border-left:none}}
-/* 抽屉之上仍需可用的弹窗（从抽屉内打开）；Toast 单独在下方主规则设 z-index */
-#provPickerModal,#importPreviewModal,#comboModelPicker,#presetPickerModal{z-index:10003}
+/* 抽屉之上仍需可用的弹窗（从抽屉内打开）；!important 是因为这些弹窗的 z-index 写在行内 style 上 */
+#provPickerModal,#importPreviewModal,#comboModelPicker,#presetPickerModal{z-index:10003 !important}
 
 /* ===== 模型添加行（组合页统计条复用 .model-stats-bar） ===== */
 .model-composer{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:var(--radius-sm);background:var(--surface2)}
