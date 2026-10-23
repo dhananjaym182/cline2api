@@ -218,6 +218,17 @@ table{width:100%;border-collapse:collapse;table-layout:fixed}
 .model-subtable{table-layout:auto}
 .model-subtable td{padding:7px 12px;text-align:left;white-space:nowrap}
 .model-subtable td:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
+/* ===== 连接选择器（provider 抽屉）与连接池列表 ===== */
+.conn-pick-box{max-height:220px;overflow-y:auto;border:1px solid var(--border2);border-radius:8px;padding:4px 8px 6px;background:var(--surface2)}
+.conn-pick-empty{display:block;color:var(--text3);font-size:12px;padding:6px 2px}
+.conn-pick-group{color:var(--text3);font-size:11px;font-weight:600;padding:8px 2px 2px}
+.conn-pick-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:6px;font-size:12px;cursor:pointer;color:var(--text)}
+.conn-pick-item:hover{background:var(--surface)}
+.conn-pick-item.on{background:var(--surface);box-shadow:inset 0 0 0 1px var(--accent)}
+.conn-pick-item .mono{overflow-wrap:anywhere}
+.conn-pick-warn{color:var(--yellow);font-size:11px;white-space:nowrap}
+.conn-pick-usage{color:var(--text3);font-size:11px;white-space:nowrap;margin-left:auto}
+tr.conn-group-row td{background:var(--surface2);color:var(--text2);font-size:12px;font-weight:600;padding:6px var(--sp-3)}
 /* 数字列统一右对齐 + 等宽数字（Provider 优先级 / 组合条目数等） */
 .num-col,th.num-col,td.num-col{text-align:right;font-variant-numeric:tabular-nums}
 th,td{text-align:left;padding:10px var(--sp-3);border-bottom:1px solid var(--border2);font-size:var(--fs-base);vertical-align:middle;overflow-wrap:break-word}

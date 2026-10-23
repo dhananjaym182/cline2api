@@ -28,7 +28,7 @@
     <div class="nav-section-label">账户</div>
     <div class="nav-item" data-tab="accounts">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <span class="nav-label">账号管理</span>
+      <span class="nav-label">账号与连接</span>
     </div>
     <div class="nav-item" data-tab="import">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -176,8 +176,8 @@
 <div id="tab-accounts" class="tab-panel" style="display:none">
   <div class="page-header">
     <div>
-      <div class="large-title">账号管理</div>
-      <div class="large-subtitle">管理 Cline 账号池中的所有账号</div>
+      <div class="large-title">账号与连接</div>
+      <div class="large-subtitle">管理 Cline 账号池与所有 OAuth 登录连接，按模型查看各自用量</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-sm" onclick="testAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>测试全部</button>
@@ -187,6 +187,7 @@
     </div>
   </div>
   <div class="section">
+    <div class="section-title"><span>Cline 账号池</span></div>
     <div class="section-body flush">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border2)">
         <input type="text" id="accSearch" placeholder="搜索邮箱..." oninput="onAccSearch(this.value)" style="flex:1;max-width:320px;min-width:0;padding:7px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px">
@@ -210,11 +211,24 @@
       <div id="accountCards" class="account-cards"></div>
     </div>
   </div>
+  <div class="section">
+    <div class="section-title"><span>OAuth 连接池</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
+        <button class="btn btn-sm" onclick="showConnectionImport()">导入 Token</button>
+        <button class="btn btn-sm btn-primary" onclick="openDeviceLogin()">设备码登录</button>
+      </span>
+    </div>
+    <div class="section-desc">所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与轮转派发；Token 只存服务端，不写进 Provider。</div>
+    <div class="section-body flush">
+      <div id="connectionsList"></div>
+    </div>
+  </div>
 </div>
 
 <div id="tab-import" class="tab-panel" style="display:none">
   <div class="large-title">导入账号</div>
   <div class="large-subtitle">通过 OAuth 登录、手动 Token 或批量文件添加账号</div>
+  <div style="font-size:12px;color:var(--text3);margin:-6px 0 12px">第三方服务的登录连接（设备码 / 粘贴 Token）在「账号与连接」页统一管理，本页仅导入 Cline 账号</div>
   <div class="section">
     <div class="tabs" id="importTabs">
       <div class="tab active" data-tab="oauth">OAuth 浏览器登录</div>
@@ -418,6 +432,7 @@
           <label>回退模型链</label>
           <input type="text" id="settingModelChain" placeholder="z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash, cline-free/longcat-2.0, free" oninput="this.dataset.dirty='1'" onchange="updateConfig()">
           <div style="font-size:12px;color:var(--text3);margin-top:4px">逗号分隔模型 ID，可用 <code>free</code> 表示内置免费回退链；留空则自动回退到内置免费链。允许填写不在上方列表里的模型 ID（列表外的模型实测仍可用时可直接填入，同步列表只是参考）；失效条目由冷却与故障转移自动跳过</div>
+          <div class="field-hint" style="margin-top:2px"><a href="#" onclick="switchTab('combos');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">组合的回退顺序与紧急回退在「模型组合」页管理 →</a></div>
         </div>
       </div>
       <div class="form-row">
@@ -434,6 +449,14 @@
         <div class="field"><label>引擎版本</label><input type="text" id="settingVersion" disabled></div>
         <div class="field"><label>账号文件</label><input type="text" id="settingPoolPath" disabled></div>
       </div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title"><span>策略与回退一览</span></div>
+    <div class="section-desc">本页「轮询策略」= 从 Cline 账号池取号的方式（quality 同时参与自定义 Provider 评分排序）；全局「回退模型链」是组合失败的最终兜底。其余两处策略选择器在别的页面：</div>
+    <div class="section-body">
+      <div class="field-hint"><a href="#" onclick="switchTab('upstreams');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">上游服务页：opencode / Cline 出口代理策略 = 多个出口代理地址之间的选择 →</a></div>
+      <div class="field-hint"><a href="#" onclick="switchTab('combos');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">模型组合页：组合条目顺序与紧急回退 →</a></div>
     </div>
   </div>
   </div>
@@ -539,6 +562,7 @@
         </div>
       </div>
       <div class="field-hint">开启「紧急回退」后，仅当组合内所有条目都失败时，才允许继续回退到配置的全局回退链 / 内置免费链；关闭则组合内失败即结束。</div>
+      <div class="field-hint"><a href="#" onclick="hideComboEditor();switchTab('routing');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">全局回退链与账号轮询策略在「路由与模型」页管理 →</a></div>
     </div>
     <div class="drawer-group">
       <div class="form-group-label">模型条目（按优先级从上到下）</div>
@@ -647,6 +671,7 @@
             <option value="random">随机 (random)</option>
             <option value="fill">填满 (fill)</option>
           </select>
+          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="switchTab('routing');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">「路由与模型」</a></div>
         </div>
         <div class="field" style="flex:1"><label>出口冷却状态</label><div id="ocProxyCooldowns" style="font-size:12px;color:var(--text3)">-</div></div>
       </div>
@@ -672,6 +697,7 @@
             <option value="random">随机 (random)</option>
             <option value="fill">填满 (fill)</option>
           </select>
+          <div class="field-hint">仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在 <a href="#" onclick="switchTab('routing');return false" style="color:var(--accent);cursor:pointer;text-decoration:none">「路由与模型」</a></div>
         </div>
       </div>
       <div class="field" style="margin-top:10px">
@@ -802,10 +828,11 @@
           <label>免费来源（供统计）</label>
           <select id="provFree"><option value="true">免费</option><option value="false">付费</option></select>
         </div>
-        <div class="field">
-          <label>账号连接（可选）</label>
-          <select id="provConnection"><option value="">不使用连接</option></select>
-        </div>
+      </div>
+      <div class="field">
+        <label>账号连接池 <span id="provConnCount" style="font-weight:400;color:var(--text3)"></span></label>
+        <div id="provConnPick" class="conn-pick-box"><span class="conn-pick-empty">加载中...</span></div>
+        <div class="field-hint">勾选多个登录连接后轮转派发，被限流/待重登的连接自动跳过由兄弟连接顶上；不勾选 = 仅用 API Key。连接的增删在「账号与连接」页管理。</div>
       </div>
     </div>
   </div>
@@ -847,21 +874,10 @@
           </div>
         </div>
       </div>
-
-  <div class="section">
-    <div class="section-title"><span>登录连接（OAuth）</span>
-      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:400;color:var(--text3)">
-        <button class="btn btn-sm" onclick="showConnectionImport()">导入 Token</button>
-        <button class="btn btn-sm btn-primary" onclick="openDeviceLogin()">设备码登录</button>
-      </span>
-    </div>
-    <div class="section-desc">为需要登录签票的上游（如 Kilo Code）做设备码授权。登录成功后，在 Provider 编辑器的「账号连接」里选中该连接，派发时自动注入 Bearer 与组织头；Token 只存服务端，不写进 Provider。</div>
-    <div class="section-body">
-      <div id="connectionsList"></div>
-    </div>
-  </div>
+</div>
 
   <!-- 设备码登录弹窗：选择 provider → 展示 user code + 验证链接 → 轮询状态 -->
+  <!-- 连接弹窗位于 tab 面板之外：账号与连接页打开，跨标签页可用 -->
   <div id="connLoginModal" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeDeviceLogin()">
     <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:var(--sp-5);max-width:480px;width:100%;box-shadow:var(--shadow-lg)">
       <div style="font-size:15px;font-weight:600;color:var(--text)">设备码登录</div>
@@ -904,7 +920,6 @@
       </div>
     </div>
   </div>
-</div>
 
 <div id="tab-about" class="tab-panel" style="display:none">
   <div class="large-title">关于</div>

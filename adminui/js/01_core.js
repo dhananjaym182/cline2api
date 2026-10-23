@@ -278,7 +278,15 @@ const I18N = {
   '刷新中...': 'Refreshing...',
   '暂无模型': 'No models',
   '模型统计': 'Model Usage',
-  '按模型统计（仅免费模型）': 'Per-model usage (free models)',
+  '按模型统计（仅免费模型，按来源分组）': 'Per-model usage (free models, grouped by source)',
+  '按模型统计': 'Per-model usage',
+  'Cline 官方': 'Cline official',
+  '未命名': 'Unnamed',
+  '自定义/内置': 'Custom or built-in',
+  '连接池轮转派发': 'Connection pool round-robin',
+  '用量': 'Usage',
+  '总量': 'Total tokens',
+  '已选': 'selected',
   '展开': 'Expand',
   '收起': 'Collapse',
   '模型冷却中': 'Model cooling',
@@ -370,6 +378,14 @@ const I18N = {
   '系统': 'System',
   '路由与模型': 'Routing & Models',
   '上游服务': 'Upstreams',
+  '策略与回退一览': 'Strategies and fallbacks at a glance',
+  '本页「轮询策略」= 从 Cline 账号池取号的方式（quality 同时参与自定义 Provider 评分排序）；全局「回退模型链」是组合失败的最终兜底。其余两处策略选择器在别的页面：': 'Polling strategy (this page) = how accounts are picked from the Cline pool (quality also feeds custom provider scoring); the global fallback model chain is the last resort when combos fail. The other two strategy selectors live elsewhere:',
+  '上游服务页：opencode / Cline 出口代理策略 = 多个出口代理地址之间的选择 →': 'Upstreams page: opencode / Cline egress proxy strategy = choice among proxy addresses →',
+  '模型组合页：组合条目顺序与紧急回退 →': 'Model Combos page: combo entry order and emergency fallback →',
+  '组合的回退顺序与紧急回退在「模型组合」页管理 →': 'Combo fallback order and emergency fallback are managed on the Model Combos page →',
+  '全局回退链与账号轮询策略在「路由与模型」页管理 →': 'Global fallback chain and account rotation strategy are managed on the Routing & Models page →',
+  '仅决定多个出口代理地址之间的选择；Cline 账号轮询与 Provider 评分在': 'Only picks among egress proxy addresses; Cline account rotation and provider scoring live on',
+  '「路由与模型」': 'Routing and Models',
   '密钥与安全': 'Keys & Security',
   '默认模型、轮询策略、回退链与可用模型': 'Default model, rotation strategy, fallback chain & models',
   'opencode zen、Cline 出口代理与请求头': 'opencode zen, Cline egress proxies & headers',
@@ -582,12 +598,18 @@ const I18N = {
   '导入 Token': 'Import Token',
   '可用': 'OK',
   '确定删除该连接？绑定它的 Provider 将不再注入 token。': 'Delete this connection? Bound providers will stop injecting the token.',
-  '账号连接（可选）': 'Account connection (optional)',
-  '不使用连接': 'No connection',
+  '账号与连接': 'Accounts and Connections',
+  '管理 Cline 账号池与所有 OAuth 登录连接，按模型查看各自用量': 'Manage the Cline account pool and every OAuth login, with usage per model',
+  'Cline 账号池': 'Cline Account Pool',
+  'OAuth 连接池': 'OAuth Connection Pool',
+  '所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与轮转派发；Token 只存服务端，不写进 Provider。': 'All upstream accounts that need a login (OAuth device code / pasted token) are managed here: each connection tracks the models and usage it served, grouped by provider. Tick logins in the provider editor pool to join round-robin dispatch; tokens stay server-side and are never copied into providers.',
+  '第三方服务的登录连接（设备码 / 粘贴 Token）在「账号与连接」页统一管理，本页仅导入 Cline 账号': 'Third-party logins (device code / pasted token) live on the Accounts and Connections page; this page only imports Cline accounts',
+  '账号连接池': 'Account connection pool',
+  '勾选多个登录连接后轮转派发，被限流/待重登的连接自动跳过由兄弟连接顶上；不勾选 = 仅用 API Key。连接的增删在「账号与连接」页管理。': 'Tick multiple logins for round-robin dispatch; rate-limited or reauth-pending ones are skipped while siblings take over. Tick none to use the API key only. Connections are added and removed on the Accounts and Connections page.',
   '复制': 'Copy',
   '需登录': 'Login required',
-  '设备码登录后，在编辑器「账号连接」中选择连接；无需 API Key': 'Sign in via device code, then choose the connection under Account connection in the editor; no API key needed',
-  '已填充登录类预设：请在「登录连接（OAuth）」完成设备码登录，再在编辑器「账号连接」选择连接': 'Login preset applied: complete a device-code login under Logins (OAuth), then pick the connection in Account connection',
+  '设备码连接：在「账号与连接」添加，编辑器「账号连接池」勾选即可；无需 API Key': 'Device-code connection: add it under Accounts and Connections, then tick it in the editor pool; no API key needed',
+  '已填充登录类预设：请到「账号与连接」完成设备码登录，再在编辑器「账号连接池」勾选连接': 'Login preset applied: complete the device-code login under Accounts and Connections, then tick the connection in the editor pool',
   '新密钥已生成（点击复制）': 'New key generated (click to copy)',
   '暂无 API 密钥': 'No API keys yet',
   '暂无请求日志': 'No request logs yet',
@@ -790,7 +812,7 @@ function applyTab(name){
   try { history.replaceState(null, '', '#' + name); } catch(e){}
   setActiveTab(name);
   if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); }
-  else if (name === 'accounts') loadAccounts();
+  else if (name === 'accounts') { loadAccounts(); loadConnections(); }
   else if (name === 'logs') loadRequestLogs(true);
   else if (name === 'routing') { loadModels().then(() => { loadConfig(); }); }
   else if (name === 'combos') { loadCombos(); }

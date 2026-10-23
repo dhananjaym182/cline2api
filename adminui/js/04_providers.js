@@ -17,7 +17,7 @@ async function loadProviders() {
     box.innerHTML = '<table class="action-table"><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th class="num-col">优先级</th><th>状态</th><th>' + t('最近检测') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
       list.map(p =>
         '<tr>' +
-          '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + (p.connectionId ? ' <span style="color:var(--accent);font-size:11px">token</span>' : '') + '</td>' +
+          '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + (function () { const n = (p.connectionIds || []).length || (p.connectionId ? 1 : 0); return n ? ' <span style="color:var(--accent);font-size:11px" title="' + t('连接池轮转派发') + '">token×' + n + '</span>' : ''; })() + '</td>' +
           '<td class="mono" style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(p.baseURL) + '</td>' +
           '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc((p.modelIds || []).join(', ')) + '</td>' +
           '<td class="num-col">' + p.priority + '</td>' +
@@ -181,8 +181,8 @@ function showProviderEditor(p) {
   _('provEnabled').value = p ? String(p.enabled !== false) : 'true';
   // 手动新建默认付费：整源标 free 会把付费模型误标为免费（审计 §9.2）；free 来源应由预设/导入按模型判定
   _('provFree').value = p ? String(!!p.free) : 'false';
-  fillConnectionSelect(p ? (p.connectionId || '') : '');
-  if (!_connList.length) loadConnections().then(() => fillConnectionSelect(p ? (p.connectionId || '') : ''));
+  initConnPick(p ? (p.connectionIds && p.connectionIds.length ? p.connectionIds : (p.connectionId ? [p.connectionId] : [])) : []);
+  if (!_connList.length) loadConnections();
   const testOut = _('provTestResult');
   if (testOut) testOut.innerHTML = '';
   renderProvModelChips();
@@ -232,7 +232,8 @@ async function saveProvider(btn) {
     headers: parseHeaderText(_('provHeaders').value),
     enabled: _('provEnabled').value === 'true',
     free: _('provFree').value === 'true',
-    connectionId: _('provConnection') ? _('provConnection').value : '',
+    connectionIds: _provConnSel.slice(),
+    connectionId: '',
   };
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
@@ -547,7 +548,7 @@ function presetRowHTML(p) {
     '<span class="preset-name">' + esc(p.name) + '</span>' +
     '<span class="preset-key">' + esc(p.baseURL || p.key) + '</span>' +
     '<span style="display:inline-flex;gap:6px;align-items:center;flex-shrink:0">' +
-    (p.loginFlow ? '<span class="model-source-badge zen" title="' + t('设备码登录后，在编辑器「账号连接」中选择连接；无需 API Key') + '">' + t('需登录') + '</span>' : (g.badge ? '<span class="' + g.cls + '">' + t(g.badge) + '</span>' : '')) +
+    (p.loginFlow ? '<span class="model-source-badge zen" title="' + t('设备码连接：在「账号与连接」添加，编辑器「账号连接池」勾选即可；无需 API Key') + '">' + t('需登录') + '</span>' : (g.badge ? '<span class="' + g.cls + '">' + t(g.badge) + '</span>' : '')) +
     (p.modelIDs && p.modelIDs.length ? '<span class="model-source-badge">' + p.modelIDs.length + ' ' + t('个模型') + '</span>' : '') +
     '</span></div>';
 }
@@ -597,7 +598,7 @@ function applyPreset(key) {
   // 带种子模型或目录端点的预设：新建保存后自动开分级预览（勾选后才写入，绝不静默导入）
   _previewAfterSave = !p.loginFlow && (!!p.modelIDs || !!p.modelsFetcher || wholeFree);
   if (p.loginFlow) {
-    toast(t('已填充登录类预设：请在「登录连接（OAuth）」完成设备码登录，再在编辑器「账号连接」选择连接'), 'info');
+    toast(t('已填充登录类预设：请到「账号与连接」完成设备码登录，再在编辑器「账号连接池」勾选连接'), 'info');
   } else if (p.kind === 'free' || p.kind === 'local') {
     // 免密钥/本地源：直接走上游探测，弹出模型多选（免费/付费分组）
     toast(t('免密钥预设：正在自动拉取模型…'), 'info');
@@ -740,27 +741,69 @@ async function loadConnections() {
   const dl = _('connProviderList');
   if (dl) dl.innerHTML = _connFlows.map(p => '<option value="' + esc(p) + '" label="' + esc(flowLabel(p)) + '">').join('');
   const ed = _('providerEditor');
-  if (ed && ed.classList.contains('open')) fillConnectionSelect(_('provConnection') ? _('provConnection').value : '');
+  if (ed && ed.classList.contains('open')) renderConnPick();
 }
 
+// Wave-4: connection rows live on the merged Accounts page (账号与连接),
+// grouped by provider service, each with its own usage + per-model stats.
 function renderConnectionsList() {
   const box = _('connectionsList');
   if (!box) return;
   if (!_connList.length) { box.innerHTML = listEmptyState(ICON_LOGINS, t('暂无登录连接') + ' · ' + t('用设备码登录或导入已有 Token')); return; }
-  box.innerHTML = '<table class="action-table"><thead><tr><th>' + t('服务') + '</th><th>' + t('方式') + '</th><th>' + t('账号') + '</th><th>' + t('状态') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
-    _connList.map(c =>
-      '<tr>' +
-        '<td>' + esc(flowLabel(c.provider)) + ' <span class="mono" style="font-size:11px;color:var(--text3)">' + esc(c.provider) + '</span></td>' +
-        '<td style="font-size:11px;color:var(--text3)">' + esc(c.authType === 'device_code' ? t('设备码登录') : c.authType === 'import_token' ? t('导入 Token') : (c.authType || '')) + '</td>' +
-        '<td style="font-size:12px">' + esc(c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : '—')) + '</td>' +
-        '<td>' + (c.status === 'active'
-          ? '<span class="status active"><span class="status-dot active"></span>' + t('已登录') + '</span>'
-          : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('需重新登录') + '</span>') + '</td>' +
-        '<td><button class="btn btn-sm" onclick=\'testConnection("' + c.id + '", this)\'>' + t('测试') + '</button> ' +
-            '<span class="conn-row-test-out"></span> ' +
-            '<button class="btn btn-sm btn-danger" onclick=\'deleteConnection("' + c.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
-      '</tr>'
-    ).join('') + '</tbody></table>';
+  const sorted = _connList.slice().sort((a, b) =>
+    String(a.provider).localeCompare(String(b.provider)) || String(a.email || '').localeCompare(String(b.email || '')));
+  let lastProv = null;
+  const rows = sorted.map(c => {
+    let groupRow = '';
+    if (c.provider !== lastProv) {
+      lastProv = c.provider;
+      groupRow = '<tr class="conn-group-row"><td colspan="6">' + esc(flowLabel(c.provider)) +
+        ' <span class="mono" style="font-size:11px;color:var(--text3);font-weight:400">' + esc(c.provider) + '</span></td></tr>';
+    }
+    const stats = Object.values(c.modelStats || {}).sort((x, y) => y.totalTokens - x.totalTokens);
+    const statRows = stats.length
+      ? '<tr style="background:var(--surface2)"><td colspan="6" style="padding:8px 32px;color:var(--text2);font-size:12px;font-weight:600">' + t('按模型统计') + ' · ' + stats.length + ' ' + t('个模型') + '</td></tr>' +
+        stats.map(st =>
+          '<tr style="background:var(--surface2)">' +
+            '<td style="padding-left:32px" class="mono">' + esc(st.modelId) +
+              ' <span class="model-tag' + (st.cost === 'free' ? ' free' : '') + '" style="font-size:10px;padding:1px 6px">' + esc(st.cost || 'paid') + '</span></td>' +
+            '<td></td>' +
+            '<td>' + formatNumber(st.usageCount) + '</td>' +
+            '<td>' + formatTokenCount(st.promptTokens) + '</td>' +
+            '<td>' + formatTokenCount(st.totalTokens) + '</td>' +
+            '<td>' + formatTokenCount(st.cachedTokens) + '</td>' +
+          '</tr>').join('')
+      : '<tr style="background:var(--surface2)"><td colspan="6" style="padding:6px 32px;color:var(--text3);font-size:12px">' + t('暂无数据') + '</td></tr>';
+    return groupRow + '<tr>' +
+      '<td><button class="btn btn-sm btn-icon" onclick="toggleConnStats(\'' + escAttr(c.id) + '\', this)" title="' + t('展开') + '" aria-label="' + t('展开') + '">▸</button></td>' +
+      '<td style="font-size:11px;color:var(--text3)">' + esc(c.authType === 'device_code' ? t('设备码登录') : c.authType === 'import_token' ? t('导入 Token') : (c.authType || '')) + '</td>' +
+      '<td style="font-size:12px">' + esc(c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : '—')) + '</td>' +
+      '<td>' + (c.status === 'active'
+        ? '<span class="status active"><span class="status-dot active"></span>' + t('已登录') + '</span>'
+        : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('需重新登录') + '</span>') + '</td>' +
+      '<td style="font-size:12px">' + (c.usageCount
+        ? formatNumber(c.usageCount) + ' ' + t('请求') + ' · ' + formatTokenCount(c.totalTokens || 0) + ' token'
+        : '<span style="color:var(--text3)">—</span>') + '</td>' +
+      '<td><button class="btn btn-sm" onclick=\'testConnection("' + c.id + '", this)\'>' + t('测试') + '</button> ' +
+          '<span class="conn-row-test-out"></span> ' +
+          '<button class="btn btn-sm btn-danger" onclick=\'deleteConnection("' + c.id + '")\' title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button></td>' +
+      '</tr>' +
+      '<tr id="connStatsRow-' + escAttr(c.id) + '" style="display:none"><td colspan="6" style="padding:0">' +
+        '<table class="model-subtable" style="width:100%">' +
+          '<tr><th style="padding-left:32px;text-align:left">' + t('模型') + '</th><th></th><th style="text-align:left">' + t('请求') + '</th><th style="text-align:left">' + t('输入') + '</th><th style="text-align:left">' + t('总量') + '</th><th style="text-align:left">' + t('缓存') + '</th></tr>' +
+          statRows +
+        '</table></td></tr>';
+  }).join('');
+  box.innerHTML = '<table class="action-table"><thead><tr><th style="width:34px"></th><th>' + t('方式') + '</th><th>' + t('账号') + '</th><th>' + t('状态') + '</th><th>' + t('用量') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function toggleConnStats(id, btn) {
+  const row = _('connStatsRow-' + id);
+  if (!row) return;
+  const hidden = row.style.display === 'none';
+  row.style.display = hidden ? '' : 'none';
+  btn.innerHTML = hidden ? '▾' : '▸';
+  btn.title = hidden ? t('收起') : t('展开');
 }
 
 function openDeviceLogin() {
@@ -890,14 +933,43 @@ async function deleteConnection(id) {
   } catch (e) { toast(t('删除失败: ') + e.message, 'error'); }
 }
 
-// fillConnectionSelect Provider 编辑器「账号连接」下拉：列出服务端连接，保留当前选择。
-function fillConnectionSelect(selected) {
-  const sel = _('provConnection');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">' + t('不使用连接') + '</option>' +
-    _connList.map(c => '<option value="' + esc(c.id) + '"' + (c.id === selected ? ' selected' : '') + '>' +
-      esc(c.provider + (c.email ? ' · ' + c.email : '')) + (c.status === 'active' ? '' : ' (' + t('需重新登录') + ')') +
-      '</option>').join('');
+// Wave-4: connection pool picker in the provider drawer (checkbox list grouped
+// by provider service). Replaces the old single-select provConnection dropdown.
+let _provConnSel = [];
+
+function initConnPick(ids) { _provConnSel = (ids || []).slice(); renderConnPick(); }
+
+function toggleConnPick(id, on) {
+  const i = _provConnSel.indexOf(id);
+  if (on && i < 0) _provConnSel.push(id);
+  if (!on && i >= 0) _provConnSel.splice(i, 1);
+  const cnt = _('provConnCount');
+  if (cnt) cnt.textContent = ' · ' + (_provConnSel.length ? _provConnSel.length + t('已选') : t('未选择'));
+}
+
+function renderConnPick() {
+  const box = _('provConnPick');
+  if (!box) return;
+  const cnt = _('provConnCount');
+  if (cnt) cnt.textContent = ' · ' + (_provConnSel.length ? _provConnSel.length + t('已选') : t('未选择'));
+  if (!_connList.length) {
+    box.innerHTML = '<span class="conn-pick-empty">' + t('暂无登录连接') + ' · <a href="javascript:void(0)" onclick="showConnectionImport()" style="color:var(--accent)">' + t('导入 Token') + '</a></span>';
+    return;
+  }
+  const byProv = {};
+  _connList.forEach(c => { (byProv[c.provider] = byProv[c.provider] || []).push(c); });
+  box.innerHTML = Object.keys(byProv).sort().map(prov =>
+    '<div class="conn-pick-group">' + esc(flowLabel(prov)) + '</div>' +
+    byProv[prov].map(c => {
+      const on = _provConnSel.includes(c.id);
+      const who = c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : c.id);
+      return '<label class="conn-pick-item' + (on ? ' on' : '') + '">' +
+        '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="toggleConnPick(\'' + escAttr(c.id) + '\', this.checked)"> ' +
+        '<span class="mono" style="font-size:12px">' + esc(who) + '</span>' +
+        (c.status !== 'active' ? ' <span class="conn-pick-warn">' + t('需重新登录') + '</span>' : '') +
+        (c.usageCount ? ' <span class="conn-pick-usage">' + formatNumber(c.usageCount) + ' ' + t('请求') + '</span>' : '') +
+        '</label>';
+    }).join('')).join('');
 }
 
 async function saveHeaders(btn) {

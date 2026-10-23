@@ -54,6 +54,9 @@ function onAccSearch(v) {
 
 async function loadAccounts() {
   try {
+    if (!_cachedModels.length) {
+      try { const dm = await api('GET', '/models'); _cachedModels = dm.data.models || []; } catch (e) {}
+    }
     const d = await api('GET', '/accounts');
     const list = d.data.accounts;
     _lastAccountList = list || [];
@@ -88,17 +91,37 @@ async function loadAccounts() {
     updateSelCount();
     renderAccountPager(view.length);
     const sn = { active: t('活跃'), cooldown: t('冷却'), expired: t('已过期') };
-    // 模型统计子行（仅 free 模型 + 模型级冷却状态）
+    // id → catalog entry，用于按真实来源分组（表格子行与移动卡片共用）
+    const cat = {};
+    (_cachedModels || []).forEach(m => { if (!cat[m.id]) cat[m.id] = m; });
+    // key 前缀决定组顺序：Cline 官方 → Zen → 各 Provider → 自定义/内置 → 其他
+    const groupInfo = id => {
+      const m = cat[id];
+      if (!m) return { key: '4|other', label: t('其他') };
+      if (m.source === 'remote') return { key: '0|remote', label: t('Cline 官方') };
+      if (m.source === 'zen') return { key: '1|zen', label: 'Zen' };
+      if (m.source === 'provider') return { key: '2|' + (m.provider || ''), label: 'Provider · ' + (m.provider || t('未命名')) };
+      return { key: '3|custom', label: t('自定义/内置') };
+    };
+    // 模型统计子行（仅 free 模型 + 模型级冷却状态），按模型真实来源分组
     const modelStatsRow = a => {
       const stats = Object.values(a.modelStats || {}).sort((x, y) => y.totalTokens - x.totalTokens);
       const cools = a.modelCooldowns || {};
-      const rows = stats.map(st => {
+      const entries = stats.map(st => ({ id: st.modelId, stat: st }));
+      Object.keys(cools).filter(m => cools[m] && !(a.modelStats || {})[m]).forEach(m => entries.push({ id: m, coolOnly: true }));
+      const groupMap = new Map();
+      entries.forEach(e => {
+        const g = groupInfo(e.id);
+        if (!groupMap.has(g.key)) groupMap.set(g.key, { label: g.label, items: [] });
+        groupMap.get(g.key).items.push(e);
+      });
+      const statRow = st => {
         const cd = cools[st.modelId];
         const cdBadge = cd
           ? '<span class="status cooldown status-cooldown" title="' + t('模型冷却中') + ' · ' + formatCooldown(cd) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(cd) + '</span></span>'
           : '';
         return '<tr style="background:var(--surface2)">' +
-          '<td style="padding-left:32px" class="mono">' + esc(st.modelId) + ' <span class="model-tag free" style="font-size:10px;padding:1px 6px">free</span>' + '</td>' +
+          '<td style="padding-left:44px" class="mono">' + esc(st.modelId) + ' <span class="model-tag free" style="font-size:10px;padding:1px 6px">free</span>' + '</td>' +
           '<td>' + cdBadge + '</td>' +
           '<td>' + formatNumber(st.usageCount) + '</td>' +
           '<td>' + formatTokenCount(st.promptTokens) + '</td>' +
@@ -106,24 +129,28 @@ async function loadAccounts() {
           '<td>' + formatTokenCount(st.totalTokens) + '</td>' +
           '<td>' + formatTokenCount(st.cachedTokens) + '</td>' +
           '</tr>';
-      }).join('');
-      const coolsWithoutStats = Object.keys(cools).filter(m => cools[m] && !(a.modelStats || {})[m]);
-      const extraCools = coolsWithoutStats.map(m =>
+      };
+      const coolOnlyRow = m =>
         '<tr style="background:var(--surface2)">' +
-          '<td style="padding-left:32px" class="mono">' + esc(m) + '</td>' +
+          '<td style="padding-left:44px" class="mono">' + esc(m) + '</td>' +
           '<td><span class="status cooldown status-cooldown" title="' + t('模型冷却中') + ' · ' + formatCooldown(cools[m]) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(cools[m]) + '</span></span></td>' +
           '<td colspan="5"></td>' +
-        '</tr>'
-      ).join('');
+        '</tr>';
+      let body = '';
+      [...groupMap.keys()].sort().forEach(k => {
+        const grp = groupMap.get(k);
+        body += '<tr style="background:var(--surface2)"><td colspan="7" style="padding:6px 32px 2px;color:var(--text3);font-size:11px;font-weight:600">' + esc(grp.label) + ' · ' + grp.items.length + '</td></tr>';
+        grp.items.forEach(e => { body += e.stat ? statRow(e.stat) : coolOnlyRow(e.id); });
+      });
       const totalCooling = Object.keys(cools).length;
       const title = '<tr style="background:var(--surface2)">' +
         '<td colspan="7" style="padding:8px 32px;color:var(--text2);font-size:12px;font-weight:600">' +
-          t('按模型统计（仅免费模型）') + (totalCooling ? ' · <span style="color:var(--yellow)">⏳ ' + totalCooling + ' ' + t('模型冷却中') + '</span>' : '') +
+          t('按模型统计（仅免费模型，按来源分组）') + (totalCooling ? ' · <span style="color:var(--yellow)">⏳ ' + totalCooling + ' ' + t('模型冷却中') + '</span>' : '') +
         '</td></tr>';
-      if (!rows && !extraCools) {
+      if (!body) {
         return title + '<tr style="background:var(--surface2)"><td colspan="7" style="padding:6px 32px;color:var(--text3);font-size:12px">' + t('暂无数据') + '</td></tr>';
       }
-      return title + rows + extraCools;
+      return title + body;
     };
     tbody.innerHTML = pageList.map((a, i) => {
       const seq = start + i + 1;
@@ -158,26 +185,40 @@ async function loadAccounts() {
       const cardStatus = a.status === 'cooldown' && a.cooldownUntil
         ? '<span class="status cooldown status-cooldown" title="' + t('冷却 · 剩余 ') + formatCooldown(a.cooldownUntil) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(a.cooldownUntil) + '</span></span>'
         : '<span class="status ' + a.status + '"><span class="status-dot ' + a.status + '"></span>' + (sn[a.status] || a.status) + '</span>';
-      // 卡片内的模型统计（免费模型 + 冷却状态）
+      // 卡片内的模型统计（免费模型 + 冷却状态），按来源分组
       const stats = Object.values(a.modelStats || {}).sort((x, y) => y.totalTokens - x.totalTokens);
       const cools = a.modelCooldowns || {};
       const coolingCount = Object.keys(cools).length;
-      let items = '';
-      stats.forEach(st => {
-        const cd = cools[st.modelId];
-        items += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--border2);font-size:12px">' +
-          '<span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(st.modelId) +
-            (cd ? ' <span style="color:var(--yellow)">⏳' + formatCooldown(cd) + '</span>' : '') + '</span>' +
-          '<span style="white-space:nowrap">' + formatTokenCount(st.totalTokens) + t(' Tok · ') + formatNumber(st.usageCount) + t(' 次') + '</span></div>';
+      const cardEntries = stats.map(st => ({ id: st.modelId, stat: st }));
+      Object.keys(cools).filter(m => cools[m] && !(a.modelStats || {})[m]).forEach(m => cardEntries.push({ id: m, coolOnly: true }));
+      const cardGroups = new Map();
+      cardEntries.forEach(e => {
+        const g = groupInfo(e.id);
+        if (!cardGroups.has(g.key)) cardGroups.set(g.key, { label: g.label, items: [] });
+        cardGroups.get(g.key).items.push(e);
       });
-      Object.keys(cools).filter(m => !(a.modelStats || {})[m]).forEach(m => {
-        items += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--border2);font-size:12px">' +
-          '<span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(m) + '</span>' +
-          '<span style="color:var(--yellow);white-space:nowrap">⏳' + formatCooldown(cools[m]) + '</span></div>';
+      let items = '';
+      [...cardGroups.keys()].sort().forEach(k => {
+        const grp = cardGroups.get(k);
+        items += '<div style="font-size:10px;color:var(--text3);font-weight:600;padding:6px 0 2px">' + esc(grp.label) + '</div>';
+        grp.items.forEach(e => {
+          if (e.stat) {
+            const st = e.stat;
+            const cd = cools[st.modelId];
+            items += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0 5px 8px;border-bottom:1px solid var(--border2);font-size:12px">' +
+              '<span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(st.modelId) +
+                (cd ? ' <span style="color:var(--yellow)">⏳' + formatCooldown(cd) + '</span>' : '') + '</span>' +
+              '<span style="white-space:nowrap">' + formatTokenCount(st.totalTokens) + t(' Tok · ') + formatNumber(st.usageCount) + t(' 次') + '</span></div>';
+          } else {
+            items += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0 5px 8px;border-bottom:1px solid var(--border2);font-size:12px">' +
+              '<span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(e.id) + '</span>' +
+              '<span style="color:var(--yellow);white-space:nowrap">⏳' + formatCooldown(cools[e.id]) + '</span></div>';
+          }
+        });
       });
       if (!items) items = '<div style="font-size:12px;color:var(--text3);padding:4px 0">' + t('暂无数据') + '</div>';
       const modelHtml = '<div style="margin:10px 0 0;padding:10px;border-radius:8px;background:var(--surface);border:1px solid var(--border2)">' +
-        '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px">' + t('按模型统计（仅免费模型）') +
+        '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px">' + t('按模型统计（仅免费模型，按来源分组）') +
           (coolingCount ? ' · <span style="color:var(--yellow)">⏳ ' + coolingCount + '</span>' : '') + '</div>' + items + '</div>';
       return '<article class="account-card">' +
         '<div class="account-card-header"><span class="account-email">' + esc(a.email) + '</span>' +
