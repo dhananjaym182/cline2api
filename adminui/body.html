@@ -5,11 +5,12 @@
   <div class="sidebar-header">
     <div class="brand">
       <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
-      <div>
+      <div class="brand-text">
         <div class="brand-name">Cline 代理</div>
         <div class="brand-sub">多账号轮询 · 双协议</div>
       </div>
     </div>
+    <button type="button" class="nav-collapse-btn" onclick="toggleNav()" title="收起侧栏" aria-label="收起侧栏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg></button>
   </div>
   <div class="sidebar-nav">
   <div class="nav-section">
@@ -70,6 +71,10 @@
     <div><a href="#" onclick="openExternal('https://github.com/luawei1/cline2api');return false">GitHub</a> · <a href="#" onclick="openExternal('https://github.com/luawei1/cline2api/issues');return false">反馈</a> · MIT</div>
   </div>
   <div class="sidebar-lang">
+    <div class="seg theme-switch" id="themeSwitch" role="group" aria-label="主题">
+      <button type="button" data-theme-opt="light" onclick="setTheme('light')" title="浅色" aria-label="浅色"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+      <button type="button" data-theme-opt="dark" onclick="setTheme('dark')" title="深色" aria-label="深色"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+    </div>
     <div class="lang-switch">
       <button type="button" id="langZh" onclick="setLang('zh')">中文</button>
       <button type="button" id="langEn" onclick="setLang('en')">English</button>
@@ -81,70 +86,76 @@
 <div class="content-shell">
 
 <div id="tab-dashboard" class="tab-panel">
-  <div class="large-title">仪表盘</div>
-  <div class="large-subtitle">查看账号池状态与快捷操作</div>
-  <div class="metric-section">
-    <div class="metric-heading">账号状态</div>
-    <div class="cards">
-      <div class="card blue">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-      <div class="num" id="statTotal">-</div><div class="label">账号总数</div>
-    </div>
-    <div class="card green">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
-      <div class="num" id="statActive">-</div><div class="label">活跃</div>
-    </div>
-    <div class="card yellow">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-      <div class="num" id="statCooldown">-</div><div class="label">冷却</div>
-    </div>
-    <div class="card red">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div>
-      <div class="num" id="statExpired">-</div><div class="label">已过期</div>
+  <div class="page-header">
+    <div>
+      <div class="large-title">仪表盘</div>
+      <div class="large-subtitle">账号池容量与用量总览</div>
     </div>
   </div>
+  <div class="metric-section">
+    <div class="pool-hero">
+      <div class="pool-hero-top">
+        <div class="pool-hero-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>账号池容量</div>
+        <div class="pool-requests">累计请求 <b id="statPoolRequests">-</b></div>
+      </div>
+      <div class="cap-bar" id="poolCapBar" role="img" aria-label="池容量分布">
+        <span class="cap-seg ok" id="capSegActive"></span>
+        <span class="cap-seg warn" id="capSegCooldown"></span>
+        <span class="cap-seg bad" id="capSegExpired"></span>
+      </div>
+      <div class="pool-chips">
+        <span class="chip">总数 <b id="statTotal">-</b></span>
+        <span class="chip ok"><span class="dot"></span>活跃 <b id="statActive">-</b></span>
+        <span class="chip warn"><span class="dot"></span>冷却 <b id="statCooldown">-</b></span>
+        <span class="chip bad"><span class="dot"></span>已过期 <b id="statExpired">-</b></span>
+      </div>
+    </div>
   </div>
   <div class="metric-section">
     <div class="metric-heading">Token 用量</div>
-    <div class="cards tokens">
-    <div class="card blue">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-      <div class="num" id="statPromptTokens">-</div><div class="label">累计输入 Token</div>
-    </div>
-    <div class="card green">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-      <div class="num" id="statCompletionTokens">-</div><div class="label">累计输出 Token</div>
-    </div>
-    <div class="card yellow">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-      <div class="num" id="statTotalTokens">-</div><div class="label">累计总 Token</div>
-    </div>
-    <div class="card blue">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></div>
-      <div class="num" id="statCachedTokens">-</div><div class="label">缓存 Token</div>
-    </div>
+    <div class="tiles">
+      <div class="stat-tile">
+        <div class="tile-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statPromptTokens">-</div><div class="tile-label">累计输入 Token</div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="tile-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statCompletionTokens">-</div><div class="tile-label">累计输出 Token</div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="tile-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statTotalTokens">-</div><div class="tile-label">累计总 Token</div><div class="tile-sub" id="statAvgPerReq">平均 -/请求</div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="tile-icon cyan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statCachedTokens">-</div><div class="tile-label">缓存 Token</div><div class="tile-sub" id="statCacheRate">缓存率 -</div></div>
+      </div>
     </div>
   </div>
   <div class="metric-section">
     <div class="metric-heading">opencode 免费模型 · 今日用量</div>
-    <div class="cards tokens">
-      <div class="card yellow">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
-      <div class="num" id="statOcRequests">-</div><div class="label">今日请求数</div>
+    <div class="tiles">
+      <div class="stat-tile">
+        <div class="tile-icon amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statOcRequests">-</div><div class="tile-label">今日请求数</div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="tile-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statOcInputTokens">-</div><div class="tile-label">今日输入 Token</div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="tile-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statOcOutputTokens">-</div><div class="tile-label">今日输出 Token</div></div>
+      </div>
+      <div class="stat-tile">
+        <div class="tile-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="tile-body"><div class="tile-num" id="statOcTotalTokens">-</div><div class="tile-label">今日总 Token</div></div>
+      </div>
     </div>
-    <div class="card blue">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-      <div class="num" id="statOcInputTokens">-</div><div class="label">今日输入 Token</div>
-    </div>
-    <div class="card green">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-      <div class="num" id="statOcOutputTokens">-</div><div class="label">今日输出 Token</div>
-    </div>
-    <div class="card yellow">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-      <div class="num" id="statOcTotalTokens">-</div><div class="label">今日总 Token</div>
-    </div>
-    </div>
+  </div>
+  <div class="metric-section">
+    <div class="metric-heading">需要关注</div>
+    <div class="attention-list" id="dashAttention"><span class="loading"></span> 加载中...</div>
   </div>
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>快捷操作</div>
@@ -626,7 +637,7 @@
       </div>
       <div class="field" style="margin-top:10px">
         <label>代理列表</label>
-        <textarea id="ocProxies" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080" onchange="saveOcConfig()"></textarea>
+        <textarea id="ocProxies" rows="4" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080" onchange="saveOcConfig()"></textarea>
       </div>
     </div>
   </div>
@@ -650,7 +661,7 @@
       </div>
       <div class="field" style="margin-top:10px">
         <label>代理列表</label>
-        <textarea id="clineProxies" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080"></textarea>
+        <textarea id="clineProxies" rows="4" placeholder="socks5://127.0.0.1:1080&#10;http://user:pass@proxy.example.com:8080"></textarea>
       </div>
       <div class="form-actions" style="margin-top:14px">
         <button class="btn btn-primary" onclick="saveClineProxyConfig(this)">保存 Cline 代理</button>
@@ -686,7 +697,7 @@
     <div class="section-body">
       <div class="field">
         <label>请求头（每行一个，格式 Key: Value）</label>
-        <textarea id="zenHeadersBulk" rows="6" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)" placeholder="User-Agent: opencode/1.18.31&#10;x-opencode-project: global&#10;x-custom-header: my-value"></textarea>
+        <textarea id="zenHeadersBulk" rows="6" placeholder="User-Agent: opencode/1.18.31&#10;x-opencode-project: global&#10;x-custom-header: my-value"></textarea>
       </div>
       <div class="form-actions" style="margin-top:10px">
         <button class="btn btn-sm btn-primary" onclick="saveZenHeaders(this)">保存 opencode 请求头</button>
@@ -736,7 +747,7 @@
           <div class="field" style="flex:1"><label>模型 ID（逗号分隔，如 z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash）</label><input type="text" id="provModels" style="font-family:ui-monospace,monospace"></div>
         </div>
         <div class="form-row">
-          <div class="field" style="flex:1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--border2);border-radius:8px;padding:8px;background:var(--surface);color:var(--text)"></textarea></div>
+          <div class="field" style="flex:1"><label>自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）</label><textarea id="provHeaders" rows="3"></textarea></div>
         </div>
         <div class="form-row">
           <div class="field">
@@ -858,8 +869,8 @@
     <div class="section-title">应用信息</div>
     <div class="section-body">
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
-        <div style="width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#4F46E5,#7C3AED);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <div class="app-logo-lg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         </div>
         <div>
           <div style="font-size:20px;font-weight:700;color:var(--text)">Cline2API</div>

@@ -620,6 +620,28 @@ const I18N = {
   '按优先级逐条探测；可在结果中直接启停/移除条目，保存更改后才实际落盘，取消即放弃修改。': 'Entries are probed in priority order. Enable/disable or remove entries right in the results — save applies the changes, cancel discards them.',
   '✓ 全部通过': '✓ All passed',
   '保存更改': 'Save Changes',
+  // 仪表盘改版：池容量 / 关注清单 / 主题与侧栏收起
+  '账号池容量与用量总览': 'Pool capacity and usage at a glance',
+  '账号池容量': 'Pool Capacity',
+  '累计请求': 'Total requests',
+  '总数': 'Total',
+  '需要关注': 'Needs Attention',
+  '前往处理': 'Review',
+  '已过期账号 · 需要重新导入或登录': 'Expired accounts — re-import or re-login needed',
+  '冷却中账号 · 稍后自动恢复': 'Accounts cooling down — they recover automatically',
+  '存在模型级冷却的账号': 'Accounts with model-level cooldowns',
+  '需重新登录的连接': 'Connections needing re-login',
+  '暂无需要处理的项目 · 账号池健康': 'Nothing needs attention — pool is healthy',
+  '平均 ': 'Avg ',
+  '/请求': '/req',
+  '平均 -/请求': 'Avg -/req',
+  '缓存率 ': 'Cache rate ',
+  '缓存率 -': 'Cache rate -',
+  '收起侧栏': 'Collapse sidebar',
+  '展开侧栏': 'Expand sidebar',
+  '浅色': 'Light',
+  '深色': 'Dark',
+  '主题': 'Theme',
 };
 let LANG = 'zh';
 const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
@@ -898,29 +920,39 @@ async function openExternal(url) {
   } catch (e) { toast(t('打开失败: ') + e.message, 'error'); }
 }
 
-// ========== 仪表盘 ==========
-async function loadStats() {
-  try {
-    const d = await api('GET', '/stats');
-    const s = d.data;
-    _('statTotal').textContent = s.total;
-    _('statActive').textContent = s.active;
-    _('statCooldown').textContent = s.cooldown;
-    _('statExpired').textContent = s.expired;
-    _('statPromptTokens').textContent = formatTokenCount(s.promptTokens);
-    _('statCompletionTokens').textContent = formatTokenCount(s.completionTokens);
-    _('statTotalTokens').textContent = formatTokenCount(s.totalTokens);
-    _('statCachedTokens').textContent = formatTokenCount(s.cachedTokens);
-    const oc = s.opencodeToday || {};
-    _('statOcRequests').textContent = oc.requests != null ? oc.requests : '-';
-    _('statOcInputTokens').textContent = formatTokenCount(oc.inputTokens || 0);
-    _('statOcOutputTokens').textContent = formatTokenCount(oc.outputTokens || 0);
-    _('statOcTotalTokens').textContent = formatTokenCount(oc.totalTokens || 0);
-    if (s.version) _('settingVersion').value = s.version;
-    // 设置项由 /config 返回为准；这里仅在用户未编辑时回填，避免轮询清掉正在输入的内容
-    const fillIfIdle = (id, val) => { const el = _(id); if (el && document.activeElement !== el && !el.dataset.dirty) el.value = val; };
-    if (s.strategy) fillIfIdle('settingStrategy', s.strategy);
-    fillIfIdle('settingModelChain', (s.modelChain || []).join(', '));
-  } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
+// ========== 主题（浅色 / 深色） ==========
+const THEME_KEY = 'cline_admin_theme';
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelectorAll('#themeSwitch button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.themeOpt === theme);
+  });
 }
+function setTheme(theme) {
+  if (theme !== 'light' && theme !== 'dark') return;
+  try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+  applyTheme(theme);
+}
+applyTheme(document.documentElement.dataset.theme || 'light');
+
+// ========== 侧栏收起 ==========
+const NAV_COLLAPSE_KEY = 'cline_admin_nav';
+function syncNavCollapseBtn() {
+  const collapsed = document.documentElement.dataset.nav === 'collapsed';
+  const btn = document.querySelector('.nav-collapse-btn');
+  if (!btn) return;
+  const label = collapsed ? t('展开侧栏') : t('收起侧栏');
+  btn.title = label; btn.setAttribute('aria-label', label);
+  btn.innerHTML = collapsed
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>';
+}
+function toggleNav() {
+  const collapsed = document.documentElement.dataset.nav === 'collapsed';
+  if (collapsed) delete document.documentElement.dataset.nav;
+  else document.documentElement.dataset.nav = 'collapsed';
+  try { localStorage.setItem(NAV_COLLAPSE_KEY, collapsed ? 'expanded' : 'collapsed'); } catch (e) {}
+  syncNavCollapseBtn();
+}
+syncNavCollapseBtn();
 

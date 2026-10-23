@@ -57,6 +57,7 @@ async function loadAccounts() {
     const d = await api('GET', '/accounts');
     const list = d.data.accounts;
     _lastAccountList = list || [];
+    if (window.renderAttention) renderAttention();
     const view = filteredAccountList(); // 搜索后的视图
     const tbody = _('accountTableBody');
     const cards = _('accountCards');

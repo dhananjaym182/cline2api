@@ -162,15 +162,3 @@ async function loadRequestLogs(reset) {
     }
   } catch (e) { toast(t('加载日志失败: ') + e.message, 'error'); }
 }
-
-// ========== 初始化 ==========
-applyLang();
-// 恢复上次打开的标签页（URL hash 优先，其次 sessionStorage），并加载该页数据
-const bootTab = getActiveTab();
-applyTab(bootTab);
-// 与标签页无关的全局预热：密钥列表、模型列表 + 配置
-loadKeys();
-loadModels().then(() => loadConfig());
-setInterval(() => { loadStats(); }, 10000);
-// 手动改 hash / 浏览器前进后退时同步切换标签页
-window.addEventListener('hashchange', () => applyTab(getActiveTab()));
