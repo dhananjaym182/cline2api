@@ -20,21 +20,26 @@ import (
 	"time"
 )
 
-// 分类信号（写入 Model.TierSignal，管理页可见「为什么免费」并支持手动覆盖为 "manual"）
+// Tier signals (stored in Model.TierSignal; admin UI shows why a model is free
+// and supports manual override to "manual"). Ordered strongest-first.
 const (
-	tierSignalPricingZero  = "pricing-zero"  // 上游 pricing.prompt/completion 均为 0
-	tierSignalSuffixFree   = "suffix-free"   // id 以 :free / -free 结尾
-	tierSignalAllowlist    = "allowlist"     // tags 含 free，或命中内置免费种子白名单
-	tierSignalProviderFree = "provider-free" // provider 整源免费（Free=true / 免密钥源）
-	tierSignalPaidDefault  = "paid-default"  // 无任何免费信号 → paid，不猜测
+	tierSignalPricingZero  = "pricing-zero"    // upstream pricing.prompt/completion both 0
+	tierSignalFlagFree     = "flag-free"       // entry declares free itself: free=true or mode:"free"
+	tierSignalSuffixFree   = "suffix-free"     // id ends with :free / -free
+	tierSignalNameToken    = "name-token-free" // id has a standalone free segment (free-x, x:free:y, cline-free/x)
+	tierSignalAllowlist    = "allowlist"       // tags contain free, or hit the built-in zen seed allowlist
+	tierSignalProviderFree = "provider-free"   // whole provider is free (Free=true / no-key source)
+	tierSignalPaidDefault  = "paid-default"    // no free signal → paid, never guessed
 )
 
-// upstreamModelEntry 是上游 /models 单条目的解析结果（OpenAI 列表 + OpenRouter 风格定价）。
+// upstreamModelEntry is one parsed /models item (OpenAI list + OpenRouter-style pricing).
 type upstreamModelEntry struct {
 	ID             string
 	PricingPrompt  *float64
 	PricingComplet *float64
 	Tags           []string
+	FreeFlag       bool   // boolean free:true on the entry (some gateways mark it this way)
+	Mode           string // string mode field (Cline catalog uses mode:"free")
 }
 
 // freeIDAllowlist 内置免费模型 id 白名单（zen 种子表 + 别名），随包初始化。
@@ -49,14 +54,36 @@ var freeIDAllowlist = func() map[string]bool {
 	return m
 }()
 
-// classifyUpstreamModel 有序信号、首个命中即返回；providerFree=整源免费（含免密钥 preset）。
+// freeNameToken reports whether the id carries a standalone "free" segment,
+// mirroring how Cline ("cline-free/x") and Zen ("y-free") name free models:
+// split on - : / _ and compare whole tokens, so freemap-style substrings
+// never match.
+func freeNameToken(id string) bool {
+	for _, tok := range strings.FieldsFunc(strings.ToLower(strings.TrimSpace(id)), func(r rune) bool {
+		return r == '-' || r == ':' || r == '/' || r == '_'
+	}) {
+		if tok == "free" {
+			return true
+		}
+	}
+	return false
+}
+
+// classifyUpstreamModel checks signals in order and returns on the first hit;
+// providerFree marks a whole-source-free provider (includes no-key presets).
 func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signal string) {
 	if e.PricingPrompt != nil && e.PricingComplet != nil && *e.PricingPrompt == 0 && *e.PricingComplet == 0 {
 		return "free", tierSignalPricingZero
 	}
+	if e.FreeFlag || strings.EqualFold(strings.TrimSpace(e.Mode), "free") {
+		return "free", tierSignalFlagFree
+	}
 	lower := strings.ToLower(e.ID)
 	if strings.HasSuffix(lower, ":free") || strings.HasSuffix(lower, "-free") {
 		return "free", tierSignalSuffixFree
+	}
+	if freeNameToken(lower) {
+		return "free", tierSignalNameToken
 	}
 	for _, tag := range e.Tags {
 		if strings.EqualFold(strings.TrimSpace(tag), "free") {
@@ -150,6 +177,15 @@ func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]
 							e.Tags = append(e.Tags, s)
 						}
 					}
+				}
+				switch fv := it["free"].(type) {
+				case bool:
+					e.FreeFlag = fv
+				case string:
+					e.FreeFlag = strings.EqualFold(strings.TrimSpace(fv), "true")
+				}
+				if mv, ok := it["mode"].(string); ok {
+					e.Mode = strings.TrimSpace(mv)
 				}
 				out = append(out, e)
 			}

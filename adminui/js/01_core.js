@@ -552,6 +552,8 @@ const I18N = {
   '扫描中...': 'Scanning...',
   '上游拉取失败': 'Upstream fetch failed',
   '定价为 0': 'Zero pricing',
+  '上游 free 标志': 'Upstream free flag',
+  'id 含 free 段': 'id contains free segment',
   'id 后缀 free': 'id suffix free',
   '免费标签/白名单': 'Free tag/allowlist',
   '整源免费': 'Whole source free',

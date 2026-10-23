@@ -612,7 +612,7 @@ function applyPreset(key) {
 let _importBatch = null;
 
 const _tierSignals = {
-  'pricing-zero': '定价为 0', 'suffix-free': 'id 后缀 free', 'allowlist': '免费标签/白名单',
+  'pricing-zero': '定价为 0', 'flag-free': '上游 free 标志', 'suffix-free': 'id 后缀 free', 'name-token-free': 'id 含 free 段', 'allowlist': '免费标签/白名单',
   'provider-free': '整源免费', 'paid-default': '无免费信号 → 付费',
 };
 
