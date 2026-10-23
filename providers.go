@@ -205,7 +205,7 @@ func resolveProvidersForModel(model string) []*CustomProvider {
 			}
 			// Bound connections: provider stays out of candidates only when EVERY
 			// pooled connection is missing/expired/pending reauth (fallback chain takes over).
-			if len(providerConnIDs(p)) > 0 && pickConnectionForProvider(p) == nil {
+			if len(providerConnIDs(p)) > 0 && !hasUsableConnection(p) {
 				break
 			}
 			cs = append(cs, providerCand{p: *p})
@@ -363,6 +363,10 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 		}
 		if resp.StatusCode == http.StatusOK {
 			recordProviderOutcome(p.ID, modelKey, true, latency)
+			if conn != nil {
+				// Consumed a real dispatch: move rotation past this connection.
+				advanceConnCursor(p, conn.ID)
+			}
 			tagResponseConn(resp, conn)
 			return resp, nil
 		}

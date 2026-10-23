@@ -111,6 +111,30 @@ func usableConnectionsForProvider(p *CustomProvider) []*Connection {
 	return out
 }
 
+// hasUsableConnection reports whether at least one bound connection is
+// currently usable WITHOUT advancing the rotation cursor. Use for pure
+// availability gates; only real dispatch may consume a cursor slot.
+func hasUsableConnection(p *CustomProvider) bool {
+	return len(usableConnectionsForProvider(p)) > 0
+}
+
+// advanceConnCursor moves the provider cursor past connID in the full id list,
+// so a cooled-down entry does not stall rotation for its siblings.
+func advanceConnCursor(p *CustomProvider, connID string) {
+	ids := providerConnIDs(p)
+	if len(ids) == 0 {
+		return
+	}
+	connPoolMu.Lock()
+	defer connPoolMu.Unlock()
+	for i, id := range ids {
+		if id == connID {
+			connCursor[p.ID] = (i + 1) % len(ids)
+			return
+		}
+	}
+}
+
 // pickConnectionForProvider returns the next usable connection (advancing the
 // round-robin cursor), or nil when the provider binds connections but none is
 // usable. Replaces activeConnectionForProvider on the call path.
@@ -125,17 +149,7 @@ func pickConnectionForProvider(p *CustomProvider) *Connection {
 		return nil
 	}
 	chosen := conns[0]
-	connPoolMu.Lock()
-	// Advance past the chosen connection's position in the FULL id list so a
-	// cooled-down entry does not stall rotation for its siblings.
-	ids := providerConnIDs(p)
-	for i, id := range ids {
-		if id == chosen.ID {
-			connCursor[p.ID] = (i + 1) % len(ids)
-			break
-		}
-	}
-	connPoolMu.Unlock()
+	advanceConnCursor(p, chosen.ID)
 	return chosen
 }
 
