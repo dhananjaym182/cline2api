@@ -877,11 +877,19 @@
         <div class="modal-card modal-card-col w640" role="dialog" aria-modal="true" aria-label="导入分级预览">
           <div class="modal-title">导入分级预览 <span id="importPreviewProv" class="mono" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
           <div id="importPreviewSummary" class="modal-sub"></div>
+          <div class="modal-sub" style="margin-bottom:6px">按「新增 / 层级变化 / 无变化 / 受保护」分组，每行标注判定依据（悬停看规则）；只有新增与层级变化可勾选。</div>
           <div class="modal-search-row">
             <input type="text" id="importPreviewSearch" placeholder="搜索模型..." aria-label="搜索模型" oninput="filterImportPreview()" onkeydown="if(event.key==='Escape')closeImportPreview()">
             <button class="btn btn-sm" onclick="importPreviewSelectAll(true)">全选</button>
             <button class="btn btn-sm" onclick="importPreviewSelectAll(false)">清空</button>
             <span id="importPreviewMatch" style="font-size:12px;color:var(--text3);white-space:nowrap"></span>
+          </div>
+          <div class="import-filter-row" role="group" aria-label="按操作过滤">
+            <button class="btn btn-sm import-act-filter active" data-act="" onclick="setImportActionFilter(this)">全部</button>
+            <button class="btn btn-sm import-act-filter" data-act="add" onclick="setImportActionFilter(this)">新增</button>
+            <button class="btn btn-sm import-act-filter" data-act="tier_change" onclick="setImportActionFilter(this)">层级变化</button>
+            <button class="btn btn-sm import-act-filter" data-act="nochange" onclick="setImportActionFilter(this)">无变化</button>
+            <button class="btn btn-sm import-act-filter" data-act="protected" onclick="setImportActionFilter(this)">受保护</button>
           </div>
           <div id="importPreviewList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
           <div class="modal-actions">

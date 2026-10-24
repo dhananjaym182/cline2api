@@ -605,6 +605,35 @@ function applyPreset(key) {
 
 // ========== §9.3 受控导入：preview → 勾选 → apply ==========
 let _importBatch = null;
+let _importActionFilter = '';
+
+// Per-signal explanation shown as the row tooltip, so the tier basis is explicit
+// instead of just a badge ("free"/"paid") with no justification.
+const _tierSignalWhy = {
+  'pricing-zero': '上游返回 prompt/completion 价格为 0',
+  'flag-free': '上游返回 free 标志或 mode=free',
+  'suffix-free': '模型 id 以 :free 或 -free 结尾',
+  'name-token-free': '模型 id 含独立的 free 词段',
+  'display-name-free': '模型显示名含 free 词段',
+  'allowlist': '免费标签或内置白名单命中',
+  'provider-free': '整个 Provider 标记为免费（无更精确的逐模型信号）',
+  'pricing-paid': '上游定价非零 → 付费',
+  'paid-default': '没有任何免费信号，保守归为付费',
+};
+function tierBasisTitle(it) {
+  const why = _tierSignalWhy[it.signal];
+  const basis = why ? t(why) : (it.reason ? t(it.reason) : '');
+  return basis;
+}
+function tierBadge(tier) {
+  return tier === 'free'
+    ? '<span class="model-source-badge custom">' + t('免费') + '</span>'
+    : '<span class="model-source-badge provider">' + t('付费') + '</span>';
+}
+function tierSplit(items) {
+  const free = items.filter(x => x.tier === 'free').length;
+  return t('免费') + ' ' + free + ' · ' + t('付费') + ' ' + (items.length - free);
+}
 
 async function previewModelImport(btn) {
   const body = _editingProviderId
@@ -631,15 +660,22 @@ async function previewModelImport(btn) {
 
 function closeImportPreview() {
   _('importPreviewModal').style.display = 'none';
+  _importActionFilter = '';
+  const s = _('importPreviewSearch');
+  if (s) s.value = '';
+  document.querySelectorAll('.import-act-filter').forEach(b => b.classList.toggle('active', !b.dataset.act));
 }
 
 function renderImportPreviewList() {
   const items = (_importBatch && _importBatch.items) || [];
   const cnt = a => items.filter(x => x.action === a).length;
   _('importPreviewProv').textContent = _importBatch ? _importBatch.providerName : '';
-  _('importPreviewSummary').textContent =
+  _('importPreviewSummary').innerHTML =
     t('新增') + ' ' + cnt('add') + ' · ' + t('层级变化') + ' ' + cnt('tier_change') +
-    ' · ' + t('无变化') + ' ' + cnt('nochange') + ' · ' + t('受保护') + ' ' + cnt('protected');
+    ' · ' + t('无变化') + ' ' + cnt('nochange') + ' · ' + t('受保护') + ' ' + cnt('protected') +
+    '<br>' + t('本批判定依据：') + tierSplit(items);
+  _importActionFilter = '';
+  document.querySelectorAll('.import-act-filter').forEach(b => b.classList.toggle('active', !b.dataset.act));
   if (!items.length) {
     _('importPreviewList').innerHTML = '<div class="empty">' + t('没有可导入的模型') + '</div>';
     _('importPreviewCount').textContent = '';
@@ -650,20 +686,35 @@ function renderImportPreviewList() {
   if (searchEl) searchEl.value = '';
   const matchEl = _('importPreviewMatch');
   if (matchEl) matchEl.textContent = '';
-  _('importPreviewList').innerHTML = items.map(it => {
-    const selectable = it.action === 'add' || it.action === 'tier_change';
-    const tierBadge = it.tier === 'free'
-      ? '<span class="model-source-badge custom">' + t('免费') + '</span>'
-      : '<span class="model-source-badge provider">' + t('付费') + '</span>';
-    let action;
-    if (it.action === 'add') action = '<span class="model-source-badge zen">' + t('新增') + '</span>';
-    else if (it.action === 'tier_change') action = '<span class="model-source-badge provider">' + t('层级变化') + ': ' + esc(it.oldTier === 'free' ? t('免费') : t('付费')) + ' → ' + esc(it.tier === 'free' ? t('免费') : t('付费')) + '</span>';
-    else if (it.action === 'protected') action = '<span class="model-source-badge" title="' + esc(it.reason || '') + '">' + t('受保护') + '</span>';
-    else action = '<span class="model-source-badge" style="opacity:.6">' + t('无变化') + '</span>';
-    const sig = '<span style="font-size:11px;color:var(--text3)">' + esc(t(_tierSignals[it.signal] || it.signal)) + '</span>';
-    return '<label class="combo-pick-row" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px">' +
-      '<input type="checkbox" class="import-approve" onchange="updateImportCount()" value="' + esc(it.modelId) + '" ' + (it.action === 'add' ? 'checked' : '') + (selectable ? '' : ' disabled') + '>' +
-      '<span class="combo-pick-id">' + esc(it.modelId) + '</span>' + tierBadge + sig + action + '</label>';
+  const groups = [
+    { action: 'add', label: t('新增') },
+    { action: 'tier_change', label: t('层级变化') },
+    { action: 'nochange', label: t('无变化') },
+    { action: 'protected', label: t('受保护') },
+  ];
+  _('importPreviewList').innerHTML = groups.map(g => {
+    const rows = items.filter(it => it.action === g.action);
+    if (!rows.length) return '';
+    rows.sort((a, b) => String(a.modelId).localeCompare(String(b.modelId)));
+    const head = '<div class="import-group-head">' + g.label +
+      ' <span class="import-group-count">' + rows.length + '</span>' +
+      ' <span class="import-group-tiers">' + tierSplit(rows) + '</span></div>';
+    const body = rows.map(it => {
+      const selectable = it.action === 'add' || it.action === 'tier_change';
+      const why = tierBasisTitle(it);
+      const sig = it.signal || it.reason
+        ? '<span class="import-basis" title="' + escAttr(why) + '">' + t('依据: ') + esc(t(_tierSignals[it.signal] || it.reason || it.signal)) + '</span>'
+        : '';
+      let action;
+      if (it.action === 'add') action = '<span class="model-source-badge zen">' + t('新增') + '</span>';
+      else if (it.action === 'tier_change') action = '<span class="model-source-badge provider">' + t('层级变化') + ': ' + esc(it.oldTier === 'free' ? t('免费') : t('付费')) + ' → ' + esc(it.tier === 'free' ? t('免费') : t('付费')) + '</span>';
+      else if (it.action === 'protected') action = '<span class="model-source-badge" title="' + escAttr(it.reason || '') + '">' + t('受保护') + '</span>';
+      else action = '<span class="model-source-badge" style="opacity:.6">' + t('无变化') + '</span>';
+      return '<label class="combo-pick-row" data-action="' + escAttr(it.action) + '" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px">' +
+        '<input type="checkbox" class="import-approve" onchange="updateImportCount()" value="' + esc(it.modelId) + '" ' + (it.action === 'add' ? 'checked' : '') + (selectable ? '' : ' disabled') + '>' +
+        '<span class="combo-pick-id">' + esc(it.modelId) + '</span>' + tierBadge(it.tier) + sig + action + '</label>';
+    }).join('');
+    return '<div class="import-group" data-action="' + g.action + '">' + head + body + '</div>';
   }).join('');
   updateImportCount();
 }
@@ -673,19 +724,34 @@ function updateImportCount() {
   _('importPreviewCount').textContent = n + ' ' + t('个已选');
 }
 
-// Hide/show preview rows by id substring without re-rendering (checkbox state stays in the DOM).
+// Hide/show preview rows by id substring and/or action group without re-rendering
+// (checkbox state stays in the DOM).
 function filterImportPreview() {
   const q = ((_('importPreviewSearch') || {}).value || '').trim().toLowerCase();
+  const act = _importActionFilter || '';
   let shown = 0;
-  document.querySelectorAll('#importPreviewList .combo-pick-row').forEach(row => {
-    const idEl = row.querySelector('.combo-pick-id');
-    const hit = !q || (idEl && idEl.textContent.toLowerCase().indexOf(q) !== -1);
-    row.style.display = hit ? 'flex' : 'none';
-    if (hit) shown++;
+  document.querySelectorAll('#importPreviewList .import-group').forEach(group => {
+    let groupShown = 0;
+    group.querySelectorAll('.combo-pick-row').forEach(row => {
+      const idEl = row.querySelector('.combo-pick-id');
+      const hit = (!act || group.dataset.action === act) &&
+        (!q || (idEl && idEl.textContent.toLowerCase().indexOf(q) !== -1));
+      row.style.display = hit ? 'flex' : 'none';
+      if (hit) groupShown++;
+    });
+    group.style.display = groupShown ? '' : 'none';
+    shown += groupShown;
   });
   const total = (_importBatch && _importBatch.items.length) || 0;
   const matchEl = _('importPreviewMatch');
-  if (matchEl) matchEl.textContent = q ? shown + ' / ' + total : '';
+  if (matchEl) matchEl.textContent = (q || act) ? shown + ' / ' + total : '';
+}
+
+// Action-group filter (all / add / tier_change / nochange / protected).
+function setImportActionFilter(btn) {
+  _importActionFilter = (btn && btn.dataset.act) || '';
+  document.querySelectorAll('.import-act-filter').forEach(b => b.classList.toggle('active', b === btn));
+  filterImportPreview();
 }
 
 // Toggle every enabled + currently visible approval checkbox (select all / clear all).
@@ -746,6 +812,7 @@ const _flowLabels = {
   kilocode: 'Kilo Code', github: 'GitHub Copilot', qwen: 'Qwen Chat',
   'kimi-coding': 'Kimi for Coding', 'codebuddy-cn': 'CodeBuddy CN（腾讯）',
   'codebuddy-intl': 'CodeBuddy Intl', workbuddy: 'WorkBuddy',
+  qoder: 'Qoder', 'qoder-cn': 'Qoder CN',
 };
 function flowLabel(p) { return t(_flowLabels[p] || p); }
 
@@ -856,6 +923,17 @@ async function beginDeviceLogin(btn) {
     if (r.error) { toast(t('发起登录失败: ') + r.error, 'error'); return; }
     _loginSessionId = r.sessionId;
     _('connLoginCode').textContent = r.userCode || '';
+    // Qoder identifies the device by nonce+verifier: the user just opens the
+    // link and approves in the browser, there is no code to type.
+    const browserOnly = provider === 'qoder' || provider === 'qoder-cn';
+    const hint = _('connLoginHint');
+    if (hint) {
+      hint.textContent = browserOnly
+        ? t('在浏览器中打开下面的链接并完成授权，然后保持本窗口打开。')
+        : t('在浏览器中打开下面的地址并输入此代码，然后保持本窗口打开。');
+    }
+    const codeRow = _('connLoginCode') ? _('connLoginCode').parentElement : null;
+    if (codeRow) codeRow.style.display = browserOnly ? 'none' : '';
     const a = _('connLoginUrl');
     a.href = r.authUrl || '#'; a.textContent = r.authUrl || '';
     _('connLoginStatus').innerHTML = '<span class="loading"></span> ' + t('等待授权...');

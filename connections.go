@@ -41,12 +41,12 @@ type Connection struct {
 	CreatedAt            time.Time         `json:"createdAt"`
 	// Wave-4 usage attribution (mirrors Account counters; provider traffic used
 	// to be recorded nowhere). Safe to omit for connections that never served.
-	UsageCount       int64                  `json:"usageCount,omitempty"`
-	PromptTokens     int64                  `json:"promptTokens,omitempty"`
-	CompletionTokens int64                  `json:"completionTokens,omitempty"`
-	TotalTokens      int64                  `json:"totalTokens,omitempty"`
-	CachedTokens     int64                  `json:"cachedTokens,omitempty"`
-	ModelStats       map[string]*ModelStat  `json:"modelStats,omitempty"`
+	UsageCount       int64                 `json:"usageCount,omitempty"`
+	PromptTokens     int64                 `json:"promptTokens,omitempty"`
+	CompletionTokens int64                 `json:"completionTokens,omitempty"`
+	TotalTokens      int64                 `json:"totalTokens,omitempty"`
+	CachedTokens     int64                 `json:"cachedTokens,omitempty"`
+	ModelStats       map[string]*ModelStat `json:"modelStats,omitempty"`
 }
 
 var (
@@ -206,6 +206,12 @@ type deviceFlowSpec struct {
 	Platform  string // state-poll：platform 查询参数（CLI / ide / workbuddy）
 	UserAgent string // state-poll：CLI/... UA
 
+	// qoder 模式（Qoder / Qoder CN）：本地生成 PKCE、nonce 与 machine_id，
+	// 浏览器打开 {LoginURL}?challenge=&challenge_method=S256&machine_id=&nonce=；
+	// GET {TokenURL}?nonce=&verifier=&challenge_method=S256 轮询，
+	// 202/404=pending，200 返回 {token, refresh_token, user_id, expires_at|expires_in}。
+	LoginURL string
+
 	// 可选二段兑换：登录 token → 短期作业票（GitHub: OAuth token → copilot job token）
 	ExchangeURL       string // GET + Bearer，响应 JSON
 	ExchangeTokenPath string // 如 "token"
@@ -261,31 +267,56 @@ var providerDeviceFlows = map[string]deviceFlowSpec{
 	// CodeBuddy 家族：同一 /v2/plugin 轮询契约，三个域名各一条（登录成功形状按
 	// 上游 services 实现镜像：code 0 + data.accessToken / 11217 pending）
 	"codebuddy-cn": {
-		Mode:        "state-poll",
-		StateURL:    "https://copilot.tencent.com/v2/plugin/auth/state",
-		TokenURL:    "https://copilot.tencent.com/v2/plugin/auth/token",
-		Platform:    "CLI",
-		UserAgent:   "CLI/2.63.2 CodeBuddy/2.63.2",
+		Mode:          "state-poll",
+		StateURL:      "https://copilot.tencent.com/v2/plugin/auth/state",
+		TokenURL:      "https://copilot.tencent.com/v2/plugin/auth/token",
+		Platform:      "CLI",
+		UserAgent:     "CLI/2.63.2 CodeBuddy/2.63.2",
 		ModelsTestURL: "https://copilot.tencent.com/v2/models",
-		IntervalSec: 5,
+		IntervalSec:   5,
 	},
 	"codebuddy-intl": {
-		Mode:        "state-poll",
-		StateURL:    "https://www.codebuddy.ai/v2/plugin/auth/state",
-		TokenURL:    "https://www.codebuddy.ai/v2/plugin/auth/token",
-		Platform:    "ide",
-		UserAgent:   "IDE/2.63.2 CodeBuddy/2.63.2",
+		Mode:          "state-poll",
+		StateURL:      "https://www.codebuddy.ai/v2/plugin/auth/state",
+		TokenURL:      "https://www.codebuddy.ai/v2/plugin/auth/token",
+		Platform:      "ide",
+		UserAgent:     "IDE/2.63.2 CodeBuddy/2.63.2",
 		ModelsTestURL: "https://www.codebuddy.ai/v2/models",
-		IntervalSec: 5,
+		IntervalSec:   5,
 	},
 	"workbuddy": {
-		Mode:        "state-poll",
-		StateURL:    "https://www.workbuddy.ai/v2/plugin/auth/state",
-		TokenURL:    "https://www.workbuddy.ai/v2/plugin/auth/token",
-		Platform:    "workbuddy",
-		UserAgent:   "CLI/2.63.2 WorkBuddy/2.63.2",
+		Mode:          "state-poll",
+		StateURL:      "https://www.workbuddy.ai/v2/plugin/auth/state",
+		TokenURL:      "https://www.workbuddy.ai/v2/plugin/auth/token",
+		Platform:      "workbuddy",
+		UserAgent:     "CLI/2.63.2 WorkBuddy/2.63.2",
 		ModelsTestURL: "https://www.workbuddy.ai/v2/models",
-		IntervalSec: 5,
+		IntervalSec:   5,
+	},
+	// Qoder（国际站 / 国内站）：PKCE S256 + nonce + machine_id 的浏览器轮询授权
+	// （对齐 9router 实现）。轮询/用户信息走 openapi 域名；ModelsTestURL 用
+	// userinfo 仅做连通性探测（推理协议为 COSY 签名的私有接口，非 OpenAI 兼容）。
+	"qoder": {
+		Mode:          "qoder",
+		LoginURL:      "https://qoder.com/device/selectAccounts",
+		TokenURL:      "https://openapi.qoder.sh/api/v1/deviceToken/poll",
+		ProfileURL:    "https://openapi.qoder.sh/api/v1/userinfo",
+		EmailPath:     "email",
+		OrgIDPath:     "organization_id",
+		ModelsTestURL: "https://openapi.qoder.sh/api/v1/userinfo",
+		UserAgent:     "Go-http-client/2.0",
+		IntervalSec:   2,
+	},
+	"qoder-cn": {
+		Mode:          "qoder",
+		LoginURL:      "https://qoder.com.cn/device/selectAccounts",
+		TokenURL:      "https://openapi.qoder.com.cn/api/v1/deviceToken/poll",
+		ProfileURL:    "https://openapi.qoder.com.cn/api/v1/userinfo",
+		EmailPath:     "email",
+		OrgIDPath:     "organization_id",
+		ModelsTestURL: "https://openapi.qoder.com.cn/api/v1/userinfo",
+		UserAgent:     "Go-http-client/2.0",
+		IntervalSec:   2,
 	},
 }
 
@@ -335,9 +366,21 @@ func jsonPathString(body map[string]any, path string) string {
 // deviceLoginResult 两种轮询模式（kilo / rfc8628）的统一成功形态。
 type deviceLoginResult struct {
 	token, refreshToken, email, orgID string
-	expiresAtMs                       int64 // 0 = 不过期（Kilo 语义）
+	userID                            string // qoder：上游 user_id，用于邮箱缺失时的账号标识
+	expiresAtMs                       int64  // 0 = 不过期（Kilo 语义）
 	exchangedToken                    string
 	exchangedExpMs                    int64
+}
+
+// newUUIDv4 生成 RFC 4122 v4 UUID（qoder 的 nonce / machine_id 形状）。
+func newUUIDv4() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
 // newPKCE S256 verifier/challenge（RFC 7636；Qwen 设备码要求带 challenge 授权、带 verifier 轮询）。
@@ -459,6 +502,47 @@ func dialHintError(op string, err error) error {
 	return fmt.Errorf("%s failed: %v", op, err)
 }
 
+// qoderExpiryMs interprets Qoder's token expiry: numeric expires_at (seconds or
+// milliseconds), RFC3339 string, or expires_in seconds. Qoder's refresh endpoint
+// rejects device tokens, so an already-expired/short lifetime would drop the
+// account into a re-login loop; like 9router we floor it to one day. With no
+// expiry hint at all the upstream default is 30 days.
+func qoderExpiryMs(data map[string]any) int64 {
+	var ms int64
+	switch v := data["expires_at"].(type) {
+	case float64:
+		ms = epochToMs(int64(v))
+	case string:
+		if n, e := strconv.ParseInt(v, 10, 64); e == nil {
+			ms = epochToMs(n)
+		} else if ts, e := time.Parse(time.RFC3339, v); e == nil {
+			ms = ts.UnixMilli()
+		}
+	}
+	if ms == 0 {
+		if n, ok := data["expires_in"].(float64); ok {
+			ms = time.Now().Add(time.Duration(n) * time.Second).UnixMilli()
+		}
+	}
+	if ms == 0 {
+		return time.Now().Add(30 * 24 * time.Hour).UnixMilli()
+	}
+	if floor := time.Now().Add(24 * time.Hour).UnixMilli(); ms < floor {
+		return floor
+	}
+	return ms
+}
+
+func epochToMs(n int64) int64 {
+	if n <= 0 {
+		return 0
+	}
+	if n < 1_000_000_000_000 {
+		return n * 1000
+	}
+	return n
+}
+
 // startProviderDeviceLogin  initiate → 会话登记 → 后台轮询 goroutine。
 func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 	spec, ok := providerDeviceFlows[provider]
@@ -466,7 +550,33 @@ func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 		return nil, fmt.Errorf("no device_code flow registered for provider %q", provider)
 	}
 	var verifier string
+	var qoderMachineID string
 	integ := func() (code, userDisp, verifURL string, expiresIn int, err error) {
+		if spec.Mode == "qoder" {
+			v, challenge, e := newPKCE()
+			if e != nil {
+				return "", "", "", 0, e
+			}
+			machineID, e := newUUIDv4()
+			if e != nil {
+				return "", "", "", 0, e
+			}
+			nonce, e := newUUIDv4()
+			if e != nil {
+				return "", "", "", 0, e
+			}
+			verifier, qoderMachineID = v, machineID
+			q := url.Values{}
+			q.Set("challenge", challenge)
+			q.Set("challenge_method", "S256")
+			q.Set("machine_id", machineID)
+			q.Set("nonce", nonce)
+			disp := strings.ToUpper(nonce)
+			if len(disp) > 8 {
+				disp = disp[:8]
+			}
+			return nonce, disp, spec.LoginURL + "?" + q.Encode(), 300, nil
+		}
 		if spec.Mode == "rfc8628" {
 			form := url.Values{}
 			form.Set("client_id", spec.ClientID)
@@ -614,6 +724,15 @@ func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 			if res.orgID != "" {
 				psd["orgId"] = res.orgID
 			}
+			if spec.Mode == "qoder" {
+				psd["authMethod"] = "device"
+				if res.userID != "" {
+					psd["userId"] = res.userID
+				}
+				if qoderMachineID != "" {
+					psd["machineId"] = qoderMachineID
+				}
+			}
 			if res.exchangedToken != "" {
 				psd["exchangedToken"] = res.exchangedToken
 				psd["exchangedExp"] = fmt.Sprintf("%d", res.exchangedExpMs)
@@ -687,6 +806,33 @@ func pollProviderDeviceToken(spec deviceFlowSpec, code string, expiresIn int, ve
 			body, _ = io.ReadAll(io.LimitReader(resp.Body, 256<<10))
 			statusCode = resp.StatusCode
 			resp.Body.Close()
+		} else if spec.Mode == "qoder" {
+			q := url.Values{}
+			q.Set("nonce", code)
+			q.Set("verifier", verifier)
+			q.Set("challenge_method", "S256")
+			req, e := http.NewRequest(http.MethodGet, spec.TokenURL+"?"+q.Encode(), nil)
+			if e != nil {
+				return nil, fmt.Errorf("poll failed: %v", e)
+			}
+			req.Header.Set("Accept", "application/json")
+			if spec.UserAgent != "" {
+				req.Header.Set("User-Agent", spec.UserAgent)
+			}
+			resp, e := client.Do(req)
+			if e != nil {
+				return nil, dialHintError("poll", e)
+			}
+			body, _ = io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+			statusCode = resp.StatusCode
+			resp.Body.Close()
+			switch statusCode {
+			case http.StatusOK:
+			case http.StatusAccepted, http.StatusNotFound: // pending
+				continue
+			default:
+				return nil, fmt.Errorf("poll failed: %d %s", statusCode, truncate(strings.TrimSpace(string(body)), 160))
+			}
 		} else {
 			resp, e := client.Get(spec.PollURLBase + "/" + url.PathEscape(code))
 			if e != nil {
@@ -756,6 +902,14 @@ func pollProviderDeviceToken(spec deviceFlowSpec, code string, expiresIn int, ve
 			if n, okk := data["expires_in"].(float64); okk && n > 0 {
 				res.expiresAtMs = time.Now().Add(time.Duration(n) * time.Second).UnixMilli()
 			}
+		} else if spec.Mode == "qoder" {
+			res.token, _ = data["token"].(string)
+			if res.token == "" {
+				return nil, fmt.Errorf("poll succeeded but response has no token")
+			}
+			res.refreshToken, _ = data["refresh_token"].(string)
+			res.userID, _ = data["user_id"].(string)
+			res.expiresAtMs = qoderExpiryMs(data)
 		} else {
 			if s, _ := data["status"].(string); s != "approved" {
 				continue // 未批准继续等
@@ -770,6 +924,9 @@ func pollProviderDeviceToken(spec deviceFlowSpec, code string, expiresIn int, ve
 			preq, _ := http.NewRequest(http.MethodGet, spec.ProfileURL, nil)
 			preq.Header.Set("Authorization", "Bearer "+res.token)
 			preq.Header.Set("Accept", "application/json")
+			if spec.Mode == "qoder" && spec.UserAgent != "" {
+				preq.Header.Set("User-Agent", spec.UserAgent)
+			}
 			if presp, e2 := client.Do(preq); e2 == nil {
 				pbody, _ := io.ReadAll(io.LimitReader(presp.Body, 256<<10))
 				presp.Body.Close()
@@ -783,6 +940,9 @@ func pollProviderDeviceToken(spec deviceFlowSpec, code string, expiresIn int, ve
 					}
 				}
 			}
+		}
+		if spec.Mode == "qoder" && res.email == "" && res.userID != "" {
+			res.email = "qoder-user-" + res.userID
 		}
 		if spec.ExchangeURL != "" {
 			tok, expMs, e := exchangeJobToken(spec, res.token)
@@ -1044,6 +1204,9 @@ func handleConnectionTest(w http.ResponseWriter, r *http.Request) {
 	}
 	hreq, _ := http.NewRequest(http.MethodGet, spec.ModelsTestURL, nil)
 	hreq.Header.Set("Authorization", "Bearer "+connectionBearer(conn, spec))
+	if spec.UserAgent != "" {
+		hreq.Header.Set("User-Agent", spec.UserAgent)
+	}
 	if spec.OrgHeader != "" && conn.ProviderSpecificData["orgId"] != "" {
 		hreq.Header.Set(spec.OrgHeader, conn.ProviderSpecificData["orgId"])
 	}

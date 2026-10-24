@@ -496,6 +496,14 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .combo-pick-id{font-family:ui-monospace,'SF Mono','Cascadia Code','Consolas',monospace;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
 .combo-pick-rank{flex-shrink:0;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:var(--on-accent);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;font-variant-numeric:tabular-nums}
 
+/* 导入预览：操作过滤 + 分组表头 + 逐行判定依据 */
+.import-filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.import-act-filter.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
+.import-group-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:11px;font-weight:700;color:var(--text2);background:var(--surface2);border-bottom:1px solid var(--border2)}
+.import-group-count{font-variant-numeric:tabular-nums;color:var(--text3);font-weight:600}
+.import-group-tiers{margin-left:auto;font-weight:400;color:var(--text3);font-variant-numeric:tabular-nums}
+.import-basis{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+
 /* 弹窗遮罩统一由 .overlay-modal / .overlay-top 提供（见弹窗层标准化区块） */
 
 .preset-group-title{position:sticky;top:0;z-index:1;background:var(--surface);padding:7px 10px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:1px solid var(--border2)}
