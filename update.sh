@@ -4,7 +4,7 @@
 # 用法:
 #   ./update.sh               拉取 origin/main 并更新
 #   ./update.sh --upstream     额外快进合并 upstream/main（需先配置 upstream 远端）
-#   ./update.sh --no-pull      跳过拉取，只测试 + 构建 + 重启
+#   ./update.sh --no-pull      跳过拉取，只测试 + 构建 + 重启 (aliases: --local, --no-fetch)
 #   ./update.sh --no-test      跳过测试（不推荐）
 #
 # 说明: 拉取/测试/构建阶段旧进程继续运行；只有全部成功后才重启，
@@ -23,7 +23,9 @@ USE_UPSTREAM=0
 
 for arg in "$@"; do
   case "$arg" in
-    --no-pull)   PULL=0 ;;
+    # --no-pull / --local / --no-fetch: build the current checkout as-is,
+    # never touching the network for git fetch/pull (origin or upstream).
+    --no-pull|--local|--no-fetch) PULL=0 ;;
     --no-test)   TESTS=0 ;;
     --upstream)  USE_UPSTREAM=1 ;;
     -h|--help)   sed -n '2,12p' "$0"; exit 0 ;;
