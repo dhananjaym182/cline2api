@@ -54,12 +54,13 @@ fi
 
 if [ "$TESTS" = 1 ]; then
   say "Running tests"
-  # 隔离测试的数据目录：单测会通过 setProxyConfig/upsertProvider 落盘，若数据目录
-  # 仍是仓库根目录，会覆盖用户真实的 .cline-config.json（模型组合/配置）等文件。
-  # 注意：各包的 TestMain 也会重定向；这里是覆盖 `./...` 全部包的额外防线。
-  TEST_DATA_DIR=$(mktemp -d)
-  trap 'rm -rf "$TEST_DATA_DIR"' EXIT
-  CLINE2API_DATA_DIR="$TEST_DATA_DIR" go test ./...
+  # go test isolation is built into resolveDataPath (see test_isolation_guard_test.go):
+  # with no CLINE2API_DATA_DIR set, every data file redirects to a throwaway temp dir,
+  # so fixtures never overwrite the real .cline-*.json in the repo root.
+  # Do NOT set CLINE2API_DATA_DIR here: an explicit dir wins over the guard AND triggers
+  # migrateLegacyDataFiles, copying live accounts/providers (real tokens) into the test
+  # directory — which made the protocol free-model fallback tests fail against real data.
+  go test ./...
 fi
 
 say "Building"
