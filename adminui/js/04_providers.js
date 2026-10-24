@@ -410,19 +410,14 @@ function provPickerToggle(id, checked) {
 
 // 工具条「全选」：把当前筛选结果里所有可勾选的模型补进勾选序列（已有的跳过，不可再选）
 function provPickerSelectAllShown() {
-  provPickerVisible().forEach(id => {
-    if (_provPickerOrder.indexOf(id) === -1 && !_provPickerExisting[id]) _provPickerOrder.push(id);
-  });
+  pickerMergeIds(_provPickerOrder, provPickerVisible().filter(id => !_provPickerExisting[id]));
   renderProvPickerList();
 }
 
 // 分组「全选」：只把当前筛选结果里该层级（free / 非 free）可勾选的模型补进序列
 function provPickerSelectAllTier(tier) {
-  provPickerVisible().forEach(id => {
-    const isFree = _provPickerTiers[id] === 'free';
-    if ((tier === 'free') !== isFree) return;
-    if (_provPickerOrder.indexOf(id) === -1 && !_provPickerExisting[id]) _provPickerOrder.push(id);
-  });
+  pickerMergeIds(_provPickerOrder, provPickerVisible().filter(id =>
+    ((tier === 'free') === (_provPickerTiers[id] === 'free')) && !_provPickerExisting[id]));
   renderProvPickerList();
 }
 
@@ -610,11 +605,6 @@ function applyPreset(key) {
 
 // ========== §9.3 受控导入：preview → 勾选 → apply ==========
 let _importBatch = null;
-
-const _tierSignals = {
-  'pricing-zero': '定价为 0', 'flag-free': '上游 free 标志', 'suffix-free': 'id 后缀 free', 'name-token-free': 'id 含 free 段', 'allowlist': '免费标签/白名单',
-  'provider-free': '整源免费', 'paid-default': '无免费信号 → 付费',
-};
 
 async function previewModelImport(btn) {
   const body = _editingProviderId

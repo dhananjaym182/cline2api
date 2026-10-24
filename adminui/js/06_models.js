@@ -151,6 +151,12 @@ function renderModelRow(m) {
   } else {
     tags += '<span class="model-tag pass">' + t('付费') + '</span>';
   }
+  // Per-row tier provenance: surface the classifier signal that decided the
+  // cost, matching the provider import preview (manual tiering shows no badge).
+  if (m.tierSignal && m.tierSignal !== 'manual' && _tierSignals[m.tierSignal]) {
+    const sigLabel = t(_tierSignals[m.tierSignal]);
+    tags += '<span class="model-source-badge" title="' + escAttr(t('自动判定层级') + ': ' + sigLabel) + '">' + esc(sigLabel) + '</span>';
+  }
   if (m._delistedAll) {
     tags += '<span class="delisted-badge" title="' + t('已从上游官方列表移除，实测可能仍可用；同步只标记不删除，上游报模型不存在时自动清理') + '">' + t('已下架') + '</span>';
   }
@@ -334,8 +340,7 @@ async function toggleModelsBatch(groupKey, disabled) {
 
 // 免费导向的批量开关：一次作用于全部合并行（不受工具栏筛选影响）
 async function bulkModelToggle(mode) {
-  const more = _('modelBulkMore');
-  if (more) more.classList.remove('open');
+  _setToolbarMoreOpen(false);
   const merged = mergeModelsById(_cachedModels);
   let rows, disabled, btn, confirmMsg;
   if (mode === 'free') {
@@ -379,14 +384,19 @@ function setModelCost(v) {
 }
 
 // ===== 模型工具栏「更多」溢出菜单：开关 + 点击外部收起（vanilla，无外部库） =====
+function _setToolbarMoreOpen(open) {
+  const more = _('modelBulkMore'), btn = _('toolbarMoreBtn');
+  if (more) more.classList.toggle('open', open);
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
 function toggleToolbarMore(ev) {
   ev.stopPropagation();
   const more = _('modelBulkMore');
-  if (more) more.classList.toggle('open');
+  if (more) _setToolbarMoreOpen(!more.classList.contains('open'));
 }
 document.addEventListener('click', e => {
   const more = _('modelBulkMore');
-  if (more && more.classList.contains('open') && !more.contains(e.target)) more.classList.remove('open');
+  if (more && more.classList.contains('open') && !more.contains(e.target)) _setToolbarMoreOpen(false);
 });
 
 // 修改模型上下文/最大输出：压缩阈值按此计算，设置后 zen 同步保留该值

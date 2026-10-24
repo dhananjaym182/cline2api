@@ -77,7 +77,7 @@ async function loadAccounts() {
       updateSelCount();
       const emptyMsg = _accSearch
         ? (t('没有匹配的账号') + '："' + esc(_accSearch) + '"')
-        : (t('还没有账号') + ' — <a href="#" onclick="showAccountLogin();return false" style="color:var(--accent);cursor:pointer;text-decoration:none">' + t('导入账号') + '</a> · ' + t('支持 OAuth 登录 / 手动 Token / 批量导入'));
+        : (t('还没有账号') + ' — <a href="#" onclick="showAccountLogin();return false" style="color:var(--accent);cursor:pointer;text-decoration:none">' + t('添加账号') + '</a> · ' + t('支持 OAuth 登录 / 手动 Token / 批量导入'));
       tbody.innerHTML = '<tr><td colspan="12" class="empty">' + emptyMsg + '</td></tr>';
       cards.innerHTML = listEmptyState(ICON_ACCOUNTS, emptyMsg);
       return;
@@ -154,9 +154,7 @@ async function loadAccounts() {
     };
     tbody.innerHTML = pageList.map((a, i) => {
       const seq = start + i + 1;
-      const statusBadge = a.status === 'cooldown' && a.cooldownUntil
-        ? '<span class="status cooldown status-cooldown" title="' + t('冷却 · 剩余 ') + formatCooldown(a.cooldownUntil) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(a.cooldownUntil) + '</span></span>'
-        : '<span class="status ' + a.status + '"><span class="status-dot ' + a.status + '"></span>' + (sn[a.status] || a.status) + '</span>';
+      const statusBadge = acctStatusBadge(a, sn);
       // 始终显示模型统计展开按钮（无数据时子行提示暂无）
       const expander = '<button class="btn btn-sm btn-icon" onclick="toggleModelRow(\'' + a.accountId + '\', this)" title="' + t('展开') + '" aria-label="' + t('展开') + '">▸</button>';
       const selBox = '<input type="checkbox" ' + (_checkedAccounts.has(a.accountId) ? 'checked' : '') + ' onchange="onSelAccount(\'' + a.accountId + '\', this.checked)">';
@@ -182,9 +180,7 @@ async function loadAccounts() {
     }).join('');
     cards.innerHTML = pageList.map(a => {
       const lu = formatDateTime(a.lastUsed);
-      const cardStatus = a.status === 'cooldown' && a.cooldownUntil
-        ? '<span class="status cooldown status-cooldown" title="' + t('冷却 · 剩余 ') + formatCooldown(a.cooldownUntil) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(a.cooldownUntil) + '</span></span>'
-        : '<span class="status ' + a.status + '"><span class="status-dot ' + a.status + '"></span>' + (sn[a.status] || a.status) + '</span>';
+      const cardStatus = acctStatusBadge(a, sn);
       // 卡片内的模型统计（免费模型 + 冷却状态），按来源分组
       const stats = Object.values(a.modelStats || {}).sort((x, y) => y.totalTokens - x.totalTokens);
       const cools = a.modelCooldowns || {};
@@ -382,8 +378,12 @@ function listEmptyState(icon, msg) {
   return '<div class="empty-state"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + icon + '</svg></div>' + msg + '</div>';
 }
 
-// 统一加载占位：spinner + 文案（模型/组合等块状列表与表格行统一）
-function listLoading() { return '<div class="empty"><span class="loading"></span> ' + t('加载中...') + '</div>'; }
+// Shared account status badge (table rows and cards): cooldown shows remaining time
+function acctStatusBadge(a, sn) {
+  return a.status === 'cooldown' && a.cooldownUntil
+    ? '<span class="status cooldown status-cooldown" title="' + t('冷却 · 剩余 ') + formatCooldown(a.cooldownUntil) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(a.cooldownUntil) + '</span></span>'
+    : '<span class="status ' + a.status + '"><span class="status-dot ' + a.status + '"></span>' + (sn[a.status] || a.status) + '</span>';
+}
 
 // 列表空状态图标（复用各区块标题图标）
 const ICON_ACCOUNTS = '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a5.5 5.5 0 0 1 0 7.75"/>';

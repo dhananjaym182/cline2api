@@ -451,9 +451,7 @@ function comboPickerToggle(model, checked) {
 
 // 工具条「全选」：把当前筛选结果里所有可选模型按显示顺序补进勾选序列
 function comboPickerSelectAllShown() {
-  comboPickerVisibleModels().forEach(m => {
-    if (_pickerOrder.indexOf(m.id) === -1) _pickerOrder.push(m.id);
-  });
+  pickerMergeIds(_pickerOrder, comboPickerVisibleModels().map(m => m.id));
   renderComboPickerList();
 }
 

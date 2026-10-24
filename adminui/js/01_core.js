@@ -6,14 +6,10 @@ const I18N = {
   '管理': 'Admin',
   '仪表盘': 'Dashboard',
   '账号管理': 'Accounts',
-  '导入账号': 'Import',
   '请求日志': 'Request Logs',
   '设置': 'Settings',
   '关于': 'About',
   '反馈': 'Feedback',
-  '查看账号池状态与快捷操作': 'Pool status & quick actions',
-  '账号状态': 'Account Status',
-  '账号总数': 'Total Accounts',
   '活跃': 'Active',
   '冷却': 'Cooldown',
   '已过期': 'Expired',
@@ -26,8 +22,6 @@ const I18N = {
   '添加账号': 'Add Account',
   '刷新全部 Token': 'Refresh All Tokens',
   '从文件导入': 'Import from File',
-  '生成 API 密钥': 'Generate API Key',
-  '管理 Cline 账号池中的所有账号': 'Manage all accounts in the pool',
   '测试全部': 'Test All',
   '导出': 'Export',
   '添加': 'Add',
@@ -93,7 +87,6 @@ const I18N = {
   '质量优先 (quality)': 'Quality-first (quality)',
   '引擎版本': 'Engine Version',
   '账号文件': 'Account File',
-  '请求头配置（模拟 Cline CLI 发出）': 'Request Headers (mimic Cline CLI)',
   '这些请求头会附加到所有转发给 Cline API 的请求中，以模拟官方客户端行为。': 'Attached to every request forwarded to the Cline API.',
   '请求头': 'Header',
   '值': 'Value',
@@ -146,7 +139,6 @@ const I18N = {
   '测试': 'Test',
   '重置': 'Reset',
   '删除': 'Delete',
-  '从未使用': 'Never used',
   '加载账号失败: ': 'Failed to load accounts: ',
   ' · 输入 ': ' · Input ',
   ' · 输出 ': ' · Output ',
@@ -200,6 +192,12 @@ const I18N = {
   '共': 'Total ',
   '个账号 · 每页': ' accounts · per page ',
   '全选本页': 'Select all on this page',
+  '主导航': 'Main navigation',
+  '语言': 'Language',
+  '搜索邮箱': 'Search email',
+  'API Key: <生成的密钥>': 'API Key: <generated key>',
+  '搜索模型': 'Search models',
+  '搜索预设': 'Search presets',
   '已下架': 'Delisted',
   '匹配': 'Match ',
   '没有匹配的账号': 'No matching accounts',
@@ -257,9 +255,7 @@ const I18N = {
   '从 Cline 同步模型': 'Sync Models from Cline',
   '模型同步': 'Model Sync',
   '上次同步': 'Last synced',
-  '从未同步': 'Never synced',
   '新增模型': 'Added models',
-  '移除模型': 'Removed models',
   '模型无变化': 'No model changes',
   '模型列表已更新': 'Model list updated',
   '上下文窗口 / 最大输出 (token)，点击⚙修改': 'Context window / max output (tokens), click ⚙ to edit',
@@ -288,8 +284,6 @@ const I18N = {
   '展开': 'Expand',
   '收起': 'Collapse',
   '模型冷却中': 'Model cooling',
-  '模型冷却中，约 ': 'Model cooling, ~',
-  '后释放': ' until release',
   '暂无数据': 'No data yet',
   // opencode 免费模型
   '从 opencode 同步模型': 'Sync Models from opencode',
@@ -318,7 +312,6 @@ const I18N = {
   '尾部保留 Token': 'Tail keep tokens',
   '摘要最大 Token': 'Max summary tokens',
   '保存 opencode 配置': 'Save opencode Config',
-  '手动保存 opencode 配置': 'Manually save opencode Config',
   '上述字段改动后会自动保存，也可点按钮手动触发。': 'Fields above are auto-saved on change; you can also trigger a save manually with the button.',
   'opencode 配置已保存': 'OpenCode config saved',
   'opencode 出口代理': 'OpenCode Egress Proxies',
@@ -331,7 +324,6 @@ const I18N = {
   '付费': 'Paid',
   '版本 dev': 'Version dev',
   'JSON 数组格式：[{"refreshToken":"...","email":"..."}]': 'JSON array format: [{"refreshToken":"...","email":"..."}]',
-  'API Key: <生成的密钥>': 'API Key: <generated key>',
   '代理策略': 'Proxy strategy',
   'Provider 列表': 'Providers',
   '批量编辑': 'Bulk Edit',
@@ -349,7 +341,6 @@ const I18N = {
   '每日请求上限（0=不限）': 'Daily request limit (0 = unlimited)',
   '配额提示：填入免费层限额后，路由会在派发前自动避开打满额度的上游，改用组内其他 provider，不再拿 429 试错': 'Quota hint: set the free-tier cap and routing avoids exhausted upstreams before dispatch, failing over to other providers in the group instead of discovering 429s by trial',
   '免费来源（供统计）': 'Free source (for stats)',
-  '模型 ID（逗号分隔，如 z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash）': 'Model IDs (comma-separated, e.g. z-ai/glm-5.3-flash, deepseek/deepseek-v4-flash)',
   '自定义请求头（每行 Key: Value，如 HTTP-Referer: https://mysite.com）': 'Custom headers (one Key: Value per line, e.g. HTTP-Referer: https://mysite.com)',
   '请求头（每行一个，格式 Key: Value）': 'Headers (one per line, format Key: Value)',
   '保存 opencode 请求头': 'Save opencode Headers',
@@ -357,7 +348,6 @@ const I18N = {
   '附加到发往 opencode zen 的请求。特殊值：': 'Attached to requests sent to opencode zen. Special values: ',
   '附加到发往 opencode zen 的请求。特殊值：$session / $request / $project / $client 会注入每请求的动态身份；留空删除该头。': 'Attached to requests sent to opencode zen. Special values: $session / $request / $project / $client inject per-request dynamic identity; an empty value deletes the header.',
   '接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini / vLLM 等），含设备码登录连接；模型命中时优先走该上游，失败按回退链降级，最终兜底 Cline 池': 'Connect any OpenAI-compatible upstream (OpenRouter / Groq / Cerebras / Gemini / vLLM, etc.), including device-code logins. Matching models route to the provider first; failures fall back along the chain and finally to the Cline pool.',
-  'opencode 请求头（模拟官方客户端）': 'opencode Headers (mimic official client)',
   '粘贴 refreshToken': 'Paste refreshToken',
   '如 deepseek/deepseek-v4-flash': 'e.g. deepseek/deepseek-v4-flash',
   '留空保存 = 清除密码': 'leave empty to save = clear password',
@@ -392,7 +382,6 @@ const I18N = {
   '请求头配置': 'Headers',
   '自定义 Provider': 'Providers',
   'API 密钥、访问控制与危险操作': 'API keys, access control & danger zone',
-  '从预设添加（免费源）': 'Add from presets (free tiers)',
   '测试连通性': 'Test connection',
   '暂无自定义 Provider': 'No custom providers yet',
   '出口冷却状态': 'Egress cooldowns',
@@ -409,17 +398,12 @@ const I18N = {
   '保存 Cline 代理': 'Save Cline proxies',
   'Cline 代理配置已保存': 'Cline proxy config saved',
   // 模型分组
-  'opencode · 免费模型': 'opencode · Free Models',
-  'opencode · 付费模型': 'opencode · Paid Models',
-  'Cline · 免费模型': 'Cline · Free Models',
-  'Cline · 付费模型': 'Cline · Paid Models',
   '用户自定义': 'User Custom',
   '点击展开/折叠': 'Click to expand/collapse',
   // 模型管理（提供商分组 + 启停开关）
   '路由配置': 'Routing',
   '模型管理': 'Models',
   '管理从 Cline / opencode 同步的模型与自定义模型。停用的模型不会出现在客户端模型列表（/v1/models）中，直接请求也会被拒绝。': 'Manage models synced from Cline / opencode and custom models. Disabled models are hidden from the client model list (/v1/models) and rejected when requested.',
-  '全部提供商': 'All providers',
   '全部计费': 'All billing',
   '全部状态': 'All statuses',
   '全部启用': 'Enable all',
@@ -432,14 +416,12 @@ const I18N = {
   '＋ 添加模型': '＋ Add Model',
   // 模型组合（Combo）
   '模型组合': 'Model Combos',
-  '＋ 新建组合': '＋ New Combo',
   '新建组合': 'New Combo',
   '编辑组合': 'Edit Combo',
   '查看账号列表': 'View accounts',
   '基础连接': 'Connection',
   '请求调优': 'Request tuning',
   '上下文压缩': 'Context compaction',
-  '把多个模型按优先级编排成组合（Combo）：命中组合时按顺序依次尝试，一个模型失败（限流/不可用）就自动切到下一个。停用的条目会被直接跳过。': 'Arrange several models into a priority-ordered combo. A matched combo is tried in order; when one model fails (rate-limited/unavailable) it automatically moves to the next. Disabled entries are skipped.',
   '组合 ID': 'Combo ID',
   '组合 ID *': 'Combo ID *',
   '描述': 'Description',
@@ -548,7 +530,6 @@ const I18N = {
   '本机推理端点（LM Studio、llama.cpp 等）': 'Local inference endpoints (LM Studio, llama.cpp, etc.)',
   '免密钥预设：正在自动拉取模型…': 'No-key preset: fetching models…',
   '导入分级预览': 'Import tier preview',
-  '请先保存 Provider 再分级导入': 'Save the provider first, then run the tier import',
   '扫描中...': 'Scanning...',
   '上游拉取失败': 'Upstream fetch failed',
   '定价为 0': 'Zero pricing',
@@ -560,6 +541,7 @@ const I18N = {
   '无免费信号 → 付费': 'No free signal → paid',
   '层级（免费/付费）': 'Tier (free/paid)',
   '当前判定': 'Current decision',
+  '自动判定层级': 'Auto-decided tier',
   '手动设置': 'Manually set',
   '新增': 'New',
   '层级变化': 'Tier change',
@@ -572,8 +554,6 @@ const I18N = {
   ' 个层级': ' tiers',
   '请先勾选要导入的模型': 'Select models to import first',
   // §8.3 登录连接（OAuth）
-  '登录连接（OAuth）': 'Logins (OAuth)',
-  '为需要登录签票的上游（如 Kilo Code）做设备码授权。登录成功后，在 Provider 编辑器的「账号连接」里选中该连接，派发时自动注入 Bearer 与组织头；Token 只存服务端，不写进 Provider。': 'Device-code authorization for upstreams that issue tokens by login (e.g. Kilo Code). After sign-in, choose the connection in the Account connection field of the provider editor; Bearer and org headers are injected at dispatch. Tokens stay server-side, never copied into the provider.',
   '设备码登录': 'Device-code login',
   '选择服务': 'Provider',
   '开始登录': 'Start login',
@@ -582,7 +562,6 @@ const I18N = {
   '发起中...': 'Starting...',
   '发起登录失败: ': 'Login start failed: ',
   '代码已复制': 'Code copied',
-  '粘贴已有的访问令牌（适合 Kilo 这类不签发刷新令牌的上游；过期后需重新导入或重新登录）。': 'Paste an existing access token (fits upstreams like Kilo that never issue refresh tokens; re-import or re-login when it expires).',
   '服务 *': 'Provider *',
   '邮箱（可选，用于去重）': 'Email (optional, for dedup)',
   'Org ID（可选）': 'Org ID (optional)',
@@ -618,7 +597,6 @@ const I18N = {
   '还没有账号': 'No accounts yet',
   '支持 OAuth 登录 / 手动 Token / 批量导入': 'Supports OAuth login / manual token / batch import',
   '用设备码登录或导入已有 Token': 'Sign in with a device code or import an existing token',
-  '点击预设快速填充': 'Click a preset to fill these in',
   '确定删除该 Provider？': 'Delete this Provider?',
   '（无可用模型）': '(no models available)',
   '上一页': 'Previous page',
@@ -630,7 +608,6 @@ const I18N = {
   '拉取中...': 'Fetching...',
   '搜索模型...': 'Search models...',
   '确认添加': 'Add selected',
-  '来自上游 /models 接口；确认后追加到下方「模型 ID」输入框，仍需手动保存。Provider 中已有的模型预勾选且不可再选。失败时先检查 Base URL 与 API Key。': 'From the upstream /models endpoint; confirmed models are appended to the Model IDs field below, then save manually. Models already on this provider are pre-checked and locked. If it fails, check Base URL and API Key first.',
   '未获取到模型：请先检查 Base URL 与 API Key': 'No models returned: check Base URL and API Key first',
   '接口不可用，请重启代理更新到新版本后再试': 'Endpoint unavailable — restart the proxy to load the new version, then retry',
   '没有匹配的模型': 'No matching models',
@@ -680,7 +657,6 @@ const I18N = {
   '重新检测': 'Re-check',
   '检测中...': 'Checking...',
   '检测失败': 'Check failed',
-  '检测完成': 'Check done',
   '待审': 'pending',
   '个新模型待审': ' new model(s) pending review',
   '查看审阅': 'Review',
@@ -765,6 +741,9 @@ function applyLang(){
   });
   _('langZh').classList.toggle('active', LANG === 'zh');
   if (_('langEn')) _('langEn').classList.toggle('active', LANG === 'en');
+  const lp = LANG === 'en' ? 'false' : 'true';
+  if (_('langZh')) _('langZh').setAttribute('aria-pressed', lp);
+  if (_('langEn')) _('langEn').setAttribute('aria-pressed', LANG === 'en' ? 'true' : 'false');
 }
 function setLang(l){
   LANG = l;
@@ -789,6 +768,19 @@ const _ = id => document.getElementById(id);
 const esc = s => { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; };
 // 属性上下文转义：esc 不处理引号，注入到 onclick / value 等属性时需额外转义引号
 const escAttr = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+// §9.3 tier-signal provenance labels, shared by the provider import preview
+// and the per-row badges on the Models page.
+const _tierSignals = {
+  'pricing-zero': '定价为 0', 'flag-free': '上游 free 标志', 'suffix-free': 'id 后缀 free', 'name-token-free': 'id 含 free 段', 'allowlist': '免费标签/白名单',
+  'provider-free': '整源免费', 'paid-default': '无免费信号 → 付费',
+};
+
+// Merge ids into a picker's checked-order array, skipping ids already present
+// (selection order equals attempt priority).
+function pickerMergeIds(order, ids) {
+  for (const id of ids) if (order.indexOf(id) === -1) order.push(id);
+}
 
 const ACTIVE_TAB_KEY = 'cline_admin_tab';
 
@@ -844,6 +836,7 @@ function toggleLoginImport(forceOpen) {
   const label = open ? '收起' : '展开';
   btn.title = label;
   btn.setAttribute('aria-label', label);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   applyLang();
 }
 
@@ -863,7 +856,11 @@ function applyTab(name){
   name = normalizeTabName(name);
   // 非法/未知标签页（如手改 URL）回退到 dashboard，避免空白页
   if (!name || !_('tab-' + name)) name = 'dashboard';
-  document.querySelectorAll('.nav-item').forEach(e => e.classList.toggle('active', e.dataset.tab === name));
+  document.querySelectorAll('.nav-item').forEach(e => {
+    const on = e.dataset.tab === name;
+    e.classList.toggle('active', on);
+    if (on) e.setAttribute('aria-current', 'page'); else e.removeAttribute('aria-current');
+  });
   document.querySelectorAll('.tab-panel').forEach(e => e.style.display = 'none');
   const panel = _('tab-' + name);
   if (panel) panel.style.display = 'block';
@@ -1063,9 +1060,14 @@ function closeDrawer(name) {
   const i = _openDrawers.indexOf(name);
   if (i >= 0) _openDrawers.splice(i, 1);
 }
-// ESC 关闭最上层抽屉（弹窗自身的 Esc 处理保持不变，抽屉在最外层时无冲突）
+// ESC closes the topmost drawer, but only when no modal layer is open on top
+// of it (modal Esc handling lives in 06_models and runs on the same event).
+const _ESC_MODAL_IDS = ['confirmModal','modelMetaEditor','provPickerModal','comboModelPicker','presetPickerModal','importPreviewModal','connLoginModal','connImportModal','comboTestModal','modelSyncOverlay'];
+function _modalLayerOpen() {
+  return _ESC_MODAL_IDS.some(id => { const el = _(id); return el && el.style.display === 'flex'; });
+}
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && _openDrawers.length) closeDrawer(_openDrawers[_openDrawers.length - 1]);
+  if (e.key === 'Escape' && _openDrawers.length && !_modalLayerOpen()) closeDrawer(_openDrawers[_openDrawers.length - 1]);
 });
 
 // ========== 侧栏收起 ==========
