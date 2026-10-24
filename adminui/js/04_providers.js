@@ -645,6 +645,11 @@ function renderImportPreviewList() {
     _('importPreviewCount').textContent = '';
     return;
   }
+  // Fresh batch: clear any filter from the previous preview.
+  const searchEl = _('importPreviewSearch');
+  if (searchEl) searchEl.value = '';
+  const matchEl = _('importPreviewMatch');
+  if (matchEl) matchEl.textContent = '';
   _('importPreviewList').innerHTML = items.map(it => {
     const selectable = it.action === 'add' || it.action === 'tier_change';
     const tierBadge = it.tier === 'free'
@@ -666,6 +671,32 @@ function renderImportPreviewList() {
 function updateImportCount() {
   const n = document.querySelectorAll('#importPreviewList .import-approve:checked').length;
   _('importPreviewCount').textContent = n + ' ' + t('个已选');
+}
+
+// Hide/show preview rows by id substring without re-rendering (checkbox state stays in the DOM).
+function filterImportPreview() {
+  const q = ((_('importPreviewSearch') || {}).value || '').trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll('#importPreviewList .combo-pick-row').forEach(row => {
+    const idEl = row.querySelector('.combo-pick-id');
+    const hit = !q || (idEl && idEl.textContent.toLowerCase().indexOf(q) !== -1);
+    row.style.display = hit ? 'flex' : 'none';
+    if (hit) shown++;
+  });
+  const total = (_importBatch && _importBatch.items.length) || 0;
+  const matchEl = _('importPreviewMatch');
+  if (matchEl) matchEl.textContent = q ? shown + ' / ' + total : '';
+}
+
+// Toggle every enabled + currently visible approval checkbox (select all / clear all).
+function importPreviewSelectAll(on) {
+  document.querySelectorAll('#importPreviewList .import-approve').forEach(cb => {
+    if (cb.disabled) return;
+    const row = cb.closest('.combo-pick-row');
+    if (row && row.style.display === 'none') return;
+    cb.checked = !!on;
+  });
+  updateImportCount();
 }
 
 async function importPreviewApply(btn) {

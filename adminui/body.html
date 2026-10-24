@@ -874,9 +874,15 @@
       </div>
       <!-- §9.3 受控导入：预览批次（新模型 / 层级变化 / protected），勾选批准后写入池 -->
       <div id="importPreviewModal" class="overlay-modal overlay-top" onclick="if(event.target===this)closeImportPreview()">
-        <div class="modal-card modal-card-col w640">
+        <div class="modal-card modal-card-col w640" role="dialog" aria-modal="true" aria-label="导入分级预览">
           <div class="modal-title">导入分级预览 <span id="importPreviewProv" class="mono" style="font-size:12px;color:var(--text3);font-weight:400"></span></div>
           <div id="importPreviewSummary" class="modal-sub"></div>
+          <div class="modal-search-row">
+            <input type="text" id="importPreviewSearch" placeholder="搜索模型..." aria-label="搜索模型" oninput="filterImportPreview()" onkeydown="if(event.key==='Escape')closeImportPreview()">
+            <button class="btn btn-sm" onclick="importPreviewSelectAll(true)">全选</button>
+            <button class="btn btn-sm" onclick="importPreviewSelectAll(false)">清空</button>
+            <span id="importPreviewMatch" style="font-size:12px;color:var(--text3);white-space:nowrap"></span>
+          </div>
           <div id="importPreviewList" class="combo-picker-list"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
           <div class="modal-actions">
             <span id="importPreviewCount" class="mr-auto" style="font-size:12px;color:var(--text2)"></span>
@@ -890,7 +896,7 @@
   <!-- 设备码登录弹窗：选择 provider → 展示 user code + 验证链接 → 轮询状态 -->
   <!-- 连接弹窗位于 tab 面板之外：账号与连接页打开，跨标签页可用 -->
   <div id="connLoginModal" class="overlay-modal" onclick="if(event.target===this)closeDeviceLogin()">
-    <div class="modal-card w480">
+    <div class="modal-card modal-card-col w480" role="dialog" aria-modal="true" aria-label="设备码登录">
       <div class="modal-title">设备码登录</div>
       <div id="connLoginStep1" style="margin-top:12px">
         <div class="field"><label>选择服务</label><select id="connLoginProvider" style="width:100%"></select></div>
@@ -916,7 +922,7 @@
 
   <!-- 粘贴 token 导入弹窗（无刷新上游的备用登录路径） -->
   <div id="connImportModal" class="overlay-modal" onclick="if(event.target===this)hideConnectionImport()">
-    <div class="modal-card w480">
+    <div class="modal-card modal-card-col w480" role="dialog" aria-modal="true" aria-label="导入 Token">
       <div class="modal-title">导入 Token</div>
       <div class="modal-sub">粘贴已有访问令牌作为连接（Bearer 注入），适合 Kilo 这类不签发刷新令牌的上游，或任何无设备码流程、但你已持有 token 的服务；过期后需重新导入或登录。</div>
       <div class="field" style="margin-bottom:8px"><label>服务 *</label><input type="text" id="connImpProvider" placeholder="kilocode / 任意 provider key" list="connProviderList" style="font-family:ui-monospace,monospace"><datalist id="connProviderList"></datalist></div>
@@ -1035,10 +1041,10 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <div id="loginOverlay">
-  <div style="width:min(360px,calc(100vw - 40px));padding:32px;background:var(--surface);border-radius:14px;border:1px solid var(--border2);text-align:center;box-shadow:0 10px 40px rgba(15,23,42,0.12)">
-    <h2 style="margin:0 0 6px;font-size:20px;color:var(--text)">Cline2API 管理后台</h2>
-    <p style="margin:0 0 22px;color:var(--text2);font-size:13px">该后台已启用访问密码，请输入密码登录</p>
-    <input type="password" id="loginPassword" placeholder="访问密码" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:14px" onkeydown="if(event.key==='Enter')submitLogin()">
+  <div class="login-card">
+    <h2>Cline2API 管理后台</h2>
+    <p>该后台已启用访问密码，请输入密码登录</p>
+    <input type="password" id="loginPassword" placeholder="访问密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitLogin()">
     <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="submitLogin()">登 录</button>
     <div id="loginError" style="color:var(--red);font-size:13px;margin-top:12px"></div>
   </div>

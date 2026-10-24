@@ -350,6 +350,9 @@ textarea{resize:vertical;min-height:88px;font-family:ui-monospace,'SF Mono','Cas
 .form-row{display:flex;gap:var(--sp-3);align-items:flex-end;margin-bottom:var(--sp-3)}
 .form-row .field{flex:1;min-width:0}
 .form-row .field label{display:block;font-size:var(--fs-base);color:var(--text2);margin-bottom:6px;font-weight:500}
+/* Bare .field (modal bodies without .form-row) needs the same label/stack geometry. */
+.field{min-width:0}
+.field label{display:block;font-size:var(--fs-base);color:var(--text2);margin-bottom:6px;font-weight:500}
 .form-actions{display:flex;gap:var(--sp-2);margin-top:var(--sp-3);flex-wrap:wrap;align-items:center}
 
 /* ===== Toast ===== */
@@ -541,7 +544,10 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none}
 /* 长文本稳健性：避免超长 URL / 模型 ID 撑破布局 */
 .section-desc,.combo-preview,.log-attempts li,.log-req-model{overflow-wrap:break-word}
 /* 弹层：统一遮罩模糊与阴影：登录 / 模型同步浮层 */
-#loginOverlay{position:fixed;inset:0;z-index:var(--z-login);background:rgba(248,250,252,0.96);display:none;align-items:center;justify-content:center}
+#loginOverlay{position:fixed;inset:0;z-index:var(--z-login);background:var(--overlay-bg);backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px);display:none;align-items:center;justify-content:center}
+.login-card{width:min(360px,calc(100vw - 40px));padding:32px;background:var(--surface);border-radius:14px;border:1px solid var(--border2);text-align:center;box-shadow:var(--shadow-lg)}
+.login-card h2{margin:0 0 6px;font-size:20px;color:var(--text)}
+.login-card p{margin:0 0 22px;color:var(--text2);font-size:13px}
 #modelSyncOverlay{position:fixed;inset:0;z-index:var(--z-sync);background:var(--overlay-bg);display:none;align-items:center;justify-content:center;backdrop-filter:saturate(150%) blur(6px);-webkit-backdrop-filter:saturate(150%) blur(6px)}
 #modelSyncModal{border-radius:var(--radius);box-shadow:var(--shadow-lg);width:min(480px,calc(100vw - 40px));padding:24px;background:var(--surface);border:1px solid var(--border2)}
 
