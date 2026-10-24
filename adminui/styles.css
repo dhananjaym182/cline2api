@@ -234,6 +234,14 @@ table{width:100%;border-collapse:collapse;table-layout:fixed}
 .model-subtable{table-layout:auto}
 .model-subtable td{padding:7px 12px;text-align:left;white-space:nowrap}
 .model-subtable td:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
+/* ===== 模型用量汇总表（账号页池级视图：名称列左对齐截断，数字列右对齐收紧） ===== */
+.usage-table th:first-child,.usage-table td:first-child{width:42%;text-align:left}
+.usage-table td.num-col{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.usage-table td:last-child{width:16%}
+.usage-group-row td{background:var(--surface2);color:var(--text3);font-size:var(--fs-2xs);font-weight:600;padding:6px 12px;text-transform:none}
+.usage-name .model-tag{font-size:10px;padding:1px 6px;margin-left:4px}
+.account-card-usage-hint{margin:10px 0 0;padding:8px 10px;border-radius:8px;background:var(--surface);border:1px solid var(--border2);font-size:var(--fs-sm);color:var(--text2);cursor:pointer}
+.account-card-usage-hint:hover{border-color:var(--accent);color:var(--text)}
 /* ===== 连接选择器（provider 抽屉）与连接池列表 ===== */
 .conn-pick-box{max-height:220px;overflow-y:auto;border:1px solid var(--border2);border-radius:8px;padding:4px 8px 6px;background:var(--surface2)}
 .conn-pick-empty{display:block;color:var(--text3);font-size:12px;padding:6px 2px}

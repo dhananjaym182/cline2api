@@ -173,7 +173,7 @@
   <div class="page-header">
     <div>
       <div class="large-title">账号与连接</div>
-      <div class="large-subtitle">管理 Cline 账号池与所有 OAuth 登录连接，按模型查看各自用量</div>
+      <div class="large-subtitle">分开管理 Cline 账号池与 OAuth 登录连接，免费模型用量按来源汇总查看</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-sm" onclick="testAllAccounts(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>测试全部</button>
@@ -182,6 +182,12 @@
       <button class="btn btn-primary btn-sm" onclick="showAccountLogin('oauth')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>添加</button>
     </div>
   </div>
+  <div class="subtabs page-subtabs" data-page="accounts">
+    <div class="subtab active" data-sub="pool">账号池</div>
+    <div class="subtab" data-sub="conns">连接池</div>
+  </div>
+
+  <div class="page-subpage" data-subpage="pool">
   <div class="section">
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Cline 账号池</span></div>
     <div class="section-body flush">
@@ -205,18 +211,6 @@
       </table>
       <div id="accountPager" style="display:none;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;border-top:1px solid var(--border2)"></div>
       <div id="accountCards" class="account-cards"></div>
-    </div>
-  </div>
-  <div class="section">
-    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>OAuth 连接池</span>
-      <span class="title-tools">
-        <button class="btn btn-sm" onclick="showConnectionImport()">导入 Token</button>
-        <button class="btn btn-sm btn-primary" onclick="openDeviceLogin()">设备码登录</button>
-      </span>
-    </div>
-    <div class="section-desc">所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与轮转派发；Token 只存服务端，不写进 Provider。</div>
-    <div class="section-body flush">
-      <div id="connectionsList"></div>
     </div>
   </div>
   <div class="section" id="loginImportSection">
@@ -282,6 +276,31 @@
         <div id="batchResult" style="margin-top:8px" aria-live="polite"></div>
       </div>
     </div>
+  </div>
+  <div class="section" id="modelUsageSection">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8" rx="1"/><rect x="13" y="6" width="3" height="12" rx="1"/></svg><button class="btn btn-sm btn-icon" id="modelUsageToggle" onclick="toggleModelUsage()" title="展开" aria-label="展开" aria-expanded="false" aria-controls="modelUsageBody">▸</button><span>模型用量</span></div>
+    <div id="modelUsageBody" style="display:none">
+      <div class="section-desc">汇总全部 Cline 账号服务过的免费模型，按来源分组展示请求与 Token 用量。</div>
+      <div class="section-body flush">
+        <div id="modelUsageList"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="page-subpage" data-subpage="conns" style="display:none">
+  <div class="section">
+    <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>OAuth 连接池</span>
+      <span class="title-tools">
+        <button class="btn btn-sm" onclick="showConnectionImport()">导入 Token</button>
+        <button class="btn btn-sm btn-primary" onclick="openDeviceLogin()">设备码登录</button>
+      </span>
+    </div>
+    <div class="section-desc">所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与轮转派发；Token 只存服务端，不写进 Provider。</div>
+    <div class="section-body flush">
+      <div id="connectionsList"></div>
+    </div>
+  </div>
   </div>
 </div>
 

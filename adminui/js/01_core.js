@@ -272,7 +272,6 @@ const I18N = {
   '刷新中...': 'Refreshing...',
   '暂无模型': 'No models',
   '模型统计': 'Model Usage',
-  '按模型统计（仅免费模型，按来源分组）': 'Per-model usage (free models, grouped by source)',
   '按模型统计': 'Per-model usage',
   'Cline 官方': 'Cline official',
   '未命名': 'Unnamed',
@@ -283,7 +282,6 @@ const I18N = {
   '已选': 'selected',
   '展开': 'Expand',
   '收起': 'Collapse',
-  '模型冷却中': 'Model cooling',
   '暂无数据': 'No data yet',
   // opencode 免费模型
   '从 opencode 同步模型': 'Sync Models from opencode',
@@ -577,7 +575,15 @@ const I18N = {
   '可用': 'OK',
   '确定删除该连接？绑定它的 Provider 将不再注入 token。': 'Delete this connection? Bound providers will stop injecting the token.',
   '账号与连接': 'Accounts and Connections',
-  '管理 Cline 账号池与所有 OAuth 登录连接，按模型查看各自用量': 'Manage the Cline account pool and every OAuth login, with usage per model',
+  '分开管理 Cline 账号池与 OAuth 登录连接，免费模型用量按来源汇总查看': 'Accounts and OAuth logins on separate subtabs, with pool-wide free-model usage grouped by source',
+  '账号池': 'Accounts',
+  '连接池': 'Connections',
+  '模型用量': 'Model Usage',
+  '汇总全部 Cline 账号服务过的免费模型，按来源分组展示请求与 Token 用量。': 'Free models served by all Cline accounts, grouped by source with request and token totals.',
+  '暂无用量数据': 'No usage data yet',
+  ' 个账号冷却中': ' accounts cooling',
+  '免费模型用量见「模型用量」汇总': 'See the Model Usage summary for per-model totals',
+  '展开模型用量': 'Open Model Usage',
   'Cline 账号池': 'Cline Account Pool',
   'OAuth 连接池': 'OAuth Connection Pool',
   '所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与轮转派发；Token 只存服务端，不写进 Provider。': 'All upstream accounts that need a login (OAuth device code / pasted token) are managed here: each connection tracks the models and usage it served, grouped by provider. Tick logins in the provider editor pool to join round-robin dispatch; tokens stay server-side and are never copied into providers.',
@@ -601,7 +607,6 @@ const I18N = {
   '（无可用模型）': '(no models available)',
   '上一页': 'Previous page',
   '下一页': 'Next page',
-  ' Tok · ': ' tok · ',
   ' 次': ' req',
   // Provider 编辑器：测试/拉取模型（老接口 404 → 提示重启代理）
   '拉取模型': 'Fetch models',
@@ -840,8 +845,22 @@ function toggleLoginImport(forceOpen) {
   applyLang();
 }
 
+function toggleModelUsage(forceOpen) {
+  const body = _('modelUsageBody'), btn = _('modelUsageToggle');
+  if (!body || !btn) return;
+  const open = (forceOpen === undefined) ? body.style.display === 'none' : !!forceOpen;
+  body.style.display = open ? '' : 'none';
+  btn.textContent = open ? '▾' : '▸';
+  const label = open ? '收起' : '展开';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  applyLang();
+}
+
 function showAccountLogin(subtab) {
   applyTab('accounts');
+  switchPageSubTab('accounts', 'pool', true);
   toggleLoginImport(true);
   if (subtab) {
     const tab = document.querySelector('#importTabs .tab[data-tab="' + subtab + '"]');

@@ -80,6 +80,7 @@ async function loadAccounts() {
         : (t('还没有账号') + ' — <a href="#" onclick="showAccountLogin();return false" style="color:var(--accent);cursor:pointer;text-decoration:none">' + t('添加账号') + '</a> · ' + t('支持 OAuth 登录 / 手动 Token / 批量导入'));
       tbody.innerHTML = '<tr><td colspan="12" class="empty">' + emptyMsg + '</td></tr>';
       cards.innerHTML = listEmptyState(ICON_ACCOUNTS, emptyMsg);
+      renderModelUsage();
       return;
     }
     // 分页：前端切片，页码越界时收敛
@@ -91,72 +92,10 @@ async function loadAccounts() {
     updateSelCount();
     renderAccountPager(view.length);
     const sn = { active: t('活跃'), cooldown: t('冷却'), expired: t('已过期') };
-    // id → catalog entry，用于按真实来源分组（表格子行与移动卡片共用）
-    const cat = {};
-    (_cachedModels || []).forEach(m => { if (!cat[m.id]) cat[m.id] = m; });
-    // key 前缀决定组顺序：Cline 官方 → Zen → 各 Provider → 自定义/内置 → 其他
-    const groupInfo = id => {
-      const m = cat[id];
-      if (!m) return { key: '4|other', label: t('其他') };
-      if (m.source === 'remote') return { key: '0|remote', label: t('Cline 官方') };
-      if (m.source === 'zen') return { key: '1|zen', label: 'Zen' };
-      if (m.source === 'provider') return { key: '2|' + (m.provider || ''), label: 'Provider · ' + (m.provider || t('未命名')) };
-      return { key: '3|custom', label: t('自定义/内置') };
-    };
-    // 模型统计子行（仅 free 模型 + 模型级冷却状态），按模型真实来源分组
-    const modelStatsRow = a => {
-      const stats = Object.values(a.modelStats || {}).sort((x, y) => y.totalTokens - x.totalTokens);
-      const cools = a.modelCooldowns || {};
-      const entries = stats.map(st => ({ id: st.modelId, stat: st }));
-      Object.keys(cools).filter(m => cools[m] && !(a.modelStats || {})[m]).forEach(m => entries.push({ id: m, coolOnly: true }));
-      const groupMap = new Map();
-      entries.forEach(e => {
-        const g = groupInfo(e.id);
-        if (!groupMap.has(g.key)) groupMap.set(g.key, { label: g.label, items: [] });
-        groupMap.get(g.key).items.push(e);
-      });
-      const statRow = st => {
-        const cd = cools[st.modelId];
-        const cdBadge = cd
-          ? '<span class="status cooldown status-cooldown" title="' + t('模型冷却中') + ' · ' + formatCooldown(cd) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(cd) + '</span></span>'
-          : '';
-        return '<tr style="background:var(--surface2)">' +
-          '<td style="padding-left:44px" class="mono">' + esc(st.modelId) + ' <span class="model-tag free" style="font-size:10px;padding:1px 6px">free</span>' + '</td>' +
-          '<td>' + cdBadge + '</td>' +
-          '<td>' + formatNumber(st.usageCount) + '</td>' +
-          '<td>' + formatTokenCount(st.promptTokens) + '</td>' +
-          '<td>' + formatTokenCount(st.completionTokens) + '</td>' +
-          '<td>' + formatTokenCount(st.totalTokens) + '</td>' +
-          '<td>' + formatTokenCount(st.cachedTokens) + '</td>' +
-          '</tr>';
-      };
-      const coolOnlyRow = m =>
-        '<tr style="background:var(--surface2)">' +
-          '<td style="padding-left:44px" class="mono">' + esc(m) + '</td>' +
-          '<td><span class="status cooldown status-cooldown" title="' + t('模型冷却中') + ' · ' + formatCooldown(cools[m]) + '"><span class="cd-icon">⏳</span><span class="cd-time">' + formatCooldown(cools[m]) + '</span></span></td>' +
-          '<td colspan="5"></td>' +
-        '</tr>';
-      let body = '';
-      [...groupMap.keys()].sort().forEach(k => {
-        const grp = groupMap.get(k);
-        body += '<tr style="background:var(--surface2)"><td colspan="7" style="padding:6px 32px 2px;color:var(--text3);font-size:11px;font-weight:600">' + esc(grp.label) + ' · ' + grp.items.length + '</td></tr>';
-        grp.items.forEach(e => { body += e.stat ? statRow(e.stat) : coolOnlyRow(e.id); });
-      });
-      const totalCooling = Object.keys(cools).length;
-      const title = '<tr style="background:var(--surface2)">' +
-        '<td colspan="7" style="padding:8px 32px;color:var(--text2);font-size:12px;font-weight:600">' +
-          t('按模型统计（仅免费模型，按来源分组）') + (totalCooling ? ' · <span style="color:var(--yellow)">⏳ ' + totalCooling + ' ' + t('模型冷却中') + '</span>' : '') +
-        '</td></tr>';
-      if (!body) {
-        return title + '<tr style="background:var(--surface2)"><td colspan="7" style="padding:6px 32px;color:var(--text3);font-size:12px">' + t('暂无数据') + '</td></tr>';
-      }
-      return title + body;
-    };
+    renderModelUsage();
     tbody.innerHTML = pageList.map((a, i) => {
       const seq = start + i + 1;
       const statusBadge = acctStatusBadge(a, sn);
-      // 始终显示模型统计展开按钮（无数据时子行提示暂无）
-      const expander = '<button class="btn btn-sm btn-icon" onclick="toggleModelRow(\'' + a.accountId + '\', this)" title="' + t('展开') + '" aria-label="' + t('展开') + '">▸</button>';
       const selBox = '<input type="checkbox" ' + (_checkedAccounts.has(a.accountId) ? 'checked' : '') + ' onchange="onSelAccount(\'' + a.accountId + '\', this.checked)">';
       return '<tr>' +
         '<td style="text-align:center">' + selBox + '</td>' +
@@ -170,52 +109,19 @@ async function loadAccounts() {
         '<td>' + formatTokenCount(a.cachedTokens) + '</td>' +
         '<td>' + formatDateTime(a.lastUsed, true) + '</td>' +
         '<td>' + formatDateTime(a.createdAt, true) + '</td>' +
-        '<td style="white-space:nowrap">' + expander +
+        '<td style="white-space:nowrap">' +
           '<button class="btn btn-sm" onclick="testAccount(\'' + a.accountId + '\',this)" title="' + t('测试') + '" aria-label="' + t('测试') + '">⚡</button> ' +
           '<button class="btn btn-sm" onclick="resetAccount(\'' + a.accountId + '\')" title="' + t('重置') + '" aria-label="' + t('重置') + '">↻</button> ' +
           '<button class="btn btn-sm btn-danger" onclick="deleteAccount(\'' + a.accountId + '\', this)" title="' + t('删除') + '" aria-label="' + t('删除') + '">✕</button>' +
-        '</td></tr>' +
-        '<tr id="modelRow-' + a.accountId + '" style="display:none"><td colspan="12" style="padding:0">' +
-          '<table class="model-subtable" style="width:100%">' + modelStatsRow(a) + '</table></td></tr>';
+        '</td></tr>';
     }).join('');
     cards.innerHTML = pageList.map(a => {
       const lu = formatDateTime(a.lastUsed);
       const cardStatus = acctStatusBadge(a, sn);
-      // 卡片内的模型统计（免费模型 + 冷却状态），按来源分组
-      const stats = Object.values(a.modelStats || {}).sort((x, y) => y.totalTokens - x.totalTokens);
-      const cools = a.modelCooldowns || {};
-      const coolingCount = Object.keys(cools).length;
-      const cardEntries = stats.map(st => ({ id: st.modelId, stat: st }));
-      Object.keys(cools).filter(m => cools[m] && !(a.modelStats || {})[m]).forEach(m => cardEntries.push({ id: m, coolOnly: true }));
-      const cardGroups = new Map();
-      cardEntries.forEach(e => {
-        const g = groupInfo(e.id);
-        if (!cardGroups.has(g.key)) cardGroups.set(g.key, { label: g.label, items: [] });
-        cardGroups.get(g.key).items.push(e);
-      });
-      let items = '';
-      [...cardGroups.keys()].sort().forEach(k => {
-        const grp = cardGroups.get(k);
-        items += '<div style="font-size:10px;color:var(--text3);font-weight:600;padding:6px 0 2px">' + esc(grp.label) + '</div>';
-        grp.items.forEach(e => {
-          if (e.stat) {
-            const st = e.stat;
-            const cd = cools[st.modelId];
-            items += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0 5px 8px;border-bottom:1px solid var(--border2);font-size:12px">' +
-              '<span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(st.modelId) +
-                (cd ? ' <span style="color:var(--yellow)">⏳' + formatCooldown(cd) + '</span>' : '') + '</span>' +
-              '<span style="white-space:nowrap">' + formatTokenCount(st.totalTokens) + t(' Tok · ') + formatNumber(st.usageCount) + t(' 次') + '</span></div>';
-          } else {
-            items += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0 5px 8px;border-bottom:1px solid var(--border2);font-size:12px">' +
-              '<span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(e.id) + '</span>' +
-              '<span style="color:var(--yellow);white-space:nowrap">⏳' + formatCooldown(cools[e.id]) + '</span></div>';
-          }
-        });
-      });
-      if (!items) items = '<div style="font-size:12px;color:var(--text3);padding:4px 0">' + t('暂无数据') + '</div>';
-      const modelHtml = '<div style="margin:10px 0 0;padding:10px;border-radius:8px;background:var(--surface);border:1px solid var(--border2)">' +
-        '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px">' + t('按模型统计（仅免费模型，按来源分组）') +
-          (coolingCount ? ' · <span style="color:var(--yellow)">⏳ ' + coolingCount + '</span>' : '') + '</div>' + items + '</div>';
+      // Per-model stats live in the pool-wide 模型用量 section now; the card only points there.
+      const coolingCount = Object.keys(a.modelCooldowns || {}).filter(m => a.modelCooldowns[m]).length;
+      const modelHtml = '<div class="account-card-usage-hint" onclick="toggleModelUsage(true)" title="' + escAttr(t('展开模型用量')) + '">' + t('免费模型用量见「模型用量」汇总') +
+        (coolingCount ? ' · <span style="color:var(--yellow)">⏳ ' + coolingCount + '</span>' : '') + '</div>';
       return '<article class="account-card">' +
         '<div class="account-card-header"><span class="account-email">' + esc(a.email) + '</span>' +
         cardStatus + '</div>' +
@@ -416,13 +322,69 @@ function logTimestampHtml(v) {
 }
 
 // 展开/收起账号的模型统计子行（表格视图）
-function toggleModelRow(id, btn) {
-  const row = _('modelRow-' + id);
-  if (!row) return;
-  const hidden = row.style.display === 'none';
-  row.style.display = hidden ? '' : 'none';
-  btn.innerHTML = hidden ? '▾' : '▸';
-  btn.title = hidden ? t('收起') : t('展开');
+// Pool-wide per-model usage (free models only, as reported per account), aggregated
+// across every account so provider-served models no longer nest under one account row.
+function renderModelUsage() {
+  const box = _('modelUsageList');
+  if (!box) return;
+  const cat = {};
+  (_cachedModels || []).forEach(m => { if (!cat[m.id]) cat[m.id] = m; });
+  const groupInfo = id => {
+    const m = cat[id];
+    if (!m) return { key: '4|other', label: t('其他') };
+    if (m.source === 'remote') return { key: '0|remote', label: t('Cline 官方') };
+    if (m.source === 'zen') return { key: '1|zen', label: 'Zen' };
+    if (m.source === 'provider') return { key: '2|' + (m.provider || ''), label: 'Provider · ' + (m.provider || t('未命名')) };
+    return { key: '3|custom', label: t('自定义/内置') };
+  };
+  const agg = {};
+  const coolCount = {};
+  (_lastAccountList || []).forEach(a => {
+    Object.values(a.modelStats || {}).forEach(st => {
+      const e = agg[st.modelId] || (agg[st.modelId] = { usageCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedTokens: 0 });
+      e.usageCount += st.usageCount || 0;
+      e.promptTokens += st.promptTokens || 0;
+      e.completionTokens += st.completionTokens || 0;
+      e.totalTokens += st.totalTokens || 0;
+      e.cachedTokens += st.cachedTokens || 0;
+    });
+    const cools = a.modelCooldowns || {};
+    Object.keys(cools).forEach(m => { if (cools[m]) coolCount[m] = (coolCount[m] || 0) + 1; });
+  });
+  const entries = [];
+  Object.keys(agg).forEach(id => entries.push({ id: id, stat: agg[id] }));
+  Object.keys(coolCount).forEach(m => { if (!agg[m]) entries.push({ id: m, coolOnly: true }); });
+  if (!entries.length) { box.innerHTML = '<div class="empty">' + t('暂无用量数据') + '</div>'; return; }
+  const groupMap = new Map();
+  entries.forEach(e => {
+    const g = groupInfo(e.id);
+    if (!groupMap.has(g.key)) groupMap.set(g.key, { label: g.label, items: [] });
+    groupMap.get(g.key).items.push(e);
+  });
+  let html = '<table class="usage-table"><thead><tr>' +
+    '<th>' + t('模型') + '</th><th>' + t('请求') + '</th><th>' + t('输入') + '</th><th>' + t('输出') + '</th><th>' + t('总 Token') + '</th><th>' + t('缓存') + '</th><th>' + t('状态') + '</th>' +
+    '</tr></thead><tbody>';
+  [...groupMap.keys()].sort().forEach(k => {
+    const grp = groupMap.get(k);
+    grp.items.sort((x, y) => ((y.stat && y.stat.totalTokens) || 0) - ((x.stat && x.stat.totalTokens) || 0));
+    html += '<tr class="usage-group-row"><td colspan="7">' + esc(grp.label) + ' · ' + grp.items.length + '</td></tr>';
+    grp.items.forEach(e => {
+      const st = e.stat;
+      const cooling = coolCount[e.id];
+      html += '<tr>' +
+        '<td class="usage-name mono" title="' + esc(e.id) + '">' + esc(e.id) +
+          (st ? ' <span class="model-tag free">' + t('免费') + '</span>' : '') + '</td>' +
+        '<td class="num-col">' + (st ? formatNumber(st.usageCount) : '-') + '</td>' +
+        '<td class="num-col">' + (st ? formatTokenCount(st.promptTokens) : '-') + '</td>' +
+        '<td class="num-col">' + (st ? formatTokenCount(st.completionTokens) : '-') + '</td>' +
+        '<td class="num-col">' + (st ? formatTokenCount(st.totalTokens) : '-') + '</td>' +
+        '<td class="num-col">' + (st ? formatTokenCount(st.cachedTokens) : '-') + '</td>' +
+        '<td>' + (cooling ? '<span class="status cooldown status-cooldown"><span class="cd-icon">⏳</span><span class="cd-time">' + cooling + t(' 个账号冷却中') + '</span></span>' : '') + '</td>' +
+      '</tr>';
+    });
+  });
+  html += '</tbody></table>';
+  box.innerHTML = html;
 }
 
 async function testAccount(id, btn) {
