@@ -29,6 +29,7 @@ const (
 	tierSignalNameToken    = "name-token-free" // id has a standalone free segment (free-x, x:free:y, cline-free/x)
 	tierSignalAllowlist    = "allowlist"       // tags contain free, or hit the built-in zen seed allowlist
 	tierSignalProviderFree = "provider-free"   // whole provider is free (Free=true / no-key source)
+	tierSignalPricingPaid  = "pricing-paid"    // explicit nonzero upstream pricing → paid, outranks provider-free
 	tierSignalPaidDefault  = "paid-default"    // no free signal → paid, never guessed
 )
 
@@ -74,6 +75,12 @@ func freeNameToken(id string) bool {
 func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signal string) {
 	if e.PricingPrompt != nil && e.PricingComplet != nil && *e.PricingPrompt == 0 && *e.PricingComplet == 0 {
 		return "free", tierSignalPricingZero
+	}
+	// Explicit non-zero pricing is the strongest paid signal: it outranks entry
+	// flags, id heuristics, allowlists and the provider-wide free flag. "-1"
+	// (variable/unknown, e.g. kilo auto routing) is non-zero and lands here too.
+	if (e.PricingPrompt != nil && *e.PricingPrompt != 0) || (e.PricingComplet != nil && *e.PricingComplet != 0) {
+		return "pass", tierSignalPricingPaid
 	}
 	if e.FreeFlag || strings.EqualFold(strings.TrimSpace(e.Mode), "free") {
 		return "free", tierSignalFlagFree
@@ -135,7 +142,7 @@ func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]
 	if baseURL == "" {
 		return nil, fmt.Errorf("baseURL is empty")
 	}
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := oauthHTTPClient(15 * time.Second)
 	rawNum := func(v any) *float64 {
 		switch n := v.(type) {
 		case float64:

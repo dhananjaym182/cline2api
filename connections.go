@@ -384,7 +384,7 @@ func exchangeJobToken(spec deviceFlowSpec, accessToken string) (token string, ex
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	resp, e := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	resp, e := oauthHTTPClient(15 * time.Second).Do(req)
 	if e != nil {
 		return "", 0, fmt.Errorf("token exchange failed: %v", e)
 	}
@@ -410,6 +410,53 @@ func exchangeJobToken(spec deviceFlowSpec, accessToken string) (token string, ex
 		}
 	}
 	return token, expMs, nil
+}
+
+// oauthHTTPClient routes auth traffic through the shared outbound transport
+// (SOCKS5 egress proxy pool + custom dialer) like proxied chat traffic; a bare
+// &http.Client{} would bypass the configured egress proxy entirely.
+func oauthHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, Transport: httpClient.Transport}
+}
+
+// htmlBlockedError reports an HTML page where JSON was expected — typically a
+// 405 SPA error page from a blocked/moved endpoint — with actionable hints.
+func htmlBlockedError(resp *http.Response, body []byte) error {
+	snippet := strings.ToLower(strings.TrimSpace(string(body)))
+	if !strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "html") && !strings.HasPrefix(snippet, "<") {
+		return nil
+	}
+	return fmt.Errorf("upstream returned an HTML page (HTTP %d) instead of JSON — the login endpoint is likely blocked locally (hosts-file sinkhole / DNS) or has moved upstream; configure an egress proxy in Settings or use Token import", resp.StatusCode)
+}
+
+// decodeJSONBody parses an upstream auth response. On non-200 or unparseable
+// bodies it returns an actionable error: HTML bodies get the blocked-endpoint
+// hint, everything else keeps the status + body snippet.
+func decodeJSONBody(op string, resp *http.Response, body []byte) (map[string]any, error) {
+	if resp.StatusCode == http.StatusOK {
+		var data map[string]any
+		if err := json.Unmarshal(body, &data); err == nil {
+			return data, nil
+		}
+		if htmlErr := htmlBlockedError(resp, body); htmlErr != nil {
+			return nil, fmt.Errorf("%s decode: %v", op, htmlErr)
+		}
+		return nil, fmt.Errorf("%s decode: unexpected JSON payload", op)
+	}
+	if htmlErr := htmlBlockedError(resp, body); htmlErr != nil {
+		return nil, fmt.Errorf("%s failed: %v", op, htmlErr)
+	}
+	return nil, fmt.Errorf("%s failed: %d %s", op, resp.StatusCode, truncate(strings.TrimSpace(string(body)), 200))
+}
+
+// dialHintError flags dial/lookup failures that point at local name resolution
+// (e.g. a hosts-file 0.0.0.1 sinkhole) instead of leaving the raw Go error.
+func dialHintError(op string, err error) error {
+	msg := err.Error()
+	if strings.Contains(msg, "dial tcp 0.0.0.1:") || strings.Contains(msg, "no such host") || strings.Contains(msg, "server misbehaving") {
+		return fmt.Errorf("%s failed: %v — domain did not resolve (check /etc/hosts or Windows hosts for a block entry) or is unreachable without a proxy; configure the egress proxy in Settings to route this request", op, err)
+	}
+	return fmt.Errorf("%s failed: %v", op, err)
 }
 
 // startProviderDeviceLogin  initiate → 会话登记 → 后台轮询 goroutine。
@@ -441,18 +488,15 @@ func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 			}
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			req.Header.Set("Accept", "application/json")
-			resp, e := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+			resp, e := oauthHTTPClient(15 * time.Second).Do(req)
 			if e != nil {
-				return "", "", "", 0, fmt.Errorf("initiate failed: %v", e)
+				return "", "", "", 0, dialHintError("initiate", e)
 			}
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
-			if resp.StatusCode != http.StatusOK {
-				return "", "", "", 0, fmt.Errorf("device auth initiation failed: %d %s", resp.StatusCode, truncate(strings.TrimSpace(string(body)), 200))
-			}
-			var data map[string]any
-			if e := json.Unmarshal(body, &data); e != nil {
-				return "", "", "", 0, fmt.Errorf("initiate decode: %v", e)
+			data, e := decodeJSONBody("device auth initiation", resp, body)
+			if e != nil {
+				return "", "", "", 0, e
 			}
 			code = jsonPathString(data, "device_code")
 			userDisp = jsonPathString(data, "user_code")
@@ -485,18 +529,15 @@ func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 			for k, v := range statePollHeaders(spec, false) {
 				req.Header.Set(k, v)
 			}
-			resp, e := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+			resp, e := oauthHTTPClient(15 * time.Second).Do(req)
 			if e != nil {
-				return "", "", "", 0, fmt.Errorf("initiate failed: %v", e)
+				return "", "", "", 0, dialHintError("initiate", e)
 			}
 			defer resp.Body.Close()
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
-			if resp.StatusCode != http.StatusOK {
-				return "", "", "", 0, fmt.Errorf("device auth initiation failed: %d %s", resp.StatusCode, truncate(strings.TrimSpace(string(body)), 200))
-			}
-			var data map[string]any
-			if e := json.Unmarshal(body, &data); e != nil {
-				return "", "", "", 0, fmt.Errorf("initiate decode: %v", e)
+			data, e := decodeJSONBody("device auth initiation", resp, body)
+			if e != nil {
+				return "", "", "", 0, e
 			}
 			if c, _ := data["code"].(float64); c != 0 {
 				msg, _ := data["msg"].(string)
@@ -518,21 +559,18 @@ func startProviderDeviceLogin(provider string) (*providerLoginSession, error) {
 			return "", "", "", 0, e
 		}
 		req.Header.Set("Content-Type", "application/json")
-		resp, e := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+		resp, e := oauthHTTPClient(15 * time.Second).Do(req)
 		if e != nil {
-			return "", "", "", 0, fmt.Errorf("initiate failed: %v", e)
+			return "", "", "", 0, dialHintError("initiate", e)
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
 		if resp.StatusCode == http.StatusTooManyRequests {
 			return "", "", "", 0, fmt.Errorf("too many pending authorization requests, try again later")
 		}
-		if resp.StatusCode != http.StatusOK {
-			return "", "", "", 0, fmt.Errorf("device auth initiation failed: %d %s", resp.StatusCode, truncate(strings.TrimSpace(string(body)), 200))
-		}
-		var data map[string]any
-		if e := json.Unmarshal(body, &data); e != nil {
-			return "", "", "", 0, fmt.Errorf("initiate decode: %v", e)
+		data, e := decodeJSONBody("device auth initiation", resp, body)
+		if e != nil {
+			return "", "", "", 0, e
 		}
 		code = jsonPathString(data, "code")
 		verifURL = jsonPathString(data, "verificationUrl")
@@ -608,7 +646,7 @@ func pollProviderDeviceToken(spec deviceFlowSpec, code string, expiresIn int, ve
 		interval = 3
 	}
 	deadline := time.Now().Add(time.Duration(expiresIn) * time.Second)
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := oauthHTTPClient(15 * time.Second)
 	for time.Now().Before(deadline) {
 		time.Sleep(time.Duration(interval) * time.Second)
 		var body []byte
@@ -794,7 +832,7 @@ func refreshRFC8628Connection(conn *Connection, spec deviceFlowSpec) bool {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	resp, e := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	resp, e := oauthHTTPClient(15 * time.Second).Do(req)
 	if e != nil {
 		return false
 	}
@@ -1009,7 +1047,7 @@ func handleConnectionTest(w http.ResponseWriter, r *http.Request) {
 	if spec.OrgHeader != "" && conn.ProviderSpecificData["orgId"] != "" {
 		hreq.Header.Set(spec.OrgHeader, conn.ProviderSpecificData["orgId"])
 	}
-	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(hreq)
+	resp, err := oauthHTTPClient(20 * time.Second).Do(hreq)
 	if err != nil {
 		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"ok": false, "error": err.Error()}})
 		return
