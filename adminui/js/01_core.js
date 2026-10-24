@@ -537,6 +537,7 @@ const I18N = {
   '免费标签/白名单': 'Free tag/allowlist',
   '整源免费': 'Whole source free',
   '上游定价非零': 'Nonzero upstream pricing',
+  '模型名含 free': 'Model name contains free',
   '无免费信号 → 付费': 'No free signal → paid',
   '层级（免费/付费）': 'Tier (free/paid)',
   '当前判定': 'Current decision',
@@ -779,7 +780,7 @@ const escAttr = s => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 // and the per-row badges on the Models page.
 const _tierSignals = {
   'pricing-zero': '定价为 0', 'flag-free': '上游 free 标志', 'suffix-free': 'id 后缀 free', 'name-token-free': 'id 含 free 段', 'allowlist': '免费标签/白名单',
-  'provider-free': '整源免费', 'pricing-paid': '上游定价非零', 'paid-default': '无免费信号 → 付费',
+  'provider-free': '整源免费', 'display-name-free': '模型名含 free', 'pricing-paid': '上游定价非零', 'paid-default': '无免费信号 → 付费',
 };
 
 // Merge ids into a picker's checked-order array, skipping ids already present

@@ -18,26 +18,30 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // Tier signals (stored in Model.TierSignal; admin UI shows why a model is free
 // and supports manual override to "manual"). Ordered strongest-first.
 const (
-	tierSignalPricingZero  = "pricing-zero"    // upstream pricing.prompt/completion both 0
-	tierSignalFlagFree     = "flag-free"       // entry declares free itself: free=true or mode:"free"
-	tierSignalSuffixFree   = "suffix-free"     // id ends with :free / -free
-	tierSignalNameToken    = "name-token-free" // id has a standalone free segment (free-x, x:free:y, cline-free/x)
-	tierSignalAllowlist    = "allowlist"       // tags contain free, or hit the built-in zen seed allowlist
-	tierSignalProviderFree = "provider-free"   // whole provider is free (Free=true / no-key source)
-	tierSignalPricingPaid  = "pricing-paid"    // explicit nonzero upstream pricing → paid, outranks provider-free
-	tierSignalPaidDefault  = "paid-default"    // no free signal → paid, never guessed
+	tierSignalPricingZero  = "pricing-zero"      // upstream pricing: prompt/completion 0 (and no per-request fee)
+	tierSignalFlagFree     = "flag-free"         // entry declares free itself: free=true or mode:"free"
+	tierSignalSuffixFree   = "suffix-free"       // id ends with :free / -free
+	tierSignalNameToken    = "name-token-free"   // id has a standalone free segment (free-x, free/ns/x, x:free:y, cline-free/x)
+	tierSignalDisplayName  = "display-name-free" // upstream display name carries a standalone free word, e.g. "Flash (Free)"
+	tierSignalAllowlist    = "allowlist"         // tags contain free, or hit the built-in zen seed allowlist
+	tierSignalProviderFree = "provider-free"     // whole provider is free (Free=true / no-key source)
+	tierSignalPricingPaid  = "pricing-paid"      // explicit nonzero upstream pricing → paid, outranks provider-free
+	tierSignalPaidDefault  = "paid-default"      // no free signal → paid, never guessed
 )
 
 // upstreamModelEntry is one parsed /models item (OpenAI list + OpenRouter-style pricing).
 type upstreamModelEntry struct {
 	ID             string
+	Name           string // display name (OpenAI "name" / "display_name")
 	PricingPrompt  *float64
 	PricingComplet *float64
+	PricingRequest *float64 // per-request fee, when the catalog exposes pricing.request
 	Tags           []string
 	FreeFlag       bool   // boolean free:true on the entry (some gateways mark it this way)
 	Mode           string // string mode field (Cline catalog uses mode:"free")
@@ -55,13 +59,13 @@ var freeIDAllowlist = func() map[string]bool {
 	return m
 }()
 
-// freeNameToken reports whether the id carries a standalone "free" segment,
-// mirroring how Cline ("cline-free/x") and Zen ("y-free") name free models:
-// split on - : / _ and compare whole tokens, so freemap-style substrings
-// never match.
-func freeNameToken(id string) bool {
-	for _, tok := range strings.FieldsFunc(strings.ToLower(strings.TrimSpace(id)), func(r rune) bool {
-		return r == '-' || r == ':' || r == '/' || r == '_'
+// freeWord reports whether s carries a standalone "free" word. Any
+// non-alphanumeric rune is a separator, so Cline/Zen style ids
+// ("cline-free/x", "y-free") and display names ("Flash (Free)") match while
+// freemap/freemium substrings never do.
+func freeWord(s string) bool {
+	for _, tok := range strings.FieldsFunc(strings.ToLower(strings.TrimSpace(s)), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 	}) {
 		if tok == "free" {
 			return true
@@ -70,17 +74,16 @@ func freeNameToken(id string) bool {
 	return false
 }
 
-// classifyUpstreamModel checks signals in order and returns on the first hit;
-// providerFree marks a whole-source-free provider (includes no-key presets).
+// classifyUpstreamModel checks signals in order and returns on the first hit.
+// Explicit free markers (flags, :free/-free suffixes, free words in the id or
+// display name, tags, the zen seed allowlist) outrank explicit non-zero
+// pricing: gateway catalogs commonly list their free variants with the
+// reference (non-zero) list price, mirroring how Cline (FREE tag / free array)
+// and Zen (-free suffix / seed allowlist) decide.
 func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signal string) {
-	if e.PricingPrompt != nil && e.PricingComplet != nil && *e.PricingPrompt == 0 && *e.PricingComplet == 0 {
+	if e.PricingPrompt != nil && e.PricingComplet != nil && *e.PricingPrompt == 0 && *e.PricingComplet == 0 &&
+		(e.PricingRequest == nil || *e.PricingRequest == 0) {
 		return "free", tierSignalPricingZero
-	}
-	// Explicit non-zero pricing is the strongest paid signal: it outranks entry
-	// flags, id heuristics, allowlists and the provider-wide free flag. "-1"
-	// (variable/unknown, e.g. kilo auto routing) is non-zero and lands here too.
-	if (e.PricingPrompt != nil && *e.PricingPrompt != 0) || (e.PricingComplet != nil && *e.PricingComplet != 0) {
-		return "pass", tierSignalPricingPaid
 	}
 	if e.FreeFlag || strings.EqualFold(strings.TrimSpace(e.Mode), "free") {
 		return "free", tierSignalFlagFree
@@ -89,8 +92,11 @@ func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signa
 	if strings.HasSuffix(lower, ":free") || strings.HasSuffix(lower, "-free") {
 		return "free", tierSignalSuffixFree
 	}
-	if freeNameToken(lower) {
+	if freeWord(lower) {
 		return "free", tierSignalNameToken
+	}
+	if freeWord(e.Name) {
+		return "free", tierSignalDisplayName
 	}
 	for _, tag := range e.Tags {
 		if strings.EqualFold(strings.TrimSpace(tag), "free") {
@@ -99,6 +105,13 @@ func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signa
 	}
 	if freeIDAllowlist[lower] {
 		return "free", tierSignalAllowlist
+	}
+	// Explicit non-zero pricing (including "-1" variable/unknown, e.g. kilo auto
+	// routing) means paid, and it outranks the provider-wide free flag so a
+	// mixed catalog marked free:true does not turn every model free.
+	if (e.PricingPrompt != nil && *e.PricingPrompt != 0) || (e.PricingComplet != nil && *e.PricingComplet != 0) ||
+		(e.PricingRequest != nil && *e.PricingRequest != 0) {
+		return "pass", tierSignalPricingPaid
 	}
 	if providerFree {
 		return "free", tierSignalProviderFree
@@ -174,9 +187,15 @@ func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]
 				}
 				seen[id] = true
 				e := upstreamModelEntry{ID: id}
+				if n, ok := it["name"].(string); ok {
+					e.Name = strings.TrimSpace(n)
+				} else if n, ok := it["display_name"].(string); ok {
+					e.Name = strings.TrimSpace(n)
+				}
 				if pr, ok := it["pricing"].(map[string]any); ok {
 					e.PricingPrompt = rawNum(pr["prompt"])
 					e.PricingComplet = rawNum(pr["completion"])
+					e.PricingRequest = rawNum(pr["request"])
 				}
 				if tags, ok := it["tags"].([]any); ok {
 					for _, t := range tags {
