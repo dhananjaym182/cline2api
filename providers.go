@@ -977,8 +977,9 @@ var providerPresets = map[string]providerPreset{
 func syncProviderModels() {
 	provs := listProviders() // providersMu 自持自放；之后再拿 poolMu，无反向持锁路径
 	type claim struct {
-		name string
-		cost string
+		name   string
+		cost   string
+		signal string // id-only classifier hit, stamped as TierSignal provenance
 	}
 	claimed := map[string]claim{}
 	var ids []string
@@ -995,7 +996,16 @@ func syncProviderModels() {
 				continue
 			}
 			if _, ok := claimed[id]; !ok {
-				claimed[id] = claim{name: p.Name, cost: cost}
+				// Classify ids at seed time (same semantics as Cline/Zen sync):
+				// :free / -free suffixes, free name tokens and the zen-seed
+				// allowlist land in the pool as free immediately, without the
+				// import wizard. Id-only signals stamp provenance; pricing and
+				// entry-flag signals still require the catalog fetch path.
+				c := claim{name: p.Name, cost: cost}
+				if tier, sig := classifyUpstreamModel(upstreamModelEntry{ID: id}, p.Free); tier == "free" && sig != tierSignalProviderFree {
+					c.cost, c.signal = "free", sig
+				}
+				claimed[id] = c
 				ids = append(ids, id)
 			}
 		}
@@ -1029,17 +1039,31 @@ func syncProviderModels() {
 						kept[i].Provider = c.name
 						changed = true
 					}
-					// §9.3：分级器批准过的模型保留逐模型层级，不被整源层级覆盖
-					if kept[i].TierSignal == "" && kept[i].Cost != c.cost {
-						kept[i].Cost = c.cost
-						changed = true
+					// §9.3：分级器批准过的模型保留逐模型层级，不被整源层级覆盖。
+					// Untiered entries that hit an id-only free signal are upgraded
+					// in place with provenance, repairing entries seeded before the
+					// classifier existed; otherwise the provider-wide tier applies.
+					if kept[i].TierSignal == "" {
+						if c.signal != "" && kept[i].Cost != "free" {
+							kept[i].Cost = "free"
+							kept[i].TierSignal = c.signal
+							kept[i].TierDecidedAt = time.Now().Unix()
+							changed = true
+						} else if c.signal == "" && kept[i].Cost != c.cost {
+							kept[i].Cost = c.cost
+							changed = true
+						}
 					}
 					break
 				}
 			}
 			continue
 		}
-		kept = append(kept, Model{ID: id, Provider: c.name, Cost: c.cost, Status: "active", Source: "provider"})
+		m := Model{ID: id, Provider: c.name, Cost: c.cost, Status: "active", Source: "provider", TierSignal: c.signal}
+		if c.signal != "" {
+			m.TierDecidedAt = time.Now().Unix()
+		}
+		kept = append(kept, m)
 		changed = true
 	}
 	if !changed {
