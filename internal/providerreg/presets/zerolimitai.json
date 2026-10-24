@@ -1,0 +1,8 @@
+{
+  "id": "zerolimitai",
+  "name": "ZeroLimitAI",
+  "baseURL": "https://www.zerolimitai.com/api/v1",
+  "notes": "zerolimitai (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

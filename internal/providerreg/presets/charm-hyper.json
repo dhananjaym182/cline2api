@@ -1,0 +1,8 @@
+{
+  "id": "charm-hyper",
+  "name": "Charm Hyper",
+  "baseURL": "https://hyper.charm.land/v1",
+  "notes": "charm-hyper (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

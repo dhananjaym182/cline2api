@@ -1,0 +1,8 @@
+{
+  "id": "electronhub",
+  "name": "Electron Hub",
+  "baseURL": "https://api.electronhub.ai/v1",
+  "notes": "electronhub (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

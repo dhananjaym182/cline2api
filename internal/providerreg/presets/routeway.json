@@ -1,0 +1,18 @@
+{
+  "id": "routeway",
+  "name": "Routeway",
+  "baseURL": "https://api.routeway.ai/v1",
+  "notes": "routeway (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "llama-3.3-70b-instruct:free",
+    "nemotron-3-nano-30b-a3b:free",
+    "nemotron-nano-9b-v2:free",
+    "step-3.7-flash:free",
+    "step-3.5-flash:free",
+    "laguna-m.1:free",
+    "laguna-xs.2:free",
+    "llama-3.2-3b-instruct:free"
+  ],
+  "kind": "hasFree"
+}

@@ -1,0 +1,25 @@
+{
+  "id": "deepinfra",
+  "name": "DeepInfra",
+  "baseURL": "https://api.deepinfra.com/v1/openai",
+  "notes": "deepinfra (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "anthropic/claude-4-opus",
+    "anthropic/claude-4-sonnet",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "deepseek-ai/DeepSeek-V4-Flash",
+    "zai-org/GLM-5.1",
+    "moonshotai/Kimi-K2.6",
+    "MiniMaxAI/MiniMax-M2.5",
+    "Qwen/Qwen3.5-397B-A17B",
+    "Qwen/Qwen3.6-35B-A3B",
+    "google/gemma-4-31B-it",
+    "XiaomiMiMo/MiMo-V2.5-Pro"
+  ],
+  "kind": "hasFree"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "openrouter",
+  "name": "OpenRouter",
+  "baseURL": "https://openrouter.ai/api/v1",
+  "headers": {
+    "HTTP-Referer": "https://cline.bot",
+    "X-Title": "Cline Proxy"
+  },
+  "notes": "300+ models; many :free variants. Key: openrouter.ai/keys",
+  "freeTier": true
+}

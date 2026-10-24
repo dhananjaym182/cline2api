@@ -1,0 +1,7 @@
+{
+  "id": "cerebras",
+  "name": "Cerebras",
+  "baseURL": "https://api.cerebras.ai/v1",
+  "notes": "Free tier, very high throughput. Key: cloud.cerebras.ai",
+  "freeTier": true
+}

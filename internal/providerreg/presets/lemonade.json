@@ -1,0 +1,8 @@
+{
+  "id": "lemonade",
+  "name": "Lemonade Server",
+  "baseURL": "http://localhost:13305/api/v1",
+  "notes": "lemonade (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "local"
+}

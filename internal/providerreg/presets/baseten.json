@@ -1,0 +1,16 @@
+{
+  "id": "baseten",
+  "name": "Baseten",
+  "baseURL": "https://inference.baseten.co/v1",
+  "notes": "baseten (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "nvidia/Nemotron-120B-A12B",
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
+    "moonshotai/Kimi-K2.5",
+    "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3"
+  ],
+  "kind": "hasFree"
+}

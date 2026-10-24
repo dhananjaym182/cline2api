@@ -1,0 +1,13 @@
+{
+  "id": "reka",
+  "name": "Reka",
+  "baseURL": "https://api.reka.ai/v1",
+  "notes": "reka (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "reka-flash-3",
+    "reka-flash",
+    "reka-edge-2603"
+  ],
+  "kind": "hasFree"
+}

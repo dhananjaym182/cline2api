@@ -1,0 +1,17 @@
+{
+  "id": "morph",
+  "name": "Morph",
+  "baseURL": "https://api.morphllm.com/v1",
+  "notes": "morph (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "morph-v3-large",
+    "morph-v3-fast",
+    "morph-glm52-744b",
+    "morph-qwen35-397b",
+    "morph-qwen36-27b",
+    "morph-minimax3-428b",
+    "morph-dsv4flash"
+  ],
+  "kind": "hasFree"
+}

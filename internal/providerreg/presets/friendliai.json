@@ -1,0 +1,15 @@
+{
+  "id": "friendliai",
+  "name": "FriendliAI",
+  "baseURL": "https://api.friendli.ai/serverless/v1",
+  "notes": "friendliai (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "google/gemma-4-31B-it",
+    "deepseek-ai/DeepSeek-V3.2",
+    "zai-org/GLM-5.1",
+    "zai-org/GLM-5.2"
+  ],
+  "kind": "hasFree"
+}

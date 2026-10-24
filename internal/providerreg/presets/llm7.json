@@ -1,0 +1,14 @@
+{
+  "id": "llm7",
+  "name": "LLM7",
+  "baseURL": "https://api.llm7.io/v1",
+  "notes": "llm7 (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "gpt-4o-mini-2024-07-18",
+    "gpt-4.1-nano-2025-04-14",
+    "deepseek-r1-0528",
+    "qwen2.5-coder-32b-instruct"
+  ],
+  "kind": "hasFree"
+}

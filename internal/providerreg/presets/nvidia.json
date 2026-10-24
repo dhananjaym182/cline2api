@@ -1,0 +1,18 @@
+{
+  "id": "nvidia",
+  "name": "NVIDIA NIM",
+  "baseURL": "https://integrate.api.nvidia.com/v1",
+  "notes": "nvidia (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "minimaxai/minimax-m2.7",
+    "minimaxai/minimax-m3",
+    "z-ai/glm-5.2",
+    "deepseek-ai/deepseek-v4-pro",
+    "deepseek-ai/deepseek-v4-flash",
+    "moonshotai/kimi-k2.6",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/parakeet-ctc-1.1b-asr"
+  ],
+  "kind": "freeTier"
+}

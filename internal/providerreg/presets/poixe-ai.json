@@ -1,0 +1,8 @@
+{
+  "id": "poixe-ai",
+  "name": "Poixe AI",
+  "baseURL": "https://api.poixe.com/v1",
+  "notes": "poixe-ai (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

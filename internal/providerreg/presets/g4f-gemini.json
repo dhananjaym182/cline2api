@@ -1,0 +1,12 @@
+{
+  "id": "g4f-gemini",
+  "name": "g4f.space — Gemini",
+  "baseURL": "https://g4f.space/api/gemini/v1",
+  "notes": "g4f-gemini (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "models/gemini-2.5-flash",
+    "models/gemini-2.5-pro"
+  ],
+  "kind": "free"
+}

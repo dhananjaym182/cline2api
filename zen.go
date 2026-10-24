@@ -2,22 +2,20 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
-	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"cline-go-proxy/internal/config"
+	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/transport"
+	zenupstream "cline-go-proxy/internal/upstream/zen"
 )
 
 // ============================================================================
@@ -239,49 +237,12 @@ func routeModel(id string) string {
 
 // ============ zen 配置 ============
 
-type zenCompactConfig struct {
-	Auto         bool   `json:"auto"`         // 超限自动摘要压缩，默认开启
-	Buffer       int    `json:"buffer"`       // 预留输出缓冲 token，默认 20000
-	KeepTokens   int    `json:"keepTokens"`   // 压缩后尾部保留 token 预算，默认 8000
-	SummaryModel string `json:"summaryModel"` // 摘要生成模型，空=用请求模型本身
-	MaxSummary   int    `json:"maxSummary"`   // 摘要最大输出 token，默认 4096
-}
+type zenCompactConfig = config.ZenCompact
 
-type zenConfigData struct {
-	Enabled         bool     `json:"enabled"`
-	Key             string   `json:"key"`
-	BaseURL         string   `json:"baseURL"`
-	Proxies         []string `json:"proxies"`
-	ProxyStrategy   string   `json:"proxyStrategy"` // round_robin / random / fill
-	MaxConcurrency  int      `json:"maxConcurrency"`
-	Retries         int      `json:"retries"`
-	Failover        bool     `json:"failover"`
-	FailoverCount   int      `json:"failoverCount"`
-	FailoverMinutes int      `json:"failoverMinutes"`
-	// ZenHeaders 管理员自定义请求头：覆盖内置指纹头（User-Agent / x-opencode-*）。
-	// 特殊值 "$session"/"$request"/"$project"/"$client" 注入每请求的动态身份。
-	ZenHeaders map[string]string `json:"zenHeaders,omitempty"`
-	Compaction zenCompactConfig  `json:"compaction"`
-}
+type zenConfigData = config.Zen
 
 func defaultZenConfig() *zenConfigData {
-	return &zenConfigData{
-		Enabled:         true,
-		Key:             "public",
-		BaseURL:         zenAPIBase,
-		ProxyStrategy:   "round_robin",
-		MaxConcurrency:  8,
-		Retries:         3,
-		Failover:        true,
-		FailoverCount:   3,
-		FailoverMinutes: 5,
-		Compaction: zenCompactConfig{
-			Auto:       true,
-			Buffer:     20000,
-			KeepTokens: 8000,
-			MaxSummary: 4096,
-		},
-	}
+	return config.DefaultZen(zenAPIBase)
 }
 
 var (
@@ -294,22 +255,10 @@ func getZenConfig() *zenConfigData {
 	zenConfigMu.Lock()
 	defer zenConfigMu.Unlock()
 	if zenConfig == nil {
-		cfg := defaultZenConfig()
-		zenPath := resolveDataPath(".cline-zen.json")
-		if data, err := os.ReadFile(zenPath); err == nil {
-			if err := json.Unmarshal(data, cfg); err != nil {
-				backupCorruptFile(zenPath, err)
-			}
-		}
-		if cfg.Key == "" {
-			cfg.Key = "public"
-		}
-		if cfg.BaseURL == "" || cfg.BaseURL == "https://opencode.ai/zen/v1" {
-			// 旧默认端点迁移：免费模型自 2026-10 中旬起只在 inference API 应答
-			cfg.BaseURL = zenAPIBase
-		}
-		if cfg.ProxyStrategy != "random" && cfg.ProxyStrategy != "fill" {
-			cfg.ProxyStrategy = "round_robin"
+		path := resolveDataPath(config.ZenPath)
+		cfg, err := config.LoadZen(path, zenAPIBase)
+		if err != nil {
+			backupCorruptFile(path, err)
 		}
 		zenConfig = cfg
 	}
@@ -318,28 +267,12 @@ func getZenConfig() *zenConfigData {
 
 // setZenConfig 原子替换配置并持久化，重建信号量与 HTTP 传输层。
 func setZenConfig(c *zenConfigData) {
-	c.BaseURL = strings.TrimSpace(c.BaseURL)
-	if c.BaseURL == "" {
-		c.BaseURL = zenAPIBase
-	}
-	if c.Key == "" {
-		c.Key = "public"
-	}
-	if c.ProxyStrategy != "round_robin" && c.ProxyStrategy != "random" && c.ProxyStrategy != "fill" {
-		c.ProxyStrategy = "round_robin"
-	}
-	if c.MaxConcurrency <= 0 {
-		c.MaxConcurrency = 8
-	}
-	if c.Retries < 0 {
-		c.Retries = 3
-	}
+	c.NormalizeForSave(zenAPIBase)
 	zenConfigMu.Lock()
 	zenConfig = c
 	zenConfigMu.Unlock()
 
-	data, _ := json.MarshalIndent(c, "", "  ")
-	if err := writeFileAtomic(resolveDataPath(".cline-zen.json"), data, 0600); err != nil {
+	if err := config.SaveZen(resolveDataPath(config.ZenPath), c); err != nil {
 		log.Printf("zen config save failed: %v", err)
 	}
 	// 关闭故障转移时立即解除已武装的窗口：否则 UI 仍显示“故障转移中”，
@@ -426,63 +359,17 @@ func zenFailedNow() bool {
 
 // isRateLimited 限流信号识别：429/503 直接命中；502/403 按错误体关键词。
 func isRateLimited(status int, body string) bool {
-	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
-		return true
-	}
-	if status == http.StatusBadGateway || status == http.StatusForbidden {
-		low := strings.ToLower(body)
-		for _, kw := range []string{"resourceexhausted", "limit reached", "rate limit", "too many", "overloaded", "busy"} {
-			if strings.Contains(low, kw) {
-				return true
-			}
-		}
-	}
-	return false
+	return dispatch.IsRateLimited(status, body)
 }
 
-// parseRetryAfter 解析 Retry-After 响应头（秒数或 HTTP 日期）；解析失败返回 0。
+// parseRetryAfter parses Retry-After (seconds or HTTP date); invalid input is 0.
 func parseRetryAfter(h string) time.Duration {
-	h = strings.TrimSpace(h)
-	if h == "" {
-		return 0
-	}
-	var secs int
-	if _, err := fmt.Sscanf(h, "%d", &secs); err == nil && secs > 0 {
-		return time.Duration(secs) * time.Second
-	}
-	if t, err := http.ParseTime(h); err == nil {
-		d := time.Until(t)
-		if d > 0 {
-			return d
-		}
-	}
-	return 0
+	return dispatch.ParseRetryAfter(h)
 }
 
 // validateProxyList 校验代理列表格式：支持 http/https/socks5/socks5h，必须含 host:port。
 func validateProxyList(proxies []string) error {
-	for _, p := range proxies {
-		line := strings.TrimSpace(p)
-		if line == "" {
-			continue
-		}
-		u, err := url.Parse(line)
-		if err != nil {
-			return fmt.Errorf("proxy %q invalid: %v", line, err)
-		}
-		switch u.Scheme {
-		case "http", "https", "socks5", "socks5h":
-		default:
-			return fmt.Errorf("proxy %q: unsupported scheme (http/https/socks5/socks5h)", line)
-		}
-		if u.Host == "" {
-			return fmt.Errorf("proxy %q: missing host:port", line)
-		}
-		if _, _, err := net.SplitHostPort(u.Host); err != nil {
-			return fmt.Errorf("proxy %q: missing port", line)
-		}
-	}
-	return nil
+	return transport.ValidateProxyList(proxies)
 }
 
 // ============ 客户端身份 ============
@@ -497,250 +384,75 @@ func validateProxyList(proxies []string) error {
 //   x-opencode-request:  "msg" + 26 位标识（消息 id）
 //   x-opencode-client:   "cli"
 
-// zenClientVersion 跟随 opencode 最新发布版本（packages/opencode/package.json）。
-const zenClientVersion = "1.19.0"
+// zenClientVersion tracks the opencode release used by the client identity.
+const zenClientVersion = zenupstream.ClientVersion
 
-// zenProviderUtilsVersions 各协议的 ai-sdk provider-utils 版本（随发布二进制实测，
-// 参考 magpie zen-free 插件）：chat/responses/anthropic 各不相同。
-var zenProviderUtilsVersions = map[string]string{"chat": "4.0.23", "responses": "4.0.40", "anthropic": "4.0.46"}
+// zenProviderUtilsVersions maps protocols to ai-sdk provider-utils versions.
+var zenProviderUtilsVersions = zenupstream.ProviderUtilsVersions
 
-const zenBase62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+var zenIDs = zenupstream.NewIdentifier()
 
-var (
-	zenIDMu        sync.Mutex
-	zenIDLastStamp int64
-	zenIDCounter   uint64
-)
-
-// opencodeIdentifier 生成 OpenCode 自己形态的 identifier（packages/schema
-// identifier.ts）：12 hex 的 (Date.now()*0x1000 + 每毫秒计数)（session 取反，
-// 新的排前）+ 14 位随机 base62。免费层校验会话 ID 必须是该形态且计数位
-// （hex [9:12] 反解）<16（magpie zen-free 插件 #100）—— 哈希伪造的形状
-// 只有 ~16/4096 概率通过，其余 403 FreeTierError。
+// opencodeIdentifier generates an opencode-shaped identifier.
 func opencodeIdentifier(prefix string, descending bool) string {
-	zenIDMu.Lock()
-	now := time.Now().UnixMilli()
-	if now != zenIDLastStamp {
-		zenIDLastStamp = now
-		zenIDCounter = 0
-	}
-	zenIDCounter++
-	zenIDMu.Unlock()
-	current := uint64(now)*0x1000 + zenIDCounter
-	value := current & 0xffffffffffff
-	if descending {
-		value = ^current & 0xffffffffffff
-	}
-	random := make([]byte, 14)
-	rand.Read(random)
-	for i, b := range random {
-		random[i] = zenBase62[int(b)%len(zenBase62)]
-	}
-	return fmt.Sprintf("%s_%012x%s", prefix, value, string(random))
-}
-
-const hexDigits = "0123456789abcdef"
-
-func randHex(n int) string {
-	b := make([]byte, n)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	return zenIDs.New(prefix, descending)
 }
 
 func randIntn(n int) int {
-	if n <= 0 {
-		return 0
-	}
-	b := make([]byte, 4)
-	rand.Read(b)
-	v := int(b[0])<<24 | int(b[1])<<16 | int(b[2])<<8 | int(b[3])
-	if v < 0 {
-		v = -v
-	}
-	return v % n
+	return zenupstream.RandIntn(n)
 }
 
-// withRetryJitter 在退避时长上叠加 0~25% 抖动，错开并发重试。
+// withRetryJitter adds 0-25% jitter to a backoff delay.
 func withRetryJitter(delay time.Duration) time.Duration {
-	if delay <= 0 {
-		return delay
-	}
-	return delay + time.Duration(float64(delay)*float64(randIntn(26))/100)
+	return zenupstream.WithRetryJitter(delay)
 }
 
-// zenConversationSeed 提取对话稳定种子：客户端会话信号优先，其次首条用户消息内容。
+// zenConversationSeed extracts a stable conversation seed.
 func zenConversationSeed(params map[string]any) string {
-	if meta, ok := params["metadata"].(map[string]any); ok {
-		if sid, _ := meta["session_id"].(string); sid != "" {
-			return sid
-		}
-	}
-	msgs, ok := params["messages"].([]any)
-	if !ok {
-		return ""
-	}
-	for _, m := range msgs {
-		mm, ok := m.(map[string]any)
-		if !ok || mm["role"] != "user" {
-			continue
-		}
-		encoded, _ := json.Marshal(mm["content"])
-		if len(encoded) > 0 && string(encoded) != "null" {
-			return string(encoded)
-		}
-	}
-	return ""
+	return zenupstream.ConversationSeed(params)
 }
 
-// zenSessionID 返回本次上游请求的会话 ID：OpenCode 自己形态（免费层校验会话
-// ID 的计数位），一个对话一个会话（对话种子映射到固定 shaped session，容量
-// 封顶 1000 超限重建），无对话信号时随机。
+var zenSessions = zenupstream.NewSessionCache()
+
+// zenSessionID returns a conversation-stable opencode-shaped session ID.
 func zenSessionID(params map[string]any) string {
-	if signal := zenConversationSeed(params); signal != "" {
-		return zenSessionLookup([]byte("ses\x00" + signal))
-	}
-	return opencodeIdentifier("ses", true)
+	return zenSessions.SessionID(params)
 }
 
-// zenSessionLookup 对话种子 → 固定的 OpenCode 形态会话（每种子一次生成，
-// 表封顶 1000，超限整体重建 —— 重建代价只是会话换新）。
-var (
-	zenSessionMu     sync.Mutex
-	zenSessionBySeed = map[string]string{}
-)
-
+// zenSessionLookup maps a seed to a fixed opencode-shaped session.
 func zenSessionLookup(seed []byte) string {
-	key := sha256.Sum256(seed)
-	keyStr := hex.EncodeToString(key[:8])
-	zenSessionMu.Lock()
-	defer zenSessionMu.Unlock()
-	sess, ok := zenSessionBySeed[keyStr]
-	if !ok {
-		sess = opencodeIdentifier("ses", true)
-		if len(zenSessionBySeed) >= 1000 {
-			zenSessionBySeed = map[string]string{}
-		}
-		zenSessionBySeed[keyStr] = sess
-	}
-	return sess
+	return zenSessions.Lookup(seed)
 }
 
-// zenUserAgent OpenCode 1.19.0 经 AI SDK 发出的 UA 形态（按协议，provider-utils
-// 版本各不相同；magpie zen-free 插件从发布二进制的实际请求捕获）。
+// zenUserAgent returns the opencode User-Agent for a protocol.
 func zenUserAgent(proto string) string {
-	pu := zenProviderUtilsVersions[proto]
-	if pu == "" {
-		pu = "4.0.23"
-	}
-	return fmt.Sprintf("opencode/%s ai-sdk/provider-utils/%s runtime/bun/1.3.14", zenClientVersion, pu)
+	return zenupstream.UserAgent(proto)
 }
 
 // ============ zen 上游调用 ============
 
-// anonymousCoreTools 是匿名免费层期望的核心工具名（agent 形态校验，参考 opencode2api）。
-var anonymousCoreTools = []string{"bash", "edit", "glob", "grep", "read"}
+// anonymousCoreTools are the tool names expected by the anonymous free tier.
+var anonymousCoreTools = zenupstream.AnonymousCoreTools
 
-// ensureAnonymousTools 补齐缺失的核心工具定义，让请求读作 agent 会话。
-// 客户端已声明的工具保持原样。
+// ensureAnonymousTools tops up missing core tool definitions.
 func ensureAnonymousTools(body map[string]any) {
-	raw, exists := body["tools"]
-	if !exists {
-		body["tools"] = anonymousToolset(nil)
-		return
-	}
-	items, ok := raw.([]any)
-	if !ok {
-		return
-	}
-	present := make(map[string]bool, len(items))
-	for _, item := range items {
-		entry, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		fn, ok := entry["function"].(map[string]any)
-		if !ok {
-			continue
-		}
-		if name, _ := fn["name"].(string); name != "" {
-			present[name] = true
-		}
-	}
-	missing := make([]string, 0, len(anonymousCoreTools))
-	for _, name := range anonymousCoreTools {
-		if !present[name] {
-			missing = append(missing, name)
-		}
-	}
-	if len(missing) == 0 {
-		return
-	}
-	body["tools"] = append(items, anonymousToolset(missing)...)
+	zenupstream.EnsureAnonymousTools(body)
 }
 
 func anonymousToolset(names []string) []any {
-	if names == nil {
-		names = anonymousCoreTools
-	}
-	tools := make([]any, 0, len(names))
-	for _, name := range names {
-		tools = append(tools, map[string]any{
-			"type": "function",
-			"function": map[string]any{
-				"name":        name,
-				"description": "Agent tool " + name,
-				"parameters":  map[string]any{"type": "object", "properties": map[string]any{}},
-			},
-		})
-	}
-	return tools
+	return zenupstream.AnonymousToolset(names)
 }
 
-// buildZenBody 构造 zen 请求体：只带 OpenAI 兼容字段，模型名改写为 zen 正式 ID。
-// 匿名免费层只接受 agent 形态的流式请求：强制 stream:true + include_usage + 注入核心工具。
+// buildZenBody constructs a zen chat request body.
 func buildZenBody(params map[string]any, stream bool, anonymous bool) map[string]any {
-	body := map[string]any{}
-	for _, key := range passThroughKeys {
-		if val, ok := params[key]; ok {
-			body[key] = val
-		}
-	}
-	for _, key := range []string{"model", "max_tokens", "max_completion_tokens"} {
-		if val, ok := params[key]; ok {
-			body[key] = val
-		}
-	}
-	// messages 需先清洗畸形 tool_calls 再透传
-	if msgsRaw, ok := params["messages"]; ok {
-		if msgsArr, ok := msgsRaw.([]any); ok {
-			body["messages"] = sanitizeMessages(msgsArr)
-		} else {
-			body["messages"] = msgsRaw
-		}
-	}
-	wireStream := stream
-	if anonymous {
-		wireStream = true
-	}
-	body["stream"] = wireStream
-	// 免费层 agent 形态校验对带 key 的请求同样生效（2026-09-29 实测）：
-	// 核心工具 bash/edit/glob/grep/read 缺一则 403 FreeTierError，这里统一补齐
-	ensureAnonymousTools(body)
-	if anonymous && wireStream {
-		body["stream_options"] = map[string]any{"include_usage": true}
-	}
-	if model, ok := params["model"].(string); ok {
-		if m, ok := resolveZenInfo(model); ok {
-			body["model"] = m.ID
-		} else if model != "" {
-			body["model"] = strings.TrimPrefix(model, "opencode/")
-		}
-	}
-	delete(body, "reasoning_effort")
-	delete(body, "reasoningEffort")
-	// 定稿前清洗 tools：null 可选字段会被上游网关硬拒 400（见 sanitizeToolsForUpstream）
-	sanitizeToolsForUpstream(body)
-	return body
+	return zenupstream.BuildChatBody(params, stream, anonymous, zenupstream.BodyOptions{
+		PassThroughKeys: passThroughKeys,
+		ResolveModel: func(model string) (string, bool) {
+			if m, ok := resolveZenInfo(model); ok {
+				return m.ID, true
+			}
+			return "", false
+		},
+	})
 }
 
 // callZenAPI 调用 zen 上游：并发信号量 + 指数退避重试 + 代理冷却 + 故障转移计数。
@@ -765,11 +477,14 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal zen body: %w", err)
 	}
-	zenPath := "/chat/completions"
-	if useResponses {
-		zenPath = "/responses"
+	zc := zenupstream.Client{
+		HTTP:     getZenHTTPClient(),
+		BaseURL:  cfg.BaseURL,
+		APIKey:   cfg.Key,
+		Headers:  cfg.ZenHeaders,
+		IDs:      zenIDs,
+		Sessions: zenSessions,
 	}
-	endpoint := strings.TrimRight(cfg.BaseURL, "/") + zenPath
 
 	zenStateMu.Lock()
 	sem := zenSem
@@ -788,56 +503,30 @@ func callZenAPI(params map[string]any, stream bool) (*http.Response, error) {
 	delay := time.Second
 
 	for attempt := 0; ; attempt++ {
-		req, err := http.NewRequest("POST", endpoint, bytes.NewReader(bodyJSON))
-		if err != nil {
-			return nil, fmt.Errorf("create zen request: %w", err)
-		}
-		sess := zenSessionID(params)
-		user := opencodeIdentifier("msg", false)
-		ua := zenUserAgent(protoName)
-		// 只发 OpenCode 1.19.0 自己发给网关的头（magpie zen-free 0.1.6 实测配方），
-		// 多余的头（x-session-affinity / X-Session-Id）不再发送
-		req.Header.Set("Authorization", "Bearer "+cfg.Key)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "*/*")
-		req.Header.Set("User-Agent", ua)
-		req.Header.Set("x-opencode-project", "global")
-		req.Header.Set("x-opencode-session", sess)
-		req.Header.Set("x-opencode-request", user)
-		req.Header.Set("x-opencode-client", "cli")
-		req.Header.Set("x-opencode-session-id", sess)
-		// 管理员自定义头：支持 $session/$request/$project/$client 动态占位符，其余原样覆盖
-		for k, v := range cfg.ZenHeaders {
-			switch v {
-			case "$session":
-				req.Header.Set(k, sess)
-			case "$request":
-				req.Header.Set(k, user)
-			case "$project":
-				req.Header.Set(k, "global")
-			case "$client":
-				req.Header.Set(k, "cli")
-			default:
-				req.Header.Set(k, v)
-			}
-		}
-		if model, _ := params["model"].(string); model != "" {
-			if m, ok := resolveZenInfo(model); ok {
-				req.Header.Set("x-opencode-model", m.ID)
-			}
-		}
-		log.Printf("  zen upstream: model=%v proto=%s stream=%v(下游=%v) msgs=%d via=%s attempt=%d session=%s",
-			bodyParamsModel(params), protoName, anonymous, stream, getMsgCount(params), describeZenProxy(), attempt+1, truncate(sess, 30))
-
 		// 响应头看门狗：黑洞场景（TCP 通、握手/响应头静默丢弃）请求会永久挂起，
 		// 且 callZenAPI 不返回则 markZenFail 不触发、故障转移永远无法激活。
 		// 60s 内未收到响应头则取消本次尝试（计为网络错误、走重试/故障转移）；
 		// 响应头到达后立即停掉看门狗，流式传输时长不受限制。
 		watchCtx, watchCancel := context.WithCancel(context.Background())
 		watchdog := time.AfterFunc(zenHeaderWatchdogTimeout, watchCancel)
-		req = req.WithContext(watchCtx)
 
-		resp, err := getZenHTTPClient().Do(req)
+		modelID := ""
+		if model, _ := params["model"].(string); model != "" {
+			if m, ok := resolveZenInfo(model); ok {
+				modelID = m.ID
+			}
+		}
+		req, err := zc.BuildRequest(watchCtx, protoName, bodyJSON, params, modelID)
+		if err != nil {
+			watchdog.Stop()
+			watchCancel()
+			return nil, fmt.Errorf("create zen request: %w", err)
+		}
+		sess := req.Header.Get("x-opencode-session")
+		log.Printf("  zen upstream: model=%v proto=%s stream=%v(下游=%v) msgs=%d via=%s attempt=%d session=%s",
+			bodyParamsModel(params), protoName, anonymous, stream, getMsgCount(params), describeZenProxy(), attempt+1, truncate(sess, 30))
+
+		resp, err := zc.HTTP.Do(req)
 		if err != nil {
 			watchdog.Stop()
 			watchCancel()
@@ -1027,81 +716,6 @@ func collapseZenStreamResponse(resp *http.Response, model string) (*http.Respons
 	}
 	log.Printf("  zen collapse: stream -> json (content_len=%d tool_calls=%d)", len(acc.Content), len(acc.ToolCalls))
 	return zenCollapseToChatResponse(acc, resp.Request)
-}
-
-// zenCollapseToChatResponse 把折叠累计器组装成等价的单个 chat.completion JSON 响应。
-// 供 chat SSE 与 Responses 事件流两条折叠路径复用。
-func zenCollapseToChatResponse(acc *zenCollapseAcc, req *http.Request) (*http.Response, error) {
-	msg := map[string]any{"role": "assistant", "content": acc.Content}
-	if acc.Reasoning != "" {
-		msg["reasoning_content"] = acc.Reasoning
-	}
-	if len(acc.ToolCalls) > 0 {
-		calls := make([]any, 0, len(acc.ToolCalls))
-		for i, t := range acc.ToolCalls {
-			if t.ID == "" {
-				t.ID = fmt.Sprintf("call_%d", i)
-			}
-			calls = append(calls, map[string]any{
-				"id":       t.ID,
-				"type":     "function",
-				"function": map[string]any{"name": t.Name, "arguments": t.Arguments},
-			})
-		}
-		msg["tool_calls"] = calls
-	}
-	finish := acc.FinishReason
-	if finish == "" {
-		finish = "stop"
-	}
-	out := map[string]any{
-		"id":      acc.ID,
-		"object":  "chat.completion",
-		"created": acc.Created,
-		"model":   acc.Model,
-		"choices": []any{map[string]any{
-			"index":         0,
-			"message":       msg,
-			"finish_reason": finish,
-		}},
-		"usage": map[string]any{
-			"prompt_tokens":     acc.Usage.Prompt,
-			"completion_tokens": acc.Usage.Completion,
-			"total_tokens":      acc.Usage.Total,
-		},
-	}
-	data, err := json.Marshal(out)
-	if err != nil {
-		return nil, fmt.Errorf("collapse zen stream: %w", err)
-	}
-	return &http.Response{
-		Status:        "200 OK",
-		StatusCode:    http.StatusOK,
-		Proto:         "HTTP/1.1",
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		Header:        http.Header{"Content-Type": []string{"application/json"}},
-		Body:          io.NopCloser(bytes.NewReader(data)),
-		ContentLength: int64(len(data)),
-		Request:       req,
-	}, nil
-}
-
-type zenCollapseTool struct {
-	ID        string
-	Name      string
-	Arguments string
-}
-
-type zenCollapseAcc struct {
-	ID           string
-	Model        string
-	Created      int64
-	Content      string
-	Reasoning    string
-	FinishReason string
-	ToolCalls    []zenCollapseTool
-	Usage        tokenUsage
 }
 
 // readAllLimited 读取响应体，最多 limit 字节（防御异常大的错误页）。
@@ -1567,356 +1181,24 @@ func zenChatContentToResponsesInput(content any) any {
 	return ""
 }
 
-// zenInt64 宽松地把 JSON 数值转成 int64。
-func zenInt64(v any) int64 {
-	switch n := v.(type) {
-	case float64:
-		return int64(n)
-	case int64:
-		return n
-	case int:
-		return int64(n)
-	case json.Number:
-		i, _ := n.Int64()
-		return i
-	}
-	return 0
+// zenInt64 coerces a JSON-decoded numeric value to int64.
+func zenInt64(v any) int64 { return zenupstream.Int64(v) }
+
+// zenCollapseAcc / zenCollapseTool are the shared collapsed-response shapes.
+type zenCollapseAcc = zenupstream.CollapseAcc
+type zenCollapseTool = zenupstream.CollapseTool
+
+// zenCollapseToChatResponse renders a collapsed accumulator as one chat.completion.
+func zenCollapseToChatResponse(acc *zenCollapseAcc, req *http.Request) (*http.Response, error) {
+	return zenupstream.CollapseToChatResponse(acc, req)
 }
 
-// zenResponsesUsage 把 Responses usage（input_tokens/output_tokens）映射为 tokenUsage。
-func zenResponsesUsage(raw any) tokenUsage {
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return tokenUsage{}
-	}
-	u := tokenUsage{Valid: true}
-	u.Prompt = zenInt64(m["input_tokens"])
-	u.Completion = zenInt64(m["output_tokens"])
-	u.Total = zenInt64(m["total_tokens"])
-	if u.Total == 0 {
-		u.Total = u.Prompt + u.Completion
-	}
-	if d, ok := m["input_tokens_details"].(map[string]any); ok {
-		u.Cached = zenInt64(d["cached_tokens"])
-	}
-	return u
-}
-
-// scanSSEData 逐条读取 SSE data: 载荷并回调（忽略 event:/注释行与 [DONE]）。
-func scanSSEData(src io.Reader, handle func(obj map[string]any)) error {
-	scanner := bufio.NewScanner(src)
-	scanner.Buffer(make([]byte, 0, 64<<10), 8<<20)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		payload := strings.TrimSpace(line[5:])
-		if payload == "" || payload == "[DONE]" {
-			continue
-		}
-		var obj map[string]any
-		if json.Unmarshal([]byte(payload), &obj) != nil {
-			continue
-		}
-		handle(obj)
-	}
-	return scanner.Err()
-}
-
-// zenResponsesSink 消费 Responses 事件流的统一出口：流式转写与折叠两种实现。
-// itemID 唯一标识一个 function_call 输出项；final=true 的 args 为权威全量参数。
-type zenResponsesSink interface {
-	open(id, model string)
-	content(text string)
-	reasoning(text string)
-	toolStart(itemID, callID, name string)
-	toolArgs(itemID, args string, final bool)
-	done(model, status string, usage tokenUsage)
-}
-
-// pumpZenResponsesEvents 解析 Responses SSE 事件并驱动 sink。
-func pumpZenResponsesEvents(src io.Reader, sink zenResponsesSink) error {
-	opened := false
-	return scanSSEData(src, func(obj map[string]any) {
-		evType, _ := obj["type"].(string)
-		resp, _ := obj["response"].(map[string]any)
-		switch evType {
-		case "response.created":
-			if !opened && resp != nil {
-				opened = true
-				id, _ := resp["id"].(string)
-				model, _ := resp["model"].(string)
-				sink.open(id, model)
-			}
-		case "response.output_text.delta":
-			if d, _ := obj["delta"].(string); d != "" {
-				sink.content(d)
-			}
-		case "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
-			if d, _ := obj["delta"].(string); d != "" {
-				sink.reasoning(d)
-			}
-		case "response.output_item.added":
-			item, _ := obj["item"].(map[string]any)
-			if it, _ := item["type"].(string); it == "function_call" {
-				itemID, _ := item["id"].(string)
-				callID, _ := item["call_id"].(string)
-				name, _ := item["name"].(string)
-				sink.toolStart(itemID, callID, name)
-			}
-		case "response.function_call_arguments.delta":
-			itemID, _ := obj["item_id"].(string)
-			if d, _ := obj["delta"].(string); d != "" {
-				sink.toolArgs(itemID, d, false)
-			}
-		case "response.function_call_arguments.done":
-			itemID, _ := obj["item_id"].(string)
-			args, _ := obj["arguments"].(string)
-			sink.toolArgs(itemID, args, true)
-		case "response.completed", "response.incomplete", "response.failed":
-			model := ""
-			var usage tokenUsage
-			if resp != nil {
-				model, _ = resp["model"].(string)
-				usage = zenResponsesUsage(resp["usage"])
-			}
-			sink.done(model, strings.TrimPrefix(evType, "response."), usage)
-		}
-	})
-}
-
-// zenChatChunkSink 把 Responses 事件流实时转写成 chat.completion.chunk SSE。
-type zenChatChunkSink struct {
-	w        io.Writer
-	id       string
-	created  int64
-	model    string
-	toolIdx  map[string]int
-	toolSeen map[string]bool
-	toolN    int
-	hasTools bool
-	err      error
-}
-
-func (s *zenChatChunkSink) write(chunk map[string]any) {
-	if s.err != nil {
-		return
-	}
-	b, err := json.Marshal(chunk)
-	if err != nil {
-		s.err = err
-		return
-	}
-	_, s.err = fmt.Fprintf(s.w, "data: %s\n\n", b)
-}
-
-func (s *zenChatChunkSink) chunk(delta map[string]any, finish any) {
-	s.write(map[string]any{
-		"id":      s.id,
-		"object":  "chat.completion.chunk",
-		"created": s.created,
-		"model":   s.model,
-		"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}},
-	})
-}
-
-func (s *zenChatChunkSink) open(id, model string) {
-	if id != "" {
-		s.id = id
-	}
-	if model != "" {
-		s.model = model
-	}
-	s.chunk(map[string]any{"role": "assistant", "content": ""}, nil)
-}
-
-func (s *zenChatChunkSink) content(text string) {
-	s.chunk(map[string]any{"content": text}, nil)
-}
-
-func (s *zenChatChunkSink) reasoning(text string) {
-	s.chunk(map[string]any{"reasoning_content": text}, nil)
-}
-
-func (s *zenChatChunkSink) toolStart(itemID, callID, name string) {
-	idx := s.toolN
-	s.toolN++
-	if itemID == "" {
-		itemID = fmt.Sprintf("tc_%d", idx)
-	}
-	s.toolIdx[itemID] = idx
-	s.hasTools = true
-	s.chunk(map[string]any{"tool_calls": []any{map[string]any{
-		"index": idx, "id": callID, "type": "function",
-		"function": map[string]any{"name": name, "arguments": ""},
-	}}}, nil)
-}
-
-func (s *zenChatChunkSink) toolArgs(itemID, args string, final bool) {
-	idx, ok := s.toolIdx[itemID]
-	if !ok {
-		// 没有配对 start 事件时无法构造合法 tool_call（空名会被客户端当畸形丢弃），放弃
-		return
-	}
-	if final {
-		if s.toolSeen[itemID] {
-			return // 增量已发过完整参数，done 事件冗余
-		}
-	} else {
-		s.toolSeen[itemID] = true
-	}
-	s.chunk(map[string]any{"tool_calls": []any{map[string]any{
-		"index": idx, "function": map[string]any{"arguments": args},
-	}}}, nil)
-}
-
-func (s *zenChatChunkSink) done(model, status string, usage tokenUsage) {
-	if model != "" {
-		s.model = model
-	}
-	if status == "failed" {
-		log.Printf("  zen responses: upstream reported failure mid-stream")
-	}
-	finish := "stop"
-	if status == "incomplete" {
-		finish = "length"
-	} else if s.hasTools && status == "completed" {
-		finish = "tool_calls"
-	}
-	s.chunk(map[string]any{}, finish)
-	if usage.Valid {
-		s.write(map[string]any{
-			"id":      s.id,
-			"object":  "chat.completion.chunk",
-			"created": s.created,
-			"model":   s.model,
-			"choices": []any{},
-			"usage": map[string]any{
-				"prompt_tokens":         usage.Prompt,
-				"completion_tokens":     usage.Completion,
-				"total_tokens":          usage.Total,
-				"prompt_tokens_details": map[string]any{"cached_tokens": usage.Cached},
-			},
-		})
-	}
-	if s.err == nil {
-		_, s.err = fmt.Fprint(s.w, "data: [DONE]\n\n")
-	}
-}
-
-// zenChatAccSink 折叠实现：把 Responses 事件流累计成 chat.completion 结构。
-type zenChatAccSink struct {
-	acc     *zenCollapseAcc
-	toolIdx map[string]int
-}
-
-func (s *zenChatAccSink) open(id, model string) {
-	if id != "" {
-		s.acc.ID = id
-	}
-	if model != "" {
-		s.acc.Model = model
-	}
-}
-
-func (s *zenChatAccSink) content(text string) {
-	s.acc.Content += text
-}
-
-func (s *zenChatAccSink) reasoning(text string) {
-	s.acc.Reasoning += text
-}
-
-func (s *zenChatAccSink) toolStart(itemID, callID, name string) {
-	idx := len(s.acc.ToolCalls)
-	s.acc.ToolCalls = append(s.acc.ToolCalls, zenCollapseTool{ID: callID, Name: name})
-	if itemID == "" {
-		itemID = fmt.Sprintf("tc_%d", idx)
-	}
-	s.toolIdx[itemID] = idx
-}
-
-func (s *zenChatAccSink) toolArgs(itemID, args string, final bool) {
-	idx, ok := s.toolIdx[itemID]
-	if !ok || idx >= len(s.acc.ToolCalls) {
-		return
-	}
-	if final {
-		// done 事件携带权威全量参数：非空即覆盖，防增量分片丢失导致参数截断
-		if args != "" {
-			s.acc.ToolCalls[idx].Arguments = args
-		}
-		return
-	}
-	s.acc.ToolCalls[idx].Arguments += args
-}
-
-func (s *zenChatAccSink) done(model, status string, usage tokenUsage) {
-	if model != "" {
-		s.acc.Model = model
-	}
-	switch status {
-	case "incomplete":
-		s.acc.FinishReason = "length"
-	case "completed":
-		if len(s.acc.ToolCalls) > 0 {
-			s.acc.FinishReason = "tool_calls"
-		} else {
-			s.acc.FinishReason = "stop"
-		}
-	default:
-		s.acc.FinishReason = "stop"
-	}
-	if usage.Valid {
-		s.acc.Usage = usage
-	}
-}
-
-// streamZenResponsesAsChat 把上游 Responses SSE 实时转写成 chat.completion.chunk SSE。
-// 转写 goroutine 拥有上游 body 与 watchdog ctx 的生命周期：结束时一并释放；
-// 下游断开会导致写管道失败，同样触发释放。
+// streamZenResponsesAsChat rewrites upstream Responses SSE into chat chunk SSE.
 func streamZenResponsesAsChat(resp *http.Response, model string, cancel context.CancelFunc) *http.Response {
-	pr, pw := io.Pipe()
-	go func() {
-		sink := &zenChatChunkSink{
-			w:        pw,
-			id:       "chatcmpl-" + randHex(12),
-			created:  time.Now().Unix(),
-			model:    model,
-			toolIdx:  map[string]int{},
-			toolSeen: map[string]bool{},
-		}
-		err := pumpZenResponsesEvents(resp.Body, sink)
-		if sink.err != nil {
-			err = sink.err
-		}
-		resp.Body.Close()
-		cancel()
-		pw.CloseWithError(err)
-	}()
-	return &http.Response{
-		Status:        "200 OK",
-		StatusCode:    http.StatusOK,
-		Proto:         "HTTP/1.1",
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		Header:        http.Header{"Content-Type": []string{"text/event-stream"}},
-		Body:          pr,
-		ContentLength: -1,
-		Request:       resp.Request,
-	}
+	return zenupstream.StreamResponsesAsChat(resp, model, cancel)
 }
 
-// collapseZenResponsesStream 消费 Responses 事件流，折叠成单个 chat.completion JSON 响应。
+// collapseZenResponsesStream folds an upstream Responses SSE into one JSON response.
 func collapseZenResponsesStream(resp *http.Response, model string, cancel context.CancelFunc) (*http.Response, error) {
-	defer resp.Body.Close()
-	defer cancel()
-	acc := &zenCollapseAcc{Model: model, Created: time.Now().Unix()}
-	sink := &zenChatAccSink{acc: acc, toolIdx: map[string]int{}}
-	if err := pumpZenResponsesEvents(resp.Body, sink); err != nil {
-		return nil, fmt.Errorf("zen responses stream read: %w", err)
-	}
-	log.Printf("  zen responses collapse: stream -> json (content_len=%d tool_calls=%d)", len(acc.Content), len(acc.ToolCalls))
-	return zenCollapseToChatResponse(acc, resp.Request)
+	return zenupstream.CollapseResponsesStream(resp, model, cancel)
 }

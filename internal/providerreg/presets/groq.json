@@ -1,0 +1,7 @@
+{
+  "id": "groq",
+  "name": "Groq",
+  "baseURL": "https://api.groq.com/openai/v1",
+  "notes": "Fast free tier (Llama/Qwen). Key: console.groq.com/keys",
+  "freeTier": true
+}

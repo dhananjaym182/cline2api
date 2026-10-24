@@ -1,0 +1,13 @@
+{
+  "id": "g4f-nvidia",
+  "name": "g4f.space — NVIDIA",
+  "baseURL": "https://g4f.space/api/nvidia/v1",
+  "notes": "g4f-nvidia (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "nvidia/nemotron-3-nano-30b-a3b",
+    "z-ai/glm-5.2",
+    "minimaxai/minimax-m2.7"
+  ],
+  "kind": "free"
+}

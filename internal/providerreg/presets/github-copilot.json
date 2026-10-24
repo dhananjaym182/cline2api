@@ -1,0 +1,12 @@
+{
+  "id": "github-copilot",
+  "name": "GitHub Copilot (Free plan)",
+  "baseURL": "https://api.githubcopilot.com",
+  "notes": "设备码登录 GitHub → 自动兑换 Copilot 作业票（免 Key）；Copilot Free 计划含少量高级请求配额",
+  "freeTier": true,
+  "modelsFetcher": {
+    "url": "https://api.githubcopilot.com/models",
+    "type": "openai"
+  },
+  "loginFlow": true
+}

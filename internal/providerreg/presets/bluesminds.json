@@ -1,0 +1,32 @@
+{
+  "id": "bluesminds",
+  "name": "BluesMinds",
+  "baseURL": "https://api.bluesminds.com/v1",
+  "notes": "bluesminds (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "claude-sonnet-4-5",
+    "claude-haiku-4-5",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-exp",
+    "deepseek-reasoner",
+    "deepseek-chat",
+    "qwen-plus",
+    "qwen-turbo",
+    "kimi-k2",
+    "kimi-k2-thinking",
+    "glm-4.7",
+    "glm-4-flash",
+    "minimax-m2.5",
+    "claude-opus-4-5",
+    "gemini-2.5-pro",
+    "grok-3",
+    "qwen-max"
+  ],
+  "kind": "hasFree"
+}

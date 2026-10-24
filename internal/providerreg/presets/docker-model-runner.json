@@ -1,0 +1,8 @@
+{
+  "id": "docker-model-runner",
+  "name": "Docker Model Runner",
+  "baseURL": "http://localhost:12434/v1",
+  "notes": "docker-model-runner (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "local"
+}

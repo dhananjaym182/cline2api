@@ -1,0 +1,16 @@
+{
+  "id": "navy",
+  "name": "NavyAI",
+  "baseURL": "https://api.navy/v1",
+  "notes": "navy (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "llama-3.3-70b-instruct",
+    "gemma-4-31b-it",
+    "deepseek-v4-flash",
+    "deepseek-chat",
+    "mistral-small-latest",
+    "llama-4-scout"
+  ],
+  "kind": "hasFree"
+}

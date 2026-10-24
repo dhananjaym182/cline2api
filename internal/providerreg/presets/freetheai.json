@@ -1,0 +1,13 @@
+{
+  "id": "freetheai",
+  "name": "FreeTheAi",
+  "baseURL": "https://api.freetheai.xyz/v1",
+  "notes": "freetheai (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "gpt-4o-mini",
+    "llama-3.3-70b-instruct",
+    "deepseek-chat"
+  ],
+  "kind": "hasFree"
+}

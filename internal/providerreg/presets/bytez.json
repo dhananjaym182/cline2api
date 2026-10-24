@@ -1,0 +1,8 @@
+{
+  "id": "bytez",
+  "name": "Bytez",
+  "baseURL": "https://api.bytez.com/v1",
+  "notes": "bytez (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

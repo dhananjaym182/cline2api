@@ -1,0 +1,21 @@
+{
+  "id": "opencode",
+  "name": "OpenCode Free",
+  "baseURL": "https://opencode.ai",
+  "headers": {
+    "x-opencode-client": "desktop"
+  },
+  "notes": "opencode (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "x-preview-f-free",
+    "laguna-s-2.1-free",
+    "muse-spark-1.2-contributor-free",
+    "muse-spark-1.3-contributor-free"
+  ],
+  "modelsFetcher": {
+    "url": "https://opencode.ai/zen/v1/models",
+    "type": "opencode-free"
+  },
+  "kind": "free"
+}

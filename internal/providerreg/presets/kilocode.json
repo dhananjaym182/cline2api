@@ -1,0 +1,8 @@
+{
+  "id": "kilocode",
+  "name": "Kilo Code (Free)",
+  "baseURL": "https://api.kilo.ai/api/openrouter",
+  "notes": "设备码登录（无需 API Key）；登录后在编辑器「账号连接」选连接，组织头自动注入",
+  "freeTier": true,
+  "loginFlow": true
+}

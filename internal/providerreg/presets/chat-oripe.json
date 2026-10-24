@@ -1,0 +1,8 @@
+{
+  "id": "chat-oripe",
+  "name": "Chat Oripe",
+  "baseURL": "https://api.oriper.com/v1",
+  "notes": "chat-oripe (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "ollama-cloud",
+  "name": "Ollama Cloud",
+  "baseURL": "https://ollama.com/v1",
+  "notes": "ollama-cloud (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "gpt-oss:20b",
+    "gpt-oss:120b",
+    "deepseek-v4-pro",
+    "deepseek-v4-flash",
+    "kimi-k2.6",
+    "glm-5.1",
+    "glm-5.2",
+    "minimax-m3",
+    "minimax-m2.7",
+    "gemma4:31b",
+    "nemotron-3-super",
+    "qwen3.5:397b"
+  ],
+  "kind": "hasFree"
+}

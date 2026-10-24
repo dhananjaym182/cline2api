@@ -1,0 +1,8 @@
+{
+  "id": "openference-api",
+  "name": "Openference API",
+  "baseURL": "https://api.openference.com/v1",
+  "notes": "openference-api (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

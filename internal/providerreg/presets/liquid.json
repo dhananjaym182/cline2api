@@ -1,0 +1,11 @@
+{
+  "id": "liquid",
+  "name": "Liquid AI",
+  "baseURL": "https://inference.liquid.ai/v1",
+  "notes": "liquid (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "liquid-lfm-40b"
+  ],
+  "kind": "hasFree"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "openadapter",
+  "name": "OpenAdapter",
+  "baseURL": "https://api.openadapter.in/v1",
+  "notes": "openadapter (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "glm-4.7"
+  ],
+  "kind": "hasFree"
+}

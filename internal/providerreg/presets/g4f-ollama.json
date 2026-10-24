@@ -1,0 +1,11 @@
+{
+  "id": "g4f-ollama",
+  "name": "g4f.space — Ollama",
+  "baseURL": "https://g4f.space/api/ollama/v1",
+  "notes": "g4f-ollama (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "gemma3:4b"
+  ],
+  "kind": "free"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "kimi-coding",
+  "name": "Kimi for Coding (Free)",
+  "baseURL": "https://api.kimi.com/coding/v1",
+  "notes": "设备码登录 Kimi（标准 RFC8628，无需 API Key）；OpenAI 兼容 /coding/v1，含 k2 编码模型免费额度",
+  "freeTier": true,
+  "modelIds": [
+    "kimi-k2.6",
+    "kimi-k2.5",
+    "kimi-k2.5-thinking",
+    "kimi-latest"
+  ],
+  "modelsFetcher": {
+    "url": "https://api.kimi.com/coding/v1/models",
+    "type": "openai"
+  },
+  "loginFlow": true
+}

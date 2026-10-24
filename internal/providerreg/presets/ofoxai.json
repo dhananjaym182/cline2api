@@ -1,0 +1,8 @@
+{
+  "id": "ofoxai",
+  "name": "OfoxAI",
+  "baseURL": "https://api.ofox.ai/v1",
+  "notes": "ofoxai (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

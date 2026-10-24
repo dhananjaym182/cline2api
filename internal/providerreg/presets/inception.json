@@ -1,0 +1,11 @@
+{
+  "id": "inception",
+  "name": "Inception",
+  "baseURL": "https://api.inceptionlabs.ai/v1",
+  "notes": "inception (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "mercury-2"
+  ],
+  "kind": "hasFree"
+}

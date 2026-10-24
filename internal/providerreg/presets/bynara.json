@@ -1,0 +1,15 @@
+{
+  "id": "bynara",
+  "name": "Bynara",
+  "baseURL": "https://router.bynara.id/v1",
+  "notes": "bynara (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "agnes-video-v2.0"
+  ],
+  "modelsFetcher": {
+    "url": "https://router.bynara.id/v1/models",
+    "type": "bynara"
+  },
+  "kind": "freeTier"
+}

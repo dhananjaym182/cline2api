@@ -1,0 +1,8 @@
+{
+  "id": "yolo-auto",
+  "name": "Yolo-Auto",
+  "baseURL": "https://yolo-auto.com/v1",
+  "notes": "yolo-auto (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

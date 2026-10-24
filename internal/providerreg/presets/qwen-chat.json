@@ -1,0 +1,8 @@
+{
+  "id": "qwen-chat",
+  "name": "Qwen Chat (Free)",
+  "baseURL": "https://portal.qwen.ai/v1",
+  "notes": "设备码登录 Qwen Chat（PKCE，无需 API Key）；OpenAI 兼容端点",
+  "freeTier": true,
+  "loginFlow": true
+}

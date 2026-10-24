@@ -1,0 +1,12 @@
+{
+  "id": "cloudcode-one",
+  "name": "CloudCode.ONE",
+  "baseURL": "https://api.cloudcode.one/v1",
+  "notes": "cloudcode-one (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "glm-4.7-flash",
+    "glm-4.6v-flash"
+  ],
+  "kind": "hasFree"
+}

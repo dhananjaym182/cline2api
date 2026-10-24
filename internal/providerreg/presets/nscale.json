@@ -1,0 +1,8 @@
+{
+  "id": "nscale",
+  "name": "nScale",
+  "baseURL": "https://inference.api.nscale.com/v1",
+  "notes": "nscale (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

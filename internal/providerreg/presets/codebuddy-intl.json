@@ -1,0 +1,15 @@
+{
+  "id": "codebuddy-intl",
+  "name": "CodeBuddy Intl (Free)",
+  "baseURL": "https://www.codebuddy.ai/v2",
+  "notes": "浏览器授权轮询登录（state-poll，无需 API Key）；CodeBuddy 国际站 /v2/chat/completions",
+  "freeTier": true,
+  "modelIds": [
+    "glm-5.3",
+    "glm-5.3-flash",
+    "glm-5.2",
+    "minimax-m3",
+    "kimi-k3-1"
+  ],
+  "loginFlow": true
+}

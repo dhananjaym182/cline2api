@@ -1,0 +1,8 @@
+{
+  "id": "xinference",
+  "name": "XInference",
+  "baseURL": "http://localhost:9997/v1",
+  "notes": "xinference (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "local"
+}

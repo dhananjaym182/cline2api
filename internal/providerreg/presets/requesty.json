@@ -1,0 +1,16 @@
+{
+  "id": "requesty",
+  "name": "Requesty",
+  "baseURL": "https://router.requesty.ai/v1",
+  "notes": "requesty (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "claude-sonnet-4-5@eu",
+    "claude-opus-4-7",
+    "gpt-5.1@eu",
+    "gpt-4.1-nano@eu",
+    "gemini-2.5-flash@eu",
+    "kimi-k3"
+  ],
+  "kind": "hasFree"
+}

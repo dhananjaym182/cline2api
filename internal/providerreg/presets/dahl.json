@@ -1,0 +1,12 @@
+{
+  "id": "dahl",
+  "name": "Dahl",
+  "baseURL": "https://inference.dahl.global/v1",
+  "notes": "dahl (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "MiniMaxAI/MiniMax-M2.7",
+    "moonshotai/Kimi-K2.6"
+  ],
+  "kind": "hasFree"
+}

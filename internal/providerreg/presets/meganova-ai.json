@@ -1,0 +1,16 @@
+{
+  "id": "meganova-ai",
+  "name": "MegaNova AI",
+  "baseURL": "https://api.meganova.ai/v1",
+  "notes": "meganova-ai (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "XiaomiMiMo/MiMo-V2-Flash",
+    "MiniMaxAI/MiniMax-M2.1",
+    "MiniMaxAI/MiniMax-M2.5",
+    "moonshotai/Kimi-K2.5",
+    "moonshotai/Kimi-K2-Thinking",
+    "deepseek-ai/DeepSeek-V3.2"
+  ],
+  "kind": "hasFree"
+}

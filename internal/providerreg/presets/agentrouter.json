@@ -1,0 +1,19 @@
+{
+  "id": "agentrouter",
+  "name": "AgentRouter",
+  "baseURL": "https://agentrouter.org/v1",
+  "notes": "agentrouter (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "glm-5.2",
+    "gpt-5.5",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8"
+  ],
+  "modelsFetcher": {
+    "url": "https://agentrouter.org/api/pricing",
+    "type": "agentrouter"
+  },
+  "kind": "freeTier"
+}

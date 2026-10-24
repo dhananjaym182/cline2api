@@ -1,0 +1,12 @@
+{
+  "id": "infron",
+  "name": "Infron AI",
+  "baseURL": "https://llm.onerouter.pro/v1",
+  "notes": "infron (from extremerouter registry)",
+  "freeTier": true,
+  "modelsFetcher": {
+    "url": "https://llm.onerouter.pro/v1/models",
+    "type": "openai"
+  },
+  "kind": "freeTier"
+}

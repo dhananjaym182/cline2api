@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,11 +8,15 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/providerreg"
+	"cline-go-proxy/internal/store/providers"
+	"cline-go-proxy/internal/upstream/openaicompat"
 )
 
 // ============================================================================
@@ -21,31 +24,6 @@ import (
 // 用户可接入任意 OpenAI 兼容上游（OpenRouter / Groq / Cerebras / Gemini 兼容层 /
 // Mistral / 自建 vLLM 等）。每个 provider 声明 baseURL、apiKey、自定义请求头、
 // 模型列表；请求按模型归属路由，失败后按 回退链 → 自动兜底 降级。
-// ============================================================================
-// CustomProvider 一个 OpenAI 兼容上游。
-type CustomProvider struct {
-	ID         string            `json:"id"`                // 稳定 ID（生成）
-	Name       string            `json:"name"`              // 显示名
-	BaseURL    string            `json:"baseURL"`           // 如 https://openrouter.ai/api/v1
-	APIKey     string            `json:"apiKey"`            // Bearer token
-	ModelIDs   []string          `json:"modelIds"`          // 该上游暴露的模型 ID（如 "z-ai/glm-5.3-flash"）
-	Headers    map[string]string `json:"headers,omitempty"` // 自定义请求头（如 OpenRouter 的 HTTP-Referer）
-	Enabled    bool              `json:"enabled"`
-	Priority   int               `json:"priority"`             // 越小越优先（同模型多上游时）
-	TimeoutSec int               `json:"timeoutSec,omitempty"` // 默认 300
-	Free       bool              `json:"free"`                 // 标记免费来源（供统计/兜底）
-	// ConnectionID 绑定一个 provider 登录连接（§8.3，OAuth/粘贴 token）；非空时
-	// 派发用连接 accessToken 覆盖 apiKey，且连接失效/过期的 provider 不入候选。
-	ConnectionID string `json:"connectionId,omitempty"`
-	// ConnectionIDs wave-4: pool several logged-in connections per provider
-	// (round-robin + failover). When set it supersedes ConnectionID for
-	// selection; when both exist the union is used (see providerConnIDs).
-	ConnectionIDs []string  `json:"connectionIds,omitempty"`
-	RpmLimit      int       `json:"rpmLimit,omitempty"`          // 每分钟请求上限（0 = 不限）
-	DailyLimit   int       `json:"dailyRequestLimit,omitempty"` // 每日请求上限（0 = 不限）
-	CreatedAt    time.Time `json:"createdAt"`
-}
-
 // providerRegistry 内存态 + 落盘（.cline-providers.json）。
 var (
 	providersMu            sync.Mutex
@@ -71,12 +49,8 @@ func loadProviders() {
 	providersLoaded = true
 	// 冷却表在 registry 前加载：无论 provider 文件是否存在都要重启冷却记忆
 	loadProviderCooldownsLocked()
-	data, err := os.ReadFile(providersFilePath)
+	list, err := providers.Load(providersFilePath)
 	if err != nil {
-		return
-	}
-	var list []*CustomProvider
-	if err := json.Unmarshal(data, &list); err != nil {
 		backupCorruptFile(providersFilePath, err)
 		return
 	}
@@ -84,11 +58,7 @@ func loadProviders() {
 }
 
 func saveProvidersLocked() {
-	data, err := json.MarshalIndent(customProviders, "", "  ")
-	if err != nil {
-		return
-	}
-	if err := writeFileAtomic(providersFilePath, data, 0600); err != nil {
+	if err := providers.Save(providersFilePath, customProviders); err != nil {
 		log.Printf("providers save failed: %v", err)
 	}
 }
@@ -248,65 +218,29 @@ func setProviderCooldown(providerID, model string, until time.Time) {
 
 // callProvider 调用自定义 provider 的 /chat/completions。
 func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.Response, error) {
-	body := map[string]any{}
-	for _, k := range passThroughKeys {
-		if v, ok := params[k]; ok {
-			body[k] = v
-		}
-	}
-	for _, k := range []string{"model", "messages", "max_tokens", "max_completion_tokens", "stream"} {
-		if v, ok := params[k]; ok {
-			body[k] = v
-		}
-	}
-	if msgs, ok := params["messages"].([]any); ok {
-		body["messages"] = sanitizeMessages(msgs)
-	}
-	body["stream"] = stream
-	if _, ok := body["max_tokens"]; !ok {
-		if mt, ok := params["max_tokens"].(float64); ok {
-			body["max_tokens"] = mt
-		}
-	}
-	// 与 buildUpstreamBody 对称：低于上游硬下限的输出预算兜到默认值
-	if mt, ok := body["max_tokens"].(float64); ok && mt < minUpstreamMaxTokens {
-		log.Printf("  provider clamp max_tokens=%d -> %d (upstream requires >= %d)", int(mt), defaultMaxTokens, minUpstreamMaxTokens)
-		body["max_tokens"] = defaultMaxTokens
-	}
-	if mt, ok := body["max_completion_tokens"].(float64); ok && mt < minUpstreamMaxTokens {
-		log.Printf("  provider clamp max_completion_tokens=%d -> %d (upstream requires >= %d)", int(mt), defaultMaxTokens, minUpstreamMaxTokens)
-		body["max_completion_tokens"] = defaultMaxTokens
-	}
-	// 与 buildUpstreamBody 对称：按模型已知硬上限封顶（gemini-3.8-flash 等）
-	if modelID, _ := body["model"].(string); modelID != "" {
-		if limit := modelMaxOutputLimit(modelID); limit > 0 {
-			if mt, ok := body["max_tokens"].(float64); ok && mt > float64(limit) {
-				log.Printf("  provider clamp max_tokens=%d -> %d (model %q output limit)", int(mt), limit, modelID)
-				body["max_tokens"] = float64(limit)
-			}
-			if mt, ok := body["max_completion_tokens"].(float64); ok && mt > float64(limit) {
-				log.Printf("  provider clamp max_completion_tokens=%d -> %d (model %q output limit)", int(mt), limit, modelID)
-				body["max_completion_tokens"] = float64(limit)
-			}
-		}
-	}
-
-	// 定稿前清洗 tools：null 可选字段会被部分网关硬拒 400（见 sanitizeToolsForUpstream）
-	sanitizeToolsForUpstream(body)
-
-	bodyJSON, err := json.Marshal(body)
+	bodyJSON, err := openaicompat.PrepareBody(params, stream, openaicompat.BodyOptions{
+		PassThroughKeys:     passThroughKeys,
+		MinMaxTokens:        minUpstreamMaxTokens,
+		DefaultMaxTokens:    defaultMaxTokens,
+		ModelMaxOutputLimit: modelMaxOutputLimit,
+		Logf:                log.Printf,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("marshal provider body: %w", err)
+		return nil, err
 	}
-
-	endpoint := strings.TrimRight(p.BaseURL, "/") + "/chat/completions"
 
 	timeout := time.Duration(p.TimeoutSec) * time.Second
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
 	// Reuse the global transport (tests/proxy customization go through httpClient.Transport).
-	client := &http.Client{Transport: httpClient.Transport, Timeout: timeout}
+	httpCli := &http.Client{Transport: httpClient.Transport, Timeout: timeout}
+	pc := &openaicompat.Client{
+		HTTP:    httpCli,
+		BaseURL: p.BaseURL,
+		APIKey:  p.APIKey,
+		Headers: p.Headers,
+	}
 
 	modelKey := fmt.Sprintf("%v", params["model"])
 	log.Printf("  provider upstream: name=%s model=%v stream=%v msgs=%d", p.Name, modelKey, stream, getMsgCount(params))
@@ -324,38 +258,31 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 		conns = []*Connection{nil}
 	}
 	for i, conn := range conns {
-		req, err := http.NewRequest("POST", endpoint, bytes.NewReader(bodyJSON))
-		if err != nil {
-			return nil, fmt.Errorf("create provider request: %w", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+p.APIKey)
-		req.Header.Set("Content-Type", "application/json")
-		for k, v := range p.Headers {
-			if v == "" {
-				req.Header.Del(k)
-				continue
-			}
-			req.Header.Set(k, v)
-		}
+		token := ""
+		extra := map[string]string{}
 		// Bound connection: authenticate with the connection token and inject
 		// connection-level dynamic headers (e.g. the Kilo org header).
 		if conn != nil {
 			spec, hasSpec := providerDeviceFlows[conn.Provider]
 			if hasSpec {
-				req.Header.Set("Authorization", "Bearer "+connectionBearer(conn, spec))
+				token = connectionBearer(conn, spec)
 			} else {
-				req.Header.Set("Authorization", "Bearer "+conn.AccessToken)
+				token = conn.AccessToken
 			}
 			if hasSpec && spec.OrgHeader != "" {
 				if oid := conn.ProviderSpecificData["orgId"]; oid != "" {
-					req.Header.Set(spec.OrgHeader, oid)
+					extra[spec.OrgHeader] = oid
 				}
 			}
+		}
+		req, err := pc.BuildRequest(bodyJSON, openaicompat.RequestOptions{Token: token, Headers: extra})
+		if err != nil {
+			return nil, fmt.Errorf("create provider request: %w", err)
 		}
 		started := time.Now()
 		// Count at dispatch: RPM/daily budget measures requests actually sent upstream.
 		recordProviderDispatch(p.ID, modelKey)
-		resp, err := client.Do(req)
+		resp, err := httpCli.Do(req)
 		latency := time.Since(started).Milliseconds()
 		if err != nil {
 			recordProviderOutcome(p.ID, modelKey, false, latency)
@@ -400,56 +327,15 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 	return nil, fmt.Errorf("provider %s: no connection attempts made", p.Name)
 }
 
-// providerRateLimitedKeys 错误体是否含明确的限流/额度类关键词（用于把换向前的
-// 421 与真正的配额问题区分开）。
+// providerRateLimitedKeys reports explicit quota/rate-limit keywords.
 func providerRateLimitedKeys(body string) bool {
-	low := strings.ToLower(body)
-	for _, kw := range []string{"quota", "rate limit", "too many requests", "resourceexhausted", "insufficient", "billing", "payment"} {
-		if strings.Contains(low, kw) {
-			return true
-		}
-	}
-	return false
+	return dispatch.RateLimitedByBody(body)
 }
 
-// providerCooldownUntil 按上游错误类别决定 provider:model 的冷却时长。
-// 原则：不同类别的失败不应共用一把平底锅 —— 重试能否自愈决定冷却长短。
-//   - 400/401/403 配置类错误（坏参数/坏 key/无权限）：长冷却 30m，避免反复
-//     打注定失败的上游。这些错误与网络无关，重试不会自愈。
-//   - 421（网关改道/该边缘节点不服务此模型，常见于 CF 前置上游）：不冷却 ——
-//     换下一个 provider 或代理节点立即重试通常能命中，一刀切长冷却反而把
-//     健康上游冻住，客户端看到的却是「毫无征兆换了个别的模型」。
-//     仅当错误体含明确限流/额度关键词时按限流对待，短暂 30s 防同一节点
-//     连续碰撞。
-//   - 429 限流：Retry-After 优先（封顶 30m），否则默认 2m。
-//   - 5xx 瞬时故障：短冷却 30s。
-//   - 其他状态：不冷却。
-//
-// 返回零值 time.Time 表示不冷却。
+// providerCooldownUntil classifies an upstream failure into a cooldown window.
+// Returning the zero time means no cooldown.
 func providerCooldownUntil(status int, retryAfterHeader, body string) time.Time {
-	noCooldown := time.Time{}
-	switch status {
-	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden:
-		return time.Now().Add(30 * time.Minute)
-	case http.StatusMisdirectedRequest: // 421
-		if providerRateLimitedKeys(body) {
-			return time.Now().Add(30 * time.Second)
-		}
-		return noCooldown
-	case http.StatusTooManyRequests:
-		ra := parseRetryAfter(retryAfterHeader)
-		if ra <= 0 {
-			ra = 2 * time.Minute
-		}
-		if ra > 30*time.Minute {
-			ra = 30 * time.Minute
-		}
-		return time.Now().Add(ra)
-	}
-	if status >= 500 && status < 600 {
-		return time.Now().Add(30 * time.Second)
-	}
-	return noCooldown
+	return dispatch.ProviderCooldownUntil(status, retryAfterHeader, body)
 }
 
 // ============================================================================
@@ -462,46 +348,20 @@ func providerCooldownUntil(status int, retryAfterHeader, body string) time.Time 
 // 过期条目直接丢弃。文件缺失/损坏只记日志，不阻塞 provider 初始化。
 // 调方必须已持有 providersMu。
 func loadProviderCooldownsLocked() {
-	data, err := os.ReadFile(providersCooldownsPath)
+	loaded, err := providers.LoadCooldowns(providersCooldownsPath)
 	if err != nil {
-		return // 首次运行无文件，正常
-	}
-	var raw map[string]int64
-	if err := json.Unmarshal(data, &raw); err != nil {
 		backupCorruptFile(providersCooldownsPath, err)
 		return
 	}
-	now := time.Now()
-	for k, v := range raw {
-		until := time.UnixMicro(v)
-		if until.After(now) {
-			providerCooldowns[k] = until
-		}
+	for k, until := range loaded {
+		providerCooldowns[k] = until
 	}
 }
 
 // saveProviderCooldownsLocked 把未过期的冷却条目原子写盘。调方必须已持有
 // providersMu。写失败只记日志：冷却丢失的最坏后果是重启后多探测一次。
 func saveProviderCooldownsLocked() {
-	now := time.Now()
-	raw := make(map[string]int64, len(providerCooldowns))
-	for k, until := range providerCooldowns {
-		if until.IsZero() || !until.After(now) {
-			continue // 零值/已过期：不写盘，同时清掉内存残留
-		}
-		raw[k] = until.UnixMicro()
-	}
-	if len(raw) == 0 {
-		if fileExists(providersCooldownsPath) {
-			_ = os.Remove(providersCooldownsPath) // 全部过期：顺手清掉残留文件
-		}
-		return
-	}
-	data, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return
-	}
-	if err := writeFileAtomic(providersCooldownsPath, data, 0600); err != nil {
+	if err := providers.SaveCooldowns(providersCooldownsPath, providerCooldowns); err != nil {
 		log.Printf("provider cooldowns save failed: %v", err)
 	}
 }
@@ -801,33 +661,14 @@ func sortProviderCands(cs []providerCand, model string) {
 	})
 }
 
-
 // ============================================================================
 // Provider 预设（市面常见免费/低成本 OpenAI 兼容上游）
 // ============================================================================
 
-type providerPreset struct {
-	Name     string
-	BaseURL  string
-	Headers  map[string]string
-	Notes    string
-	FreeTier bool
-	// ModelIDs 预填的种子模型列表（来自上游目录快照；可为空）。
-	ModelIDs []string
-	// ModelsFetcher 可选的 /v1/models 元数据（用于后续按需拉全量模型列表）。
-	ModelsFetcher *modelsFetcher
-	// Kind 是 UI 分组优先级："free"(免密钥) | "freeTier"(免费额度) | "hasFree"(含免费模型) | "local" | "other"。
-	// 留空时由 FreeTier 推导（true→freeTier，false→other）。
-	Kind string
-	// LoginFlow true = 无 API Key，靠设备码登录连接鉴权（kilocode/github/qwen）。
-	LoginFlow bool
-}
+type providerPreset = providerreg.Preset
 
 // modelsFetcher 描述 preset 对应上游的模型目录端点（目前仅 openai 兼容格式）。
-type modelsFetcher struct {
-	URL  string `json:"url"`
-	Type string `json:"type"` //当前仅 "openai"
-}
+type modelsFetcher = providerreg.ModelsFetcher
 
 // mergePresets 把 src 合入 dst，冲突时保留手写的运行时 preset。
 func mergePresets(dst, src map[string]providerPreset) map[string]providerPreset {
@@ -1002,7 +843,12 @@ func syncProviderModels() {
 				// import wizard. Id-only signals stamp provenance; pricing and
 				// entry-flag signals still require the catalog fetch path.
 				c := claim{name: p.Name, cost: cost}
-				if tier, sig := classifyUpstreamModel(upstreamModelEntry{ID: id}, p.Free); tier == "free" && sig != tierSignalProviderFree {
+				if tier, sig := classifyUpstreamModel(upstreamModelEntry{ID: id}, p.Free); sig == tierSignalProviderFree {
+					// The provider-level free flag is metadata, not a per-model
+					// entitlement: record its provenance so Free-only routing
+					// treats the route as unknown until verified.
+					c.signal = tierSignalProviderFree
+				} else if tier == "free" {
 					c.cost, c.signal = "free", sig
 				}
 				claimed[id] = c
@@ -1177,7 +1023,8 @@ func splitProviderPin(model string) (bare, pin string) {
 // resolveProvidersNamedForModel 与 resolveProvidersForModel 同规则（启用、未冷却、
 // 未超预算、服务该模型），但只保留 Name 匹配给定名称（去空白、大小写不敏感）的
 // provider。用于组合条目把模型钉到某一家上游。
-func resolveProvidersNamedForModel(model, name string) []*CustomProvider {	loadProviders()
+func resolveProvidersNamedForModel(model, name string) []*CustomProvider {
+	loadProviders()
 	providersMu.Lock()
 	defer providersMu.Unlock()
 	name = strings.TrimSpace(name)
@@ -1464,7 +1311,7 @@ func handleProviderPresets(w http.ResponseWriter, r *http.Request) {
 		Kind          string            `json:"kind"`
 		LoginFlow     bool              `json:"loginFlow,omitempty"`
 	}
-	presets := mergePresets(providerPresets, providerPresetsImported)
+	presets := mergePresets(providerreg.Builtin().All(), providerPresetsImported)
 	keys := make([]string, 0, len(presets))
 	for k := range presets {
 		keys = append(keys, k)

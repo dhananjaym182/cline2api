@@ -1,0 +1,8 @@
+{
+  "id": "sambanova",
+  "name": "SambaNova",
+  "baseURL": "https://api.sambanova.ai/v1",
+  "notes": "sambanova (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

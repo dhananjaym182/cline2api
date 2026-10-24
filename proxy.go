@@ -2,9 +2,7 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,12 +12,19 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/httpapi"
+	"cline-go-proxy/internal/httpx"
+	"cline-go-proxy/internal/protocol"
+	anthropicconv "cline-go-proxy/internal/protocol/anthropic"
+	"cline-go-proxy/internal/protocol/openaichat"
+	clineupstream "cline-go-proxy/internal/upstream/cline"
 )
 
 const (
@@ -36,9 +41,8 @@ const (
 	freeModelPrimary       = "z-ai/glm-5.3-flash"
 	freeModelFallback      = "deepseek/deepseek-v4-flash"
 	freeModelLastResort    = "cline-free/longcat-2.0"
-	// maxUpstreamToolNameLength 上游对工具 function.name 的长度上限：OpenRouter 的
-	// Meta provider 硬限 `name` ≤64 字符，超长请求间歇性 400（取决于轮询到的后端）。
-	maxUpstreamToolNameLength = 64
+	// maxUpstreamToolNameLength is the upstream tool-name limit.
+	maxUpstreamToolNameLength = openaichat.MaxToolNameLength
 )
 
 // minUpstreamMaxTokens 上游对输出 token 的硬下限：Cline 免费模型经 OpenRouter
@@ -79,28 +83,6 @@ func clampMaxTokens(n int) int {
 		return limit
 	}
 	return n
-}
-
-// envInt 读取整数环境变量（缺失/非法/非正数时用默认值）。
-func envInt(key string, def int) int {
-	n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
-	if err != nil || n <= 0 {
-		return def
-	}
-	return n
-}
-
-// envDurationFromMs 读取以毫秒为单位的时长环境变量（缺失/非法/非正数时用默认值）。
-func envDurationFromMs(key string, def time.Duration) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		return def
-	}
-	n, err := strconv.Atoi(raw)
-	if err != nil || n <= 0 {
-		return def
-	}
-	return time.Duration(n) * time.Millisecond
 }
 
 // reasoningEffort 返回下发给上游的推理强度。默认保持 "high"，
@@ -416,61 +398,27 @@ func startProxy(host string, port int) error {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/v1/health", corsHandler(func(w http.ResponseWriter, r *http.Request) {
-		info := map[string]any{
-			"status":         "ok",
-			"version":        appVersion,
-			"activeAccounts": activeCount,
-		}
-		writeJSON(w, http.StatusOK, info)
-	}))
-	mux.HandleFunc("/health", corsHandler(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"status":         "ok",
-			"version":        appVersion,
-			"activeAccounts": activeCount,
-		})
-	}))
+	health := httpapi.Health{
+		Version:        func() string { return appVersion },
+		ActiveAccounts: func() int { return activeCount },
+	}
+	mux.HandleFunc("/v1/health", corsHandler(health.Handler))
+	mux.HandleFunc("/health", corsHandler(health.Handler))
 
 	// Admin API (frontend + REST)
 	registerAdminRoutes(mux)
 
-	apiKeyHandler := func(next http.HandlerFunc) http.HandlerFunc {
-		return corsHandler(func(w http.ResponseWriter, r *http.Request) {
-			// Allow requests without key if no keys configured
-			p := loadPool()
-			if len(p.Keys) == 0 {
-				next(w, r)
-				return
-			}
-
-			key := r.Header.Get("x-api-key")
-			if key == "" {
-				if b := r.Header.Get("Authorization"); len(b) > 7 && b[:7] == "Bearer " {
-					key = b[7:]
-				}
-			}
-
-			valid := false
-			for _, k := range p.Keys {
-				if k == key {
-					valid = true
-					break
-				}
-			}
-
-			if !valid {
-				writeJSON(w, http.StatusUnauthorized, map[string]any{
-					"error": map[string]string{
-						"message": "invalid API key. Generate one at /admin/ or set x-api-key header",
-						"type":    "auth_error",
-					},
-				})
-				return
-			}
-			next(w, r)
-		})
-	}
+	apiKeyHandler := (&httpapi.APIKeyAuth{
+		Keys: func() []string { return loadPool().Keys },
+		Unauthorized: func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{
+				"error": map[string]string{
+					"message": "invalid API key. Generate one at /admin/ or set x-api-key header",
+					"type":    "auth_error",
+				},
+			})
+		},
+	}).Wrap
 
 	modelsHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
 		list := buildModelsList(getProxyConfig().OnlyFree)
@@ -522,6 +470,16 @@ func startProxy(host string, port int) error {
 
 		reqLog := RequestLog{StartedAt: time.Now(), Protocol: "openai", Model: model, Stream: isStream}
 
+		// Free-only routing rejects models whose route access is not verified
+		// free (or free_tier with an active allowance).
+		if msg := freeOnlyRejection(model); msg != "" {
+			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
+			})
+			return
+		}
+
 		// Override system prompt from override.md for OpenAI format
 		if override := loadOverrideContent(); override != "" {
 			if msgs, ok := params["messages"].([]any); ok {
@@ -553,7 +511,7 @@ func startProxy(host string, port int) error {
 				})
 				return
 			}
-			reqLog.toolNames = clampParamsToolNames(params)
+			reqLog.ToolNames = clampParamsToolNames(params)
 			run := runCombo(params, combo, isStream, requestSessionID(params, r.Header))
 			applyComboTrace(&reqLog, combo, run)
 			stampUpstream(&reqLog, params) // 归因实际服务方（provider / opencode / cline）
@@ -572,10 +530,10 @@ func startProxy(host string, port int) error {
 			}
 			defer run.Resp.Body.Close()
 			// 非流式：完整按条目顺序回退。流式：仅在连接级回退（runCombo 在写任何
-			// 字节给客户端前拿到 200 响应）；与既有 chat/responses 架构一致，建流后
-			// 的预提交中断不重开（Anthropic 端点另有 streamAnthropicCombo 的预提交回退）。
+			// 字节给客户端前拿到 200 响应）；空流由统一契约补发 in-band 错误，不再
+			// 伪装成正常结束（Anthropic 端点另有 streamAnthropicCombo 的预提交回退）。
 			if isStream {
-				handleStreamResponse(w, run.Resp, run.Acc, &reqLog)
+				serveChatStream(r.Context(), w, run.Resp, run.Acc, &reqLog, nil)
 			} else {
 				handleNonStreamResponse(w, run.Resp, run.Acc, &reqLog)
 			}
@@ -610,7 +568,7 @@ func startProxy(host string, port int) error {
 			}
 			if err != nil {
 				// zen 故障转移到 Cline 池：先截短超长工具名（Meta 后端硬限 ≤64）
-				reqLog.toolNames = clampParamsToolNames(params)
+				reqLog.ToolNames = clampParamsToolNames(params)
 				if fbResp, fbAcc, fbErr, attempted := zenFailoverToCline(params, isStream); attempted {
 					if fbErr == nil {
 						log.Printf("  chat failover: serving %q via cline pool", model)
@@ -621,7 +579,16 @@ func startProxy(host string, port int) error {
 						}
 						defer fbResp.Body.Close()
 						if isStream {
-							handleStreamResponse(w, fbResp, fbAcc, &reqLog)
+							serveChatStream(r.Context(), w, fbResp, fbAcc, &reqLog, func() (*http.Response, *Account, error) {
+								rr, ra, rerr := callClineAPI(params, true)
+								if rerr == nil {
+									stampUpstream(&reqLog, params)
+								}
+								if m, ok := params["model"].(string); ok && m != "" {
+									reqLog.Model = m
+								}
+								return rr, ra, rerr
+							})
 						} else {
 							handleNonStreamResponse(w, fbResp, fbAcc, &reqLog)
 						}
@@ -640,7 +607,19 @@ func startProxy(host string, port int) error {
 			}
 			defer resp.Body.Close()
 			if isStream {
-				handleStreamResponse(w, resp, nil, &reqLog)
+				serveChatStream(r.Context(), w, resp, nil, &reqLog, func() (*http.Response, *Account, error) {
+					fbResp, fbAcc, fbErr, attempted := zenFailoverToCline(params, true)
+					if !attempted {
+						return nil, nil, fmt.Errorf("no cline fallback available")
+					}
+					if fbErr == nil {
+						stampUpstream(&reqLog, params)
+						if m, ok := params["model"].(string); ok && m != "" {
+							reqLog.Model = m
+						}
+					}
+					return fbResp, fbAcc, fbErr
+				})
 			} else {
 				handleNonStreamResponse(w, resp, nil, &reqLog)
 			}
@@ -659,8 +638,18 @@ func startProxy(host string, port int) error {
 		}
 
 		// Cline 通道：截短超长工具名并记录映射，回程由响应处理器还原（Meta 后端硬限 ≤64）
-		reqLog.toolNames = clampParamsToolNames(params)
+		// 主动压缩同样适用于 cline/provider 路由 —— 此前只有 zen 路径会压缩，
+		// 大上下文请求会直接撞上游窗口失败。
+		zm := modelForCompaction(model)
+		compactForRequest(params, zm, requestSessionID(params, r.Header), "chat")
+		reqLog.ToolNames = clampParamsToolNames(params)
 		resp, acc, err := callClineAPI(params, isStream)
+		if err != nil && isContextLengthError(err) {
+			if out := fallbackTruncate(params, zm); out.changed {
+				log.Printf("  chat %s", out.note)
+				resp, acc, err = callClineAPI(params, isStream)
+			}
+		}
 		if effectiveModel, ok := params["model"].(string); ok && effectiveModel != "" {
 			reqLog.Model = effectiveModel // 含回退后的实际服务模型
 		}
@@ -684,7 +673,16 @@ func startProxy(host string, port int) error {
 		}
 
 		if isStream {
-			handleStreamResponse(w, resp, acc, &reqLog)
+			serveChatStream(r.Context(), w, resp, acc, &reqLog, func() (*http.Response, *Account, error) {
+				rr, ra, rerr := callClineAPI(params, true)
+				if rerr == nil {
+					stampUpstream(&reqLog, params)
+				}
+				if m, ok := params["model"].(string); ok && m != "" {
+					reqLog.Model = m
+				}
+				return rr, ra, rerr
+			})
 		} else {
 			handleNonStreamResponse(w, resp, acc, &reqLog)
 		}
@@ -769,268 +767,51 @@ func startProxy(host string, port int) error {
 }
 
 func corsHandler(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, anthropic-version, anthropic-beta")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		h(w, r)
-	}
+	return httpx.CORS(h)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	httpx.WriteJSON(w, status, data)
 }
 
 func cleanMessages(messages []any) []any {
-	cleaned := make([]any, 0, len(messages))
-	for _, m := range messages {
-		msg, ok := m.(map[string]any)
-		if !ok {
-			cleaned = append(cleaned, m)
-			continue
-		}
-		cleaned = append(cleaned, msg)
-	}
-	return cleaned
+	return openaichat.CleanMessages(messages)
 }
 
-// shortenToolName 把超长工具名确定性截短到 ≤64 字符：前 55 字节 + "_" + 8 位 sha256。
-// 确定性保证同一原始名跨请求映射稳定，多轮历史中的 tool_calls 名称不会漂移。
+// shortenToolName truncates names above the upstream limit deterministically.
 func shortenToolName(orig string) string {
-	sum := sha256.Sum256([]byte(orig))
-	return fmt.Sprintf("%.55s_%x", orig, sum[:4])
+	return openaichat.ShortenToolName(orig)
 }
 
-// clampParamsToolNames 把 Cline 请求里超过 64 字符的工具名截短：tools 定义与
-// 历史 assistant tool_calls 同步改写（保留 tool_call_id 关联，OpenAI 协议按 id 配对）。
-// 返回 短→原始 映射存入 reqLog 供回程还原；无超长名时返回 nil。
-// 每请求只在入口调用一次，重试/故障转移链复用已改写的 params，不重复调用。
+// clampParamsToolNames shortens over-long tool names and returns the mapping
+// used to restore them on the response path.
 func clampParamsToolNames(params map[string]any) map[string]string {
-	shortToOrig := map[string]string{}
-	clamped := false
-	ensure := func(orig string) string {
-		if len(orig) <= maxUpstreamToolNameLength {
-			return orig
-		}
-		short := shortenToolName(orig)
-		shortToOrig[short] = orig
-		clamped = true
-		return short
-	}
-	renameToolCalls := func(tcs []any) {
-		for _, tc := range tcs {
-			tcm, ok := tc.(map[string]any)
-			if !ok {
-				continue
-			}
-			fn, ok := tcm["function"].(map[string]any)
-			if !ok {
-				continue
-			}
-			if name, _ := fn["name"].(string); name != "" {
-				fn["name"] = ensure(name)
-			}
-		}
-	}
-	if tools, ok := params["tools"].([]any); ok {
-		for _, t := range tools {
-			tm, ok := t.(map[string]any)
-			if !ok {
-				continue
-			}
-			fn, ok := tm["function"].(map[string]any)
-			if !ok {
-				continue
-			}
-			if name, _ := fn["name"].(string); name != "" {
-				fn["name"] = ensure(name)
-			}
-		}
-	}
-	if msgs, ok := params["messages"].([]any); ok {
-		for _, mv := range msgs {
-			mm, ok := mv.(map[string]any)
-			if !ok {
-				continue
-			}
-			if tcs, ok := mm["tool_calls"].([]any); ok {
-				renameToolCalls(tcs)
-			}
-		}
-	}
-	// tool_choice 指定函数名时同样受限；响应不回显该字段，无需还原
-	if tcChoice, ok := params["tool_choice"].(map[string]any); ok {
-		if fn, ok := tcChoice["function"].(map[string]any); ok {
-			if name, _ := fn["name"].(string); name != "" {
-				fn["name"] = ensure(name)
-			}
-		}
-	}
-	if !clamped {
-		return nil
-	}
-	return shortToOrig
+	return openaichat.ClampToolNames(params)
 }
 
-// restoreToolCallsInResponse 把上游响应里被截短的工具名还原为客户端原始名，
-// 覆盖流式 delta 与非流式 message 两种形态；映射为空时是 no-op。
+// restoreToolCallsInResponse restores shortened tool names in stream and
+// non-stream response shapes.
 func restoreToolCallsInResponse(obj map[string]any, shortToOrig map[string]string) {
-	if obj == nil || len(shortToOrig) == 0 {
-		return
-	}
-	choices, ok := obj["choices"].([]any)
-	if !ok {
-		return
-	}
-	for _, c := range choices {
-		cm, ok := c.(map[string]any)
-		if !ok {
-			continue
-		}
-		for _, key := range []string{"delta", "message"} {
-			d, ok := cm[key].(map[string]any)
-			if !ok {
-				continue
-			}
-			tcs, ok := d["tool_calls"].([]any)
-			if !ok {
-				continue
-			}
-			for _, tc := range tcs {
-				tcm, ok := tc.(map[string]any)
-				if !ok {
-					continue
-				}
-				fn, ok := tcm["function"].(map[string]any)
-				if !ok {
-					continue
-				}
-				if name, _ := fn["name"].(string); name != "" {
-					if orig, ok := shortToOrig[name]; ok {
-						fn["name"] = orig
-					}
-				}
-			}
-		}
-	}
+	openaichat.RestoreToolCalls(obj, shortToOrig)
 }
 
-// sanitizeMessages 修复出站消息历史中的畸形 tool_calls。
-// 背景：上游偶发输出 function.name 为空的 tool call（GLM 流式分片丢失 / 工具调用
-// 以文本形式泄漏），客户端执行后会把残缺记录回放进下一轮历史，导致上游恒定 400：
-// "tool_calls[N].function.name must be a non-empty string"。
-// 处理：
-//  1. 丢弃 function.name 为空的 tool_call；
-//  2. 过滤后 tool_calls 为空则移除该字段；
-//  3. 丢弃没有对应合法 assistant tool_call 的孤儿 tool 结果（自愈被污染的会话）。
+// sanitizeMessages repairs malformed tool_calls in outbound history.
 func sanitizeMessages(messages []any) []any {
-	validToolIDs := make(map[string]bool)
-	for _, m := range messages {
-		msg, ok := m.(map[string]any)
-		if !ok || msg["role"] != "assistant" {
-			continue
-		}
-		tcs, ok := msg["tool_calls"].([]any)
-		if !ok {
-			continue
-		}
-		for _, tc := range tcs {
-			tcMap, ok := tc.(map[string]any)
-			if !ok {
-				continue
-			}
-			fn, _ := tcMap["function"].(map[string]any)
-			name, _ := fn["name"].(string)
-			id, _ := tcMap["id"].(string)
-			if name != "" && id != "" {
-				validToolIDs[id] = true
-			}
-		}
-	}
-
-	cleaned := make([]any, 0, len(messages))
-	for _, m := range messages {
-		msg, ok := m.(map[string]any)
-		if !ok {
-			cleaned = append(cleaned, m)
-			continue
-		}
-		role, _ := msg["role"].(string)
-
-		// 孤儿 tool 结果：找不到对应的 assistant tool_call
-		if role == "tool" {
-			id, _ := msg["tool_call_id"].(string)
-			if !validToolIDs[id] {
-				continue
-			}
-			cleaned = append(cleaned, msg)
-			continue
-		}
-
-		// assistant 消息：剔除空名 tool_call
-		if role == "assistant" {
-			if tcs, ok := msg["tool_calls"].([]any); ok {
-				kept := make([]any, 0, len(tcs))
-				for _, tc := range tcs {
-					tcMap, ok := tc.(map[string]any)
-					if !ok {
-						continue
-					}
-					fn, _ := tcMap["function"].(map[string]any)
-					name, _ := fn["name"].(string)
-					if name == "" {
-						continue
-					}
-					kept = append(kept, tcMap)
-				}
-				if len(kept) == 0 {
-					delete(msg, "tool_calls")
-				} else {
-					msg["tool_calls"] = kept
-				}
-			}
-		}
-		cleaned = append(cleaned, msg)
-	}
-	return cleaned
+	return openaichat.SanitizeMessages(messages)
 }
 
-// genToolUseID 生成 tool_use 块 id（上游未返回 id 时的兜底）。
+// genToolUseID returns a fallback tool_use block id.
 func genToolUseID() string {
-	return fmt.Sprintf("toolu_%x", time.Now().UnixNano())
+	return openaichat.GenToolUseID()
 }
 
-// hasToolUseBlocks 判断 Anthropic content 块数组中是否含有有效的 tool_use 块。
+// hasToolUseBlocks reports whether content contains an Anthropic tool_use block.
 func hasToolUseBlocks(content any) bool {
-	blocks, ok := content.([]any)
-	if !ok {
-		return false
-	}
-	for _, b := range blocks {
-		if bm, ok := b.(map[string]any); ok && bm["type"] == "tool_use" {
-			return true
-		}
-	}
-	return false
+	return openaichat.HasToolUseBlocks(content)
 }
 
 func numericInt(value any) (int, bool) {
-	switch number := value.(type) {
-	case int:
-		return number, true
-	case float64:
-		return int(number), true
-	default:
-		return 0, false
-	}
+	return openaichat.NumericInt(value)
 }
 
 // modelMaxOutputLimit 返回模型已知的最大输出 token 硬上限（0=未知，不封顶）。
@@ -1130,49 +911,10 @@ func buildUpstreamBody(params map[string]any, stream bool) map[string]any {
 	return body
 }
 
-// sanitizeToolsForUpstream 在上游请求体最终定稿（发往任何网关）前清洗 tools 的
-// 可选字段：转换器曾把工具字段无条件拷贝，客户端缺省的可选字段会变成
-// "description": null，部分网关（Vercel/zen、Cline 免费链）对 null 硬拒
-// 400 "Invalid input: expected string, received null"。规则：
-//   - 嵌套 OpenAI 形态 {"function":{...}}：清洗 function 内的 description/parameters；
-//   - 扁平顶层形态（zen Responses）：同样清洗 description/parameters；
-//   - description 只保留非空字符串（null/空串一律删键）；
-//   - 仅当工具没有任何 name 时整条剔除。
+// sanitizeToolsForUpstream cleans optional tool fields before a request body is
+// finalized for any gateway.
 func sanitizeToolsForUpstream(body map[string]any) {
-	items, ok := body["tools"].([]any)
-	if !ok {
-		return
-	}
-	out := make([]any, 0, len(items))
-	for _, item := range items {
-		tm, ok := item.(map[string]any)
-		if !ok {
-			out = append(out, item)
-			continue
-		}
-		// 两种形态：嵌套 function（chat/completions）与扁平顶层（zen Responses）
-		target := tm
-		if fn, ok := tm["function"].(map[string]any); ok {
-			target = fn
-		}
-		if name, _ := target["name"].(string); name == "" {
-			continue // 无 name 的工具对任何上游都非法：整条剔除
-		}
-		sanitizeToolFields(target)
-		out = append(out, tm)
-	}
-	body["tools"] = out
-}
-
-// sanitizeToolFields 就地收敛单个工具定义的可选字段：description 只在非空字符串
-// 时保留（null/空串/缺席删键），parameters 只在为 null/缺席时删键（对象值原样下发）。
-func sanitizeToolFields(m map[string]any) {
-	if s, ok := m["description"].(string); !ok || s == "" {
-		delete(m, "description")
-	}
-	if m["parameters"] == nil {
-		delete(m, "parameters")
-	}
+	openaichat.SanitizeTools(body)
 }
 
 func clineHeaders(token, sessionID string) http.Header {
@@ -1274,13 +1016,16 @@ func stampUpstream(reqLog *RequestLog, params map[string]any) {
 
 func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account, error) {
 	model, _ := params["model"].(string)
-	delete(params, servedByParam)       // 归因标记按次重算，避免流重试沿用上一次结果
+	delete(params, servedByParam)     // 归因标记按次重算，避免流重试沿用上一次结果
 	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
 	// Request-level pin "model@ProviderName": only the named provider may
 	// serve. An explicit pin must fail loudly rather than silently fall back
 	// to a redundancy sibling, the Cline pool, or the fallback chain.
 	if bare, pin := splitProviderPin(model); pin != "" {
 		params["model"] = bare // upstream body and log attribution carry the bare id
+		if getProxyConfig().OnlyFree && !modelFreeOnlyEligible(bare) {
+			return nil, nil, fmt.Errorf("model %q is not eligible while onlyFree is enabled (access class: %s)", bare, modelRouteAccess(bare).Class)
+		}
 		resp, perr, attempted, provName := callCustomProviderAPINamed(params, stream, pin)
 		switch {
 		case attempted && perr == nil:
@@ -1332,6 +1077,20 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 	for _, m := range sorted {
 		if m != model {
 			chain = append(chain, m)
+		}
+	}
+	if getProxyConfig().OnlyFree {
+		eligible := make([]string, 0, len(chain))
+		for _, m := range chain {
+			if modelFreeOnlyEligible(m) {
+				eligible = append(eligible, m)
+			} else {
+				log.Printf("  onlyFree: skipping model %q (access class %s)", m, modelRouteAccess(m).Class)
+			}
+		}
+		chain = eligible
+		if len(chain) == 0 {
+			return nil, nil, fmt.Errorf("onlyFree is enabled and model %q has no verified free route", model)
 		}
 	}
 	for _, m := range chain {
@@ -1441,15 +1200,7 @@ func withModel(params map[string]any, model string) map[string]any {
 
 // isFreeAliasModel 判断是否为 "free" 别名或链内免费模型（避免重复兜底）。
 func isFreeAliasModel(model string) bool {
-	if model == "free" {
-		return true
-	}
-	for _, m := range defaultFreeChain() {
-		if m == model {
-			return true
-		}
-	}
-	return false
+	return dispatch.IsFreeAlias(model, defaultFreeChain())
 }
 
 // defaultFreeChain 动态派生默认回退链（管理员未配置 modelChain 时）：
@@ -1559,17 +1310,9 @@ func filterStaleModels(chain []string) []string {
 	poolMu.Lock()
 	live := liveModelSet(p)
 	poolMu.Unlock()
-	out := make([]string, 0, len(chain))
-	var dropped []string
-	for _, m := range chain {
-		if m == "" || live[m] {
-			out = append(out, m)
-		} else {
-			dropped = append(dropped, m)
-		}
-	}
-	if len(dropped) == 0 || len(out) == 0 {
-		return chain
+	out, dropped := dispatch.FilterLive(chain, true, live)
+	if len(dropped) == 0 {
+		return out
 	}
 	log.Printf("  model chain: dropped delisted model(s) %v -> %v", dropped, out)
 	return out
@@ -1577,13 +1320,7 @@ func filterStaleModels(chain []string) []string {
 
 // hasAnyFallbackLeft 判断点名模型之后是否还有候选（决定 500 是否透传）。
 func hasAnyFallbackLeft(requested, current string) bool {
-	chain := modelFallbackChain(requested)
-	for i, m := range chain {
-		if m == current {
-			return i < len(chain)-1
-		}
-	}
-	return false
+	return dispatch.HasFallbackAfter(modelFallbackChain(requested), current)
 }
 
 // modelFallbackChain 显式模型的降级序列：点名模型优先，其后是管理员配置的
@@ -1594,21 +1331,10 @@ func hasAnyFallbackLeft(requested, current string) bool {
 // 保留 —— 它是客户端显式要求的（可能由 zen / provider 服务，不归本仓判定）。
 func modelFallbackChain(requested string) []string {
 	configured := getProxyConfig().ModelChain
-	userConfigured := len(configured) > 0
-	if !userConfigured {
-		configured = defaultFreeChain()
-		configured = filterStaleModels(configured)
+	if len(configured) == 0 {
+		configured = filterStaleModels(defaultFreeChain())
 	}
-	seen := map[string]bool{requested: true}
-	chain := []string{requested}
-	for _, m := range configured {
-		if m == "" || seen[m] {
-			continue
-		}
-		seen[m] = true
-		chain = append(chain, m)
-	}
-	return chain
+	return dispatch.BuildChain(requested, configured)
 }
 
 // hasActiveAccounts 池中是否存在 active 状态的账号。
@@ -1635,6 +1361,17 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 	// 而不是顺序打满第一个，也不在必败的死模型上浪费一次上游往返。
 	chain = filterStaleModels(chain)
 	chain = sortModelsByAvailability(chain)
+	if getProxyConfig().OnlyFree {
+		eligible := make([]string, 0, len(chain))
+		for _, m := range chain {
+			if modelFreeOnlyEligible(m) {
+				eligible = append(eligible, m)
+			} else {
+				log.Printf("  onlyFree: skipping free-chain model %q (access class %s)", m, modelRouteAccess(m).Class)
+			}
+		}
+		chain = eligible
+	}
 	delete(params, servedByParam)     // 本次调用重新归因
 	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
 	var lastErr error
@@ -1716,11 +1453,11 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 		return nil, acc, fmt.Errorf("marshal body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", clineAPIBase+"/chat/completions", bytes.NewReader(bodyJSON))
-	if err != nil {
-		return nil, acc, fmt.Errorf("create request: %w", err)
+	client := &clineupstream.Client{
+		HTTP:         &http.Client{Transport: httpClient.Transport},
+		BaseURL:      clineAPIBase,
+		ExtraHeaders: getProxyConfig().Headers,
 	}
-	req.Header = clineHeaders(token, sessionID)
 
 	toolCount := 0
 	if tools, ok := params["tools"]; ok {
@@ -1731,7 +1468,7 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 	log.Printf("  upstream: account=%s stream=%v tools=%d msgs=%d max_tokens=%v effort=%v",
 		truncateEmail(acc.Email), stream, toolCount, getMsgCount(params), body["max_tokens"], body["reasoning_effort"])
 
-	resp, err := httpClient.Do(req)
+	resp, err := client.Chat(ctx, token, sessionID, bodyJSON)
 	if err != nil {
 		acc.Status = "cooldown"
 		acc.CooldownUntil = time.Now().Add(5 * time.Minute)
@@ -1744,9 +1481,7 @@ func callClineAPIWithAccountCtx(ctx context.Context, acc *Account, params map[st
 		// Refresh token and retry
 		if err := refreshAccountToken(acc); err == nil {
 			token = acc.AccessToken
-			req.Header = clineHeaders(token, sessionID)
-			req.Body = io.NopCloser(bytes.NewReader(bodyJSON))
-			resp, err = httpClient.Do(req)
+			resp, err = client.Chat(ctx, token, sessionID, bodyJSON)
 			if err != nil {
 				acc.Status = "cooldown"
 				acc.CooldownUntil = time.Now().Add(5 * time.Minute)
@@ -1922,102 +1657,14 @@ func testAccount(acc *Account) accountTestResult {
 	return result
 }
 
-type tokenUsage struct {
-	Prompt     int64
-	Completion int64
-	Total      int64
-	Cached     int64
-	Valid      bool
-}
+type tokenUsage = openaichat.Usage
 
 func parseTokenUsage(value any) tokenUsage {
-	usage, ok := value.(map[string]any)
-	if !ok {
-		return tokenUsage{}
-	}
-	read := func(keys ...string) int64 {
-		for _, key := range keys {
-			if value, ok := usage[key].(float64); ok && value >= 0 {
-				return int64(value)
-			}
-		}
-		return 0
-	}
-	readNested := func(parent string, keys ...string) int64 {
-		details, ok := usage[parent].(map[string]any)
-		if !ok {
-			return 0
-		}
-		for _, key := range keys {
-			if value, ok := details[key].(float64); ok && value >= 0 {
-				return int64(value)
-			}
-		}
-		return 0
-	}
-	prompt := read("prompt_tokens", "input_tokens")
-	completion := read("completion_tokens", "output_tokens")
-	cached := int64(0)
-	if nested := readNested("prompt_tokens_details", "cached_tokens"); nested > 0 {
-		cached = nested
-	} else if nested := readNested("input_tokens_details", "cached_tokens"); nested > 0 {
-		cached = nested
-	} else if v := read("cache_read_input_tokens") + read("cache_creation_input_tokens"); v > 0 {
-		cached = v
-	} else {
-		cached = read("prompt_cache_hit_tokens", "prompt_cache_creation_tokens", "cached_tokens")
-	}
-	total := read("total_tokens")
-	if total == 0 {
-		total = prompt + completion
-	}
-	_, hasUsage := usage["prompt_tokens"]
-	if !hasUsage {
-		_, hasUsage = usage["input_tokens"]
-		if !hasUsage {
-			if _, hasUsage = usage["completion_tokens"]; !hasUsage {
-				if _, hasUsage = usage["output_tokens"]; !hasUsage {
-					_, hasUsage = usage["total_tokens"]
-				}
-			}
-		}
-	}
-	if !hasUsage {
-		_, hasUsage = usage["cache_read_input_tokens"]
-		if !hasUsage {
-			_, hasUsage = usage["cache_creation_input_tokens"]
-			if !hasUsage {
-				_, hasUsage = usage["prompt_tokens_details"]
-				if !hasUsage {
-					_, hasUsage = usage["input_tokens_details"]
-				}
-			}
-		}
-	}
-	return tokenUsage{Prompt: prompt, Completion: completion, Total: total, Cached: cached, Valid: hasUsage}
+	return openaichat.ParseUsage(value)
 }
 
 func mergeTokenUsage(current, next tokenUsage) tokenUsage {
-	if !next.Valid {
-		return current
-	}
-	if next.Prompt != 0 {
-		current.Prompt = next.Prompt
-	}
-	if next.Completion != 0 {
-		current.Completion = next.Completion
-	}
-	if next.Total != 0 {
-		current.Total = next.Total
-	}
-	if next.Cached != 0 {
-		current.Cached = next.Cached
-	}
-	current.Valid = current.Valid || next.Valid
-	if current.Total == 0 && (current.Prompt != 0 || current.Completion != 0) {
-		current.Total = current.Prompt + current.Completion
-	}
-	return current
+	return openaichat.MergeUsage(current, next)
 }
 
 func recordTokenUsage(acc *Account, model string, usage tokenUsage) {
@@ -2141,109 +1788,8 @@ func getMsgCount(params map[string]any) int {
 	return 0
 }
 
-func handleStreamResponse(w http.ResponseWriter, upstream *http.Response, acc *Account, reqLog *RequestLog) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.WriteHeader(http.StatusOK)
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		log.Printf("  streaming not supported for client")
-		return
-	}
-
-	reader := bufio.NewReader(upstream.Body)
-	var latestUsage tokenUsage
-	var firstOutputAt time.Time
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				if line != "" {
-					w.Write([]byte(line + "\n"))
-				}
-			} else {
-				// 记录断流原因（超时/重置），不再无声吞掉
-				log.Printf("  chat stream broken: %v", err)
-			}
-			break
-		}
-
-		line = strings.TrimRight(line, "\r\n")
-
-		if strings.HasPrefix(line, "data:") {
-			payload := strings.TrimSpace(line[5:])
-			if payload == "" || payload == "[DONE]" {
-				w.Write([]byte(line + "\n\n"))
-				flusher.Flush()
-				continue
-			}
-
-			// Try to normalize the response
-			var obj map[string]any
-			if err := json.Unmarshal([]byte(payload), &obj); err == nil {
-				// Some Cline responses wrap in {data: {...}}
-				if data, ok := obj["data"]; ok {
-					if d, ok := data.(map[string]any); ok {
-						if _, hasChoices := d["choices"]; hasChoices {
-							obj = d
-						}
-						if _, hasID := d["id"]; hasID {
-							obj = d
-						}
-					}
-				}
-				normalized := normalizeOpenAIResponse(obj)
-				restoreToolCallsInResponse(normalized, reqLog.toolNames)
-				if usage := parseTokenUsage(normalized["usage"]); usage.Valid {
-					latestUsage = mergeTokenUsage(latestUsage, usage)
-				}
-				if firstOutputAt.IsZero() && hasFirstOutput(normalized) {
-					firstOutputAt = time.Now()
-				}
-				if normBytes, err := json.Marshal(normalized); err == nil {
-					w.Write([]byte("data: " + string(normBytes) + "\n\n"))
-					flusher.Flush()
-					continue
-				}
-			}
-		}
-
-		w.Write([]byte(line + "\n"))
-		flusher.Flush()
-	}
-	recordUsage(acc, upstream, reqLog, reqLog.Model, latestUsage)
-	finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, true, "")
-}
-
 func hasFirstOutput(obj map[string]any) bool {
-	choices, ok := getNested(obj, "choices").([]any)
-	if !ok || len(choices) == 0 {
-		return false
-	}
-	choice, _ := choices[0].(map[string]any)
-	if choice == nil {
-		return false
-	}
-	if delta, ok := choice["delta"].(map[string]any); ok {
-		if c, _ := delta["content"].(string); c != "" {
-			return true
-		}
-		if tc, ok := delta["tool_calls"].([]any); ok && len(tc) > 0 {
-			return true
-		}
-	}
-	if msg, ok := choice["message"].(map[string]any); ok {
-		if c, _ := msg["content"].(string); c != "" {
-			return true
-		}
-		if tc, ok := msg["tool_calls"].([]any); ok && len(tc) > 0 {
-			return true
-		}
-	}
-	return false
+	return openaichat.HasFirstOutput(obj)
 }
 
 func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc *Account, reqLog *RequestLog) {
@@ -2265,7 +1811,7 @@ func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc
 	}
 
 	out = normalizeOpenAIResponse(out)
-	restoreToolCallsInResponse(out, reqLog.toolNames)
+	restoreToolCallsInResponse(out, reqLog.ToolNames)
 	usage := parseTokenUsage(out["usage"])
 	recordUsage(acc, upstream, reqLog, reqLog.Model, usage)
 	finalizeRequestLog(reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
@@ -2287,30 +1833,22 @@ type anthropicMsg struct {
 	Content any    `json:"content"`
 }
 
-type toolAccumulator struct {
-	index   int
-	id      string
-	name    string
-	args    string
-	emitted bool
-}
-
 type anthropicReq struct {
-	Model       string          `json:"model"`
-	MaxTokens   int             `json:"max_tokens"`
-	Messages    []anthropicMsg  `json:"messages"`
-	System      json.RawMessage `json:"system,omitempty"`
-	Stream      bool            `json:"stream,omitempty"`
-	Temperature float64         `json:"temperature,omitempty"`
-	TopP        float64         `json:"top_p,omitempty"`
-	TopK        int             `json:"top_k,omitempty"`
-	Stop        json.RawMessage `json:"stop_sequences,omitempty"`
-	Thinking    json.RawMessage `json:"thinking,omitempty"`
-	Tools       json.RawMessage `json:"tools,omitempty"`
-	ToolChoice  json.RawMessage `json:"tool_choice,omitempty"`
-	Metadata           json.RawMessage `json:"metadata,omitempty"`
-	ContextManagement  json.RawMessage `json:"context_management,omitempty"`
-	Extra              map[string]any  `json:"-"`
+	Model             string          `json:"model"`
+	MaxTokens         int             `json:"max_tokens"`
+	Messages          []anthropicMsg  `json:"messages"`
+	System            json.RawMessage `json:"system,omitempty"`
+	Stream            bool            `json:"stream,omitempty"`
+	Temperature       float64         `json:"temperature,omitempty"`
+	TopP              float64         `json:"top_p,omitempty"`
+	TopK              int             `json:"top_k,omitempty"`
+	Stop              json.RawMessage `json:"stop_sequences,omitempty"`
+	Thinking          json.RawMessage `json:"thinking,omitempty"`
+	Tools             json.RawMessage `json:"tools,omitempty"`
+	ToolChoice        json.RawMessage `json:"tool_choice,omitempty"`
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
+	ContextManagement json.RawMessage `json:"context_management,omitempty"`
+	Extra             map[string]any  `json:"-"`
 }
 
 func loadOverrideContent() string {
@@ -2336,319 +1874,32 @@ func loadOverrideContent() string {
 var overrideMissLogged atomic.Bool
 
 func extractStringContent(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	// Try string first
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return s
-	}
-	// Try array of content blocks
-	var blocks []map[string]any
-	if err := json.Unmarshal(raw, &blocks); err == nil {
-		parts := []string{}
-		for _, b := range blocks {
-			if b["type"] == "text" {
-				if t, ok := b["text"].(string); ok {
-					parts = append(parts, t)
-				}
-			}
-		}
-		return strings.Join(parts, "\n")
-	}
-	return ""
+	return anthropicconv.ExtractStringContent(raw)
 }
 
 func anthropicToolsToOpenAI(tools []any) []any {
-	out := make([]any, 0, len(tools))
-	for _, t := range tools {
-		if tMap, ok := t.(map[string]any); ok {
-			// Already in OpenAI format
-			if tMap["type"] == "function" {
-				out = append(out, t)
-				continue
-			}
-			// Convert Anthropic format to OpenAI. 客户端常缺省可选字段
-			// （如 websearch 无 description）：只拷贝存在的值，避免序列化成
-			// "description": null 被上游网关硬拒（400 Invalid input）。
-			fnMap := map[string]any{"name": tMap["name"]}
-			if d, _ := tMap["description"].(string); d != "" {
-				fnMap["description"] = d
-			}
-			if tMap["input_schema"] != nil {
-				fnMap["parameters"] = tMap["input_schema"]
-			}
-			oai := map[string]any{
-				"type":     "function",
-				"function": fnMap,
-			}
-			out = append(out, oai)
-		}
-	}
-	return out
+	return anthropicconv.ToolsToOpenAI(tools)
 }
 
 func anthropicToOpenAI(req anthropicReq) map[string]any {
-	openAI := map[string]any{
-		"model":      req.Model,
-		"max_tokens": req.MaxTokens,
-		"stream":     req.Stream,
-		"messages":   []any{},
-	}
-	if req.Temperature != 0 {
-		openAI["temperature"] = req.Temperature
-	}
-	if req.TopP != 0 {
-		openAI["top_p"] = req.TopP
-	}
-	// Anthropic thinking 参数映射为 OpenAI reasoning_effort：
-	// disabled → "none"（buildUpstreamBody 会删除，不下发给 Cline 上游），
-	// enabled/adaptive → 默认 "high"。
-	if req.Thinking != nil {
-		var thinking struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(req.Thinking, &thinking); err == nil {
-			switch thinking.Type {
-			case "enabled", "adaptive":
-				openAI["reasoning_effort"] = reasoningEffort()
-			case "disabled":
-				openAI["reasoning_effort"] = "none"
-			}
-		}
-	}
-	// Convert Anthropic tools to OpenAI format
-	if req.Tools != nil {
-		var toolsArr []any
-		if err := json.Unmarshal(req.Tools, &toolsArr); err == nil {
-			openAI["tools"] = anthropicToolsToOpenAI(toolsArr)
-		}
-	}
-	if req.ToolChoice != nil {
-		openAI["tool_choice"] = req.ToolChoice
-	}
-
-	msgs := []any{}
-
-	// System prompt: use override.md if it exists, otherwise use Anthropic's system field
-	sysContent := loadOverrideContent()
-	sysSource := "override.md"
-	if sysContent == "" {
-		sysSource = "client"
-		if req.System != nil {
-			sysContent = extractStringContent(req.System)
-		}
-	}
-	if sysContent != "" {
-		log.Printf("  system prompt: %d bytes (from %s)", len(sysContent), sysSource)
-		msgs = append(msgs, map[string]any{"role": "system", "content": sysContent})
-	}
-
+	msgs := make([]anthropicconv.Message, 0, len(req.Messages))
 	for _, m := range req.Messages {
-		switch c := m.Content.(type) {
-		case string:
-			msgs = append(msgs, map[string]any{"role": m.Role, "content": c})
-		case []any:
-			textParts := []string{}
-			var toolCalls []any
-			var toolResults []any
-
-			for _, block := range c {
-				if b, ok := block.(map[string]any); ok {
-					switch b["type"] {
-					case "text":
-						if t, ok := b["text"].(string); ok {
-							textParts = append(textParts, t)
-						}
-					case "image":
-						// skip images
-					case "tool_use":
-						// 跳过上游输出的空名 tool_use（畸形 tool call），避免污染历史导致后续 400
-						if name, _ := b["name"].(string); name == "" {
-							continue
-						}
-						argsStr := "{}"
-						if input, ok := b["input"]; ok && input != nil {
-							if s, ok := input.(string); ok {
-								argsStr = s
-							} else if bts, err := json.Marshal(input); err == nil {
-								argsStr = string(bts)
-							}
-						}
-						id, _ := b["id"].(string)
-						if id == "" {
-							id = genToolUseID()
-						}
-						tc := map[string]any{
-							"id":   id,
-							"type": "function",
-							"function": map[string]any{
-								"name":      b["name"],
-								"arguments": argsStr,
-							},
-						}
-						toolCalls = append(toolCalls, tc)
-					case "compaction":
-						// Preserve prior compaction blocks as a summary system message
-						// so findExistingSummary / compaction recognition works.
-						if c, ok := b["content"].(string); ok && c != "" {
-							msgs = append(msgs, map[string]any{
-								"role":    "system",
-								"content": "[Conversation Summary]\n" + c,
-							})
-						}
-					case "tool_result":
-						trContent := b["content"]
-						if _, isStr := trContent.(string); !isStr && trContent != nil {
-							if bts, err := json.Marshal(trContent); err == nil {
-								trContent = string(bts)
-							}
-						}
-						tr := map[string]any{
-							"role":         "tool",
-							"content":      trContent,
-							"tool_call_id": b["tool_use_id"],
-						}
-						toolResults = append(toolResults, tr)
-					}
-				}
-			}
-
-			if m.Role == "assistant" && len(toolCalls) > 0 {
-				msg := map[string]any{
-					"role":       "assistant",
-					"content":    strings.Join(textParts, "\n"),
-					"tool_calls": toolCalls,
-				}
-				msgs = append(msgs, msg)
-			} else if m.Role == "user" && len(toolResults) > 0 {
-				for _, tr := range toolResults {
-					msgs = append(msgs, tr)
-				}
-				if len(textParts) > 0 {
-					msgs = append(msgs, map[string]any{"role": "user", "content": strings.Join(textParts, "\n")})
-				}
-			} else {
-				content := strings.Join(textParts, "\n")
-				msgs = append(msgs, map[string]any{"role": m.Role, "content": content})
-			}
-		}
+		msgs = append(msgs, anthropicconv.Message{Role: m.Role, Content: m.Content})
 	}
-
-	openAI["messages"] = msgs
-	return openAI
+	return anthropicconv.ToOpenAI(anthropicconv.Request{
+		Model: req.Model, MaxTokens: req.MaxTokens, Stream: req.Stream,
+		Temperature: req.Temperature, TopP: req.TopP, System: req.System,
+		Messages: msgs, Tools: req.Tools, ToolChoice: req.ToolChoice, Thinking: req.Thinking,
+	}, anthropicconv.Options{
+		SystemOverride:  loadOverrideContent(),
+		ReasoningEffort: reasoningEffort(),
+		NewToolUseID:    genToolUseID,
+		Logf:            log.Printf,
+	})
 }
 
 func openAIToAnthropic(openAI map[string]any) map[string]any {
-	out := map[string]any{
-		"id":    "msg_" + fmt.Sprintf("%x", time.Now().UnixMilli()),
-		"type":  "message",
-		"role":  "assistant",
-		"model": getNested(openAI, "model"),
-	}
-
-	choices := getNested(openAI, "choices")
-	if choices == nil {
-		out["content"] = []any{map[string]any{"type": "text", "text": ""}}
-		out["stop_reason"] = "end_turn"
-		out["usage"] = map[string]any{"input_tokens": 0, "output_tokens": 0}
-		return out
-	}
-
-	choice0 := getNested(openAI, "choices", 0).(map[string]any)
-	msg, _ := choice0["message"].(map[string]any)
-	if msg == nil {
-		msg, _ = choice0["delta"].(map[string]any)
-	}
-
-	text := ""
-	if msg != nil {
-		if c, ok := msg["content"].(string); ok {
-			text = sanitizeContent(c)
-		}
-	}
-
-	// 上游 reasoning_content → Anthropic thinking 块（顺序：thinking 在 text 前）
-	var thinkingBlock map[string]any
-	if msg != nil {
-		if rc, ok := msg["reasoning_content"].(string); ok && rc != "" {
-			thinkingBlock = map[string]any{"type": "thinking", "thinking": rc, "signature": ""}
-		}
-	}
-
-	var contentBlocks []any
-	if thinkingBlock != nil {
-		contentBlocks = append(contentBlocks, thinkingBlock)
-	}
-	if text != "" || thinkingBlock == nil {
-		contentBlocks = append(contentBlocks, map[string]any{"type": "text", "text": text})
-	}
-
-	// Convert tool_calls to Anthropic tool_use blocks
-	if msg != nil {
-		if tc, ok := msg["tool_calls"].([]any); ok && len(tc) > 0 {
-			contentBlocks = []any{} // Clear text-only, proper response has both
-			if thinkingBlock != nil {
-				contentBlocks = append(contentBlocks, thinkingBlock)
-			}
-			if text != "" {
-				contentBlocks = append(contentBlocks, map[string]any{"type": "text", "text": text})
-			}
-			for _, tcItem := range tc {
-				if tcMap, ok := tcItem.(map[string]any); ok {
-					funcData, _ := tcMap["function"].(map[string]any)
-					// 跳过空名 tool_call（畸形工具调用），避免客户端收到无法执行的空 tool_use 块
-					if name, _ := funcData["name"].(string); name == "" {
-						continue
-					}
-					input := funcData["arguments"]
-					// OpenAI arguments is a JSON string; Anthropic expects an object
-					if argsStr, ok := input.(string); ok {
-						var argsObj any
-						if json.Unmarshal([]byte(argsStr), &argsObj) == nil {
-							input = argsObj
-						}
-					}
-					id, _ := tcMap["id"].(string)
-					if id == "" {
-						id = genToolUseID()
-					}
-					block := map[string]any{
-						"type":  "tool_use",
-						"id":    id,
-						"name":  funcData["name"],
-						"input": input,
-					}
-					contentBlocks = append(contentBlocks, block)
-				}
-			}
-		}
-	}
-
-	out["content"] = contentBlocks
-
-	switch getNested(openAI, "choices", 0, "finish_reason") {
-	case "stop":
-		out["stop_reason"] = "end_turn"
-	case "length":
-		out["stop_reason"] = "max_tokens"
-	case "tool_calls":
-		out["stop_reason"] = "tool_use"
-	default:
-		out["stop_reason"] = "end_turn"
-	}
-
-	usage := map[string]any{}
-	if u := getNested(openAI, "usage"); u != nil {
-		if um, ok := u.(map[string]any); ok {
-			usage["input_tokens"] = um["prompt_tokens"]
-			usage["output_tokens"] = um["completion_tokens"]
-		}
-	}
-	out["usage"] = usage
-
-	return out
+	return anthropicconv.FromOpenAI(openAI, anthropicconv.Options{NewToolUseID: genToolUseID})
 }
 
 // zenFailoverToCline zen 调用失败后的透明降级：改走 cline 账号池 free 模型链。
@@ -2729,6 +1980,14 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 
 	reqLog := RequestLog{StartedAt: time.Now(), Protocol: "anthropic", Model: req.Model, Stream: req.Stream}
 
+	if msg := freeOnlyRejection(req.Model); msg != "" {
+		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
+		})
+		return
+	}
+
 	// Context management (Anthropic context_management edits) — polyfill.
 	// Inspected before routing so compaction can rewrite openAIReq["messages"].
 	var cmResult *CMResult
@@ -2761,14 +2020,14 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	if cmPaused {
 		if req.Stream {
 			sw := newSSEWriter(w)
-			sw.start()
+			sw.Start()
 			msgID := "msg_" + fmt.Sprintf("%x", reqLog.StartedAt.UnixMilli())
 			emit := func(event string, data any) {
 				d, _ := json.Marshal(data)
-				sw.write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(d))))
+				sw.Write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(d))))
 			}
-			if !sw.envelope {
-				sw.envelope = true
+			if !sw.Envelope {
+				sw.Envelope = true
 				emit("message_start", map[string]any{
 					"type": "message_start",
 					"message": map[string]any{
@@ -2777,15 +2036,15 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 					},
 				})
 			}
-			sw.write([]byte(": ping\n\n"))
-			if !sw.compactionEmitted {
-				sw.compactionEmitted = true
+			sw.Write([]byte(": ping\n\n"))
+			if !sw.CompactionEmitted {
+				sw.CompactionEmitted = true
 				emitCompactionBlock(sw, cmCompactionSummary)
 			}
 			emit("message_delta", map[string]any{
-				"type": "message_delta",
-				"delta": map[string]any{"stop_reason": "compaction", "stop_sequence": nil},
-				"usage": map[string]any{"output_tokens": 0},
+				"type":               "message_delta",
+				"delta":              map[string]any{"stop_reason": "compaction", "stop_sequence": nil},
+				"usage":              map[string]any{"output_tokens": 0},
 				"context_management": cmContextManagementResponse(cmApplied),
 			})
 			emit("message_stop", map[string]any{"type": "message_stop"})
@@ -2793,13 +2052,13 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id":      "msg_" + fmt.Sprintf("%x", reqLog.StartedAt.UnixMilli()),
-			"type":    "message",
-			"role":    "assistant",
-			"content": []any{map[string]any{"type": "compaction", "content": cmCompactionSummary}},
-			"model":   req.Model,
-			"stop_reason": "compaction",
-			"usage": map[string]any{"input_tokens": 0, "output_tokens": 0},
+			"id":                 "msg_" + fmt.Sprintf("%x", reqLog.StartedAt.UnixMilli()),
+			"type":               "message",
+			"role":               "assistant",
+			"content":            []any{map[string]any{"type": "compaction", "content": cmCompactionSummary}},
+			"model":              req.Model,
+			"stop_reason":        "compaction",
+			"usage":              map[string]any{"input_tokens": 0, "output_tokens": 0},
 			"context_management": cmContextManagementResponse(cmApplied),
 		})
 		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, true, "")
@@ -2828,7 +2087,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sessionID := requestSessionID(map[string]any{"session_id": r.Header.Get("x-opencode-session")}, nil)
-		reqLog.toolNames = clampParamsToolNames(openAIReq)
+		reqLog.ToolNames = clampParamsToolNames(openAIReq)
 
 		if req.Stream {
 			streamAnthropicCombo(r.Context(), w, openAIReq, combo, &reqLog, sessionID, cmCompactionSummary, cmApplied)
@@ -2864,7 +2123,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		usage := parseTokenUsage(out["usage"])
 		recordUsage(run.Acc, run.Resp, &reqLog, reqLog.Model, usage)
 		finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-		restoreToolCallsInResponse(out, reqLog.toolNames)
+		restoreToolCallsInResponse(out, reqLog.ToolNames)
 		anthropicResp := openAIToAnthropic(out)
 		applyCMToResponse(anthropicResp, cmResult)
 		if hasToolUseBlocks(anthropicResp["content"]) {
@@ -2902,7 +2161,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			// zen 故障转移到 Cline 池：先截短超长工具名（Meta 后端硬限 ≤64）
-			reqLog.toolNames = clampParamsToolNames(openAIReq)
+			reqLog.ToolNames = clampParamsToolNames(openAIReq)
 			if fbResp, fbAcc, fbErr, attempted := zenFailoverToCline(openAIReq, req.Stream); attempted {
 				if fbErr == nil {
 					log.Printf("  anthropic failover: serving %q via cline pool", req.Model)
@@ -2936,7 +2195,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 						usage := parseTokenUsage(out2["usage"])
 						recordUsage(fbAcc, fbResp, &reqLog, reqLog.Model, usage)
 						finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-						restoreToolCallsInResponse(out2, reqLog.toolNames)
+						restoreToolCallsInResponse(out2, reqLog.ToolNames)
 						anthropicResp := openAIToAnthropic(out2)
 						applyCMToResponse(anthropicResp, cmResult)
 						if hasToolUseBlocks(anthropicResp["content"]) {
@@ -3006,9 +2265,22 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Cline 池 / provider 路由也要主动压缩：此前仅 zen 路径会压，大上下文
+	// 请求会直接撞上游窗口失败。
+	zm := modelForCompaction(req.Model)
+	compactForRequest(openAIReq, zm, requestSessionID(map[string]any{"session_id": r.Header.Get("x-opencode-session")}, nil), "anthropic")
+
 	if req.Stream {
+		contextRetried := false
 		streamAnthropicWithRetry(r.Context(), w, func() (*http.Response, *Account, error) {
 			resp, acc, err := callClineAPI(openAIReq, req.Stream)
+			if err != nil && !contextRetried && isContextLengthError(err) {
+				contextRetried = true
+				if out := fallbackTruncate(openAIReq, zm); out.changed {
+					log.Printf("  anthropic %s", out.note)
+					resp, acc, err = callClineAPI(openAIReq, req.Stream)
+				}
+			}
 			if err == nil {
 				if effectiveModel, ok := openAIReq["model"].(string); ok && effectiveModel != "" {
 					reqLog.Model = effectiveModel // 含回退后的实际服务模型
@@ -3021,8 +2293,14 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Cline 通道：截短超长工具名并记录映射，回程由响应处理器还原（Meta 后端硬限 ≤64）
-	reqLog.toolNames = clampParamsToolNames(openAIReq)
+	reqLog.ToolNames = clampParamsToolNames(openAIReq)
 	resp, acc, err := callClineAPI(openAIReq, req.Stream)
+	if err != nil && isContextLengthError(err) {
+		if out := fallbackTruncate(openAIReq, zm); out.changed {
+			log.Printf("  anthropic %s", out.note)
+			resp, acc, err = callClineAPI(openAIReq, req.Stream)
+		}
+	}
 	if effectiveModel, ok := openAIReq["model"].(string); ok && effectiveModel != "" {
 		reqLog.Model = effectiveModel // 含回退后的实际服务模型
 	}
@@ -3064,7 +2342,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		usage := parseTokenUsage(out["usage"])
 		recordUsage(acc, resp, &reqLog, reqLog.Model, usage)
 		finalizeRequestLog(&reqLog, usage, time.Time{}, reqLog.StartedAt, true, "")
-		restoreToolCallsInResponse(out, reqLog.toolNames)
+		restoreToolCallsInResponse(out, reqLog.ToolNames)
 		anthropicResp := openAIToAnthropic(out)
 
 		applyCMToResponse(anthropicResp, cmResult)
@@ -3108,54 +2386,23 @@ const streamFailoverCooldown = 2 * time.Minute
 //   - write() 每次写完立即 Flush，保证中间层（Cloudflare 隧道等）及时看到字节。
 //
 // 同时用 started 记录「是否已有字节发出」，供调用方决定重试用 JSON 还是带内 error。
-type sseWriter struct {
-	w                http.ResponseWriter
-	flusher          http.Flusher
-	started          bool // 响应头已发出
-	envelope         bool // message_start 已发出（跨预提交重试只发一次）
-	compactionEmitted bool // compaction block already emitted (avoid duplicate on retry)
-}
+type sseWriter = dispatch.SSEWriter
 
 func newSSEWriter(w http.ResponseWriter) *sseWriter {
-	f, _ := w.(http.Flusher)
-	return &sseWriter{w: w, flusher: f}
-}
-
-func (s *sseWriter) start() {
-	if s.started {
-		return
-	}
-	s.started = true
-	s.w.Header().Set("Content-Type", "text/event-stream")
-	s.w.Header().Set("Cache-Control", "no-cache")
-	s.w.Header().Set("Connection", "keep-alive")
-	s.w.Header().Set("Access-Control-Allow-Origin", "*")
-	s.w.WriteHeader(http.StatusOK)
-}
-
-func (s *sseWriter) write(p []byte) {
-	s.start()
-	s.w.Write(p)
-	if s.flusher != nil {
-		s.flusher.Flush()
-	}
+	return dispatch.NewSSEWriter(w)
 }
 
 // emitAnthropicErrorEvent 在响应头已发出（SSE 模式）后向客户端报告错误：
 // 此时无法再返回 JSON 状态码，改用 Anthropic 协议的 error 事件。
 func emitAnthropicErrorEvent(sw *sseWriter, msg string) {
-	d, _ := json.Marshal(map[string]any{
-		"type":  "error",
-		"error": map[string]any{"type": "api_error", "message": msg},
-	})
-	sw.write([]byte("event: error\ndata: " + string(d) + "\n\n"))
+	sw.EmitError(msg)
 }
 
 // finishAnthropicStreamFailure 统一处理流式尝试失败后的报错：
 // 响应头尚未发送 → JSON 状态码；已经发出 → 带内 error 事件（避免重复 WriteHeader）。
 func finishAnthropicStreamFailure(sw *sseWriter, w http.ResponseWriter, reqLog *RequestLog, status int, note, msg string) {
 	finalizeRequestLog(reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, note)
-	if sw.started {
+	if sw.Started {
 		log.Printf("  anthropic stream: %s (reported as in-band error event)", note)
 		emitAnthropicErrorEvent(sw, msg)
 		return
@@ -3218,18 +2465,42 @@ func streamAnthropicCombo(ctx context.Context, w http.ResponseWriter, params map
 		return
 	}
 
+	// 组合级主动压缩：以候选模型中最小的有效上下文为预算，一次压缩写回共享
+	// params（callSingleModel 压缩的是 map 副本，条目之间不会传递）。
+	if out := maybeCompact(params, comboCompactionModel(combo), sessionID); out.changed {
+		log.Printf("  combo %q %s", combo.ID, out.note)
+	}
+
+	// 上下文超限的「截断重试」整条组合只做一次：截断后的 params 在后续条目间共享。
+	// 与 runCombo 的非流式路径保持一致 —— 流式组合此前缺少这一步，导致某个条目
+	// 因上下文超限返回 400 时整条组合直接中止（单模型路径会先压缩/截断再回退）。
+	truncatedForRun := false
+
 	for idx, c := range cands {
 		if ctx.Err() != nil {
 			return
 		}
 		start := time.Now()
 		resp, acc, upstream, provName, err := callSingleModel(params, c.entry, true, sessionID)
+		if err != nil && isContextLengthError(err) && !truncatedForRun {
+			truncatedForRun = true
+			log.Printf("  combo %q: entry %d %q context length exceeded, truncating and retrying", combo.ID, c.order, c.model)
+			if out := fallbackTruncate(params, modelForCompaction(c.model)); out.changed {
+				log.Printf("  combo %s", out.note)
+				start = time.Now()
+				resp, acc, upstream, provName, err = callSingleModel(params, c.entry, true, sessionID)
+			}
+		}
 		if err != nil {
 			trace = append(trace, AttemptLog{Model: c.model, Order: c.order, Upstream: upstream, Status: attemptStatus(err),
 				Outcome: "failed", Reason: truncate(err.Error(), 200), DurationMs: time.Since(start).Milliseconds(),
 				Source: strings.TrimSpace(c.entry.Source), Provider: strings.TrimSpace(c.entry.Provider),
 				ProviderName: provName})
 			applyComboLog(reqLog, combo, trace, "")
+			if isContextLengthError(err) {
+				// 上下文上限是模型/上游各自的属性：当前条目装不下，换下一个条目仍可能成功。
+				continue
+			}
 			if !comboRetryable(err) {
 				break
 			}
@@ -3360,7 +2631,7 @@ func streamAnthropicWithRetry(ctx context.Context, w http.ResponseWriter, fetch 
 //  3. firstContentTimeout 是本次尝试等待首个内容事件的上限，超时同样是可重试的失败。
 //
 // 返回 true 表示客户端响应已完整处理（正常收尾或已发出 error 事件）；
-// 返回 false 表示上游尚未产出任何内容 —— 调用方重试，或用 sw.started 判断后发带内 error。
+// 返回 false 表示上游尚未产出任何内容 —— 调用方重试，或用 sw.Started 判断后发带内 error。
 func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Response, acc *Account, reqLog *RequestLog, firstContentTimeout time.Duration, compactionSummary string, compactionApplied []CMAppliedEdit) bool {
 	if upstream.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(upstream.Body, 2048))
@@ -3368,7 +2639,7 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 		log.Printf("  anthropic stream: upstream status %d before stream: %s", upstream.StatusCode, truncate(string(b), 200))
 		return false
 	}
-	if sw.flusher == nil {
+	if sw.Flusher == nil {
 		log.Printf("  streaming not supported for client")
 		io.Copy(io.Discard, upstream.Body)
 		upstream.Body.Close()
@@ -3402,38 +2673,30 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 
 	emit := func(event string, data any) {
 		d, _ := json.Marshal(data)
-		sw.write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(d))))
+		sw.Write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(d))))
 	}
 
 	// msgID 跨预提交重试保持稳定：整个请求只发一个信封，重试沿用同一条消息。
 	msgID := "msg_" + fmt.Sprintf("%x", reqLog.StartedAt.UnixMilli())
-	stopReason := "end_turn"
-	textIndex := new(int)
-	*textIndex = -1
+	// 块索引/思考-文本生命周期/工具累计是纯协议逻辑，由 anthropic 适配器负责；
+	// 这里只做上游泵、心跳、重试与记账。compaction advisory 占用 index 0。
+	startIndex := -1
 	if compactionSummary != "" {
-		*textIndex = 0
+		startIndex = 0
 	}
-	hasText := false
-	sawNamedTool := false
-	sawThinking := false
-	thinkingIdx := -1
-	thinkingOpen := false
-	pendingTools := map[int]*toolAccumulator{}
+	st := anthropicconv.NewStreamState(startIndex)
+	st.ToolID = genToolUseID
 	committed := false
-
-	// hasContent 判断是否已向客户端发出过内容事件。为 false 时本次尝试的失败对客户端
-	// 完全不可见（只发了信封与 ping），因此可以安全地冷却该模型并换链上下一个模型。
-	hasContent := func() bool { return hasText || sawThinking || sawNamedTool }
 
 	// 信封提前发送：响应头 + message_start + 首个 ping 事件。
 	// 必须从第 0 秒起就有事件流动 —— 大上下文下上游排队/预填充实测 TTFT 可达 3~4 分钟，
 	// 期间只有注释行（不是事件）时，Claude Code 的流空闲看门狗会把连接当成卡死。
-	// 重试沿用同一信封（sw.envelope 幂等），客户端看不到任何重试痕迹。
+	// 重试沿用同一信封（sw.Envelope 幂等），客户端看不到任何重试痕迹。
 	// model 取 reqLog.Model（调用方已在 fetch 时更新为含回退的实际服务模型），
 	// 不能发空串 —— 客户端会丢失流式消息的模型身份。
-	sw.start()
-	if !sw.envelope {
-		sw.envelope = true
+	sw.Start()
+	if !sw.Envelope {
+		sw.Envelope = true
 		emit("message_start", map[string]any{
 			"type": "message_start",
 			"message": map[string]any{
@@ -3448,10 +2711,10 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 	}
 	// 接通即写一个注释行：从第 0 秒起就有字节流出（Cloudflare 不会 524），
 	// 但客户端的事件级看门狗不受影响 —— 这段等待若是白等，客户端会按自己的节奏超时重连。
-	sw.write([]byte(": ping\n\n"))
+	sw.Write([]byte(": ping\n\n"))
 
-	if compactionSummary != "" && !sw.compactionEmitted {
-		sw.compactionEmitted = true
+	if compactionSummary != "" && !sw.CompactionEmitted {
+		sw.CompactionEmitted = true
 		emitCompactionBlock(sw, compactionSummary)
 	}
 
@@ -3460,36 +2723,6 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 	commit := func() {
 		committed = true
 		log.Printf("  anthropic stream: starting real-time forward")
-	}
-
-	emitToolBlock := func(acc *toolAccumulator, index int) {
-		acc.emitted = true
-		args := acc.args
-		if args == "" {
-			args = "{}"
-		}
-		emit("content_block_start", map[string]any{
-			"type":  "content_block_start",
-			"index": index,
-			"content_block": map[string]any{
-				"type":  "tool_use",
-				"id":    acc.id,
-				"name":  acc.name,
-				"input": map[string]any{},
-			},
-		})
-		emit("content_block_delta", map[string]any{
-			"type":  "content_block_delta",
-			"index": index,
-			"delta": map[string]any{
-				"type":         "input_json_delta",
-				"partial_json": args,
-			},
-		})
-		emit("content_block_stop", map[string]any{
-			"type":  "content_block_stop",
-			"index": index,
-		})
 	}
 
 	var latestUsage tokenUsage
@@ -3519,7 +2752,7 @@ L:
 			}
 			return committed
 		case <-firstContentTimer.C:
-			if !hasContent() {
+			if !st.HasContent() {
 				log.Printf("  anthropic stream: no content from upstream within %s, aborting attempt", firstContentTimeout)
 				upstream.Body.Close()
 				return false
@@ -3529,15 +2762,15 @@ L:
 			// 中途放弃后整轮重跑（长回合重跑的代价远大于多等一会儿）。
 			// 还没出内容 → 只发注释行：只喂字节级看门狗（Cloudflare），注定失败的尝试
 			// 让客户端按自己的节奏超时并重连（用户偏好断开重连而非长时间静默假活着）。
-			if hasContent() {
+			if st.HasContent() {
 				emit("ping", map[string]any{"type": "ping"})
 			} else {
-				sw.write([]byte(": ping\n\n"))
+				sw.Write([]byte(": ping\n\n"))
 			}
 		case sl, ok := <-lines:
 			if !ok {
 				// 读取泵退出但未送达错误（防御性处理）
-				if !hasContent() {
+				if !st.HasContent() {
 					log.Printf("  anthropic stream: upstream closed before any content, failing over")
 					return false
 				}
@@ -3547,7 +2780,7 @@ L:
 				return true
 			}
 			if sl.err != nil {
-				if !hasContent() {
+				if !st.HasContent() {
 					// 建流后没出任何内容就断了（实测 "unexpected EOF" 会静默 10 分钟才发生）：
 					// 不要把它当成「已提交所以只能报错」，换模型重试对客户端完全无感。
 					log.Printf("  anthropic stream: upstream ended before any content: %v", sl.err)
@@ -3571,7 +2804,7 @@ L:
 				continue
 			}
 			if payload == "[DONE]" {
-				if !hasContent() {
+				if !st.HasContent() {
 					// 上游一个内容块都没给就关闭 —— 视为失败，调用方可换模型重试
 					log.Printf("  anthropic stream: upstream sent empty stream before any content")
 					return false
@@ -3589,7 +2822,7 @@ L:
 				}
 			}
 			// 回程还原出站截短的工具名（Meta 后端硬限 ≤64 的映射）
-			restoreToolCallsInResponse(obj, reqLog.toolNames)
+			restoreToolCallsInResponse(obj, reqLog.ToolNames)
 			if usage := parseTokenUsage(obj["usage"]); usage.Valid {
 				latestUsage = mergeTokenUsage(latestUsage, usage)
 			}
@@ -3598,12 +2831,12 @@ L:
 			}
 
 			// 上游带内错误（如 {"code":504,"message":"Upstream idle timeout exceeded"}）。
-			// 只要还没发出内容事件（hasContent 为 false）就仍是可透明重试的失败；
+			// 只要还没发出内容事件（StreamState.HasContent 为 false）就仍是可透明重试的失败；
 			// 已经发出内容后则转发 error 事件并终止 —— 绝不伪造 end_turn 收尾（旧行为会让
 			// 客户端收到 error 后又收到一个「成功的空消息」，表现为静默断流）。
 			if errPayload, ok := obj["error"]; ok {
 				errBody, _ := json.Marshal(errPayload)
-				if !hasContent() {
+				if !st.HasContent() {
 					log.Printf("  anthropic stream: upstream error before any content: %s", string(errBody))
 					return false
 				}
@@ -3614,7 +2847,7 @@ L:
 			}
 
 			// 上游被截短的工具名还原为客户端原始名
-			restoreToolCallsInResponse(obj, reqLog.toolNames)
+			restoreToolCallsInResponse(obj, reqLog.ToolNames)
 
 			if !committed {
 				commit() // 首条有效数据行到达，提交响应头 + message_start
@@ -3629,111 +2862,8 @@ L:
 				continue
 			}
 
-			delta, ok := choice["delta"].(map[string]any)
-			if !ok {
-				delta = choice
-			}
-
-			// Reasoning content delta → Anthropic thinking block（thinking 在 text 前）
-			if rc, ok := delta["reasoning_content"].(string); ok && rc != "" {
-				sawThinking = true
-				if !thinkingOpen {
-					*textIndex++
-					thinkingIdx = *textIndex
-					thinkingOpen = true
-					emit("content_block_start", map[string]any{
-						"type":  "content_block_start",
-						"index": thinkingIdx,
-						"content_block": map[string]any{
-							"type":      "thinking",
-							"thinking":  "",
-							"signature": "",
-						},
-					})
-				}
-				emit("content_block_delta", map[string]any{
-					"type":  "content_block_delta",
-					"index": thinkingIdx,
-					"delta": map[string]any{
-						"type":     "thinking_delta",
-						"thinking": rc,
-					},
-				})
-			}
-
-			// Text content delta
-			if c, ok := delta["content"].(string); ok && c != "" {
-				if !hasText {
-					hasText = true
-					// thinking 块随 text 块开启而结束
-					if thinkingOpen {
-						emit("content_block_stop", map[string]any{
-							"type":  "content_block_stop",
-							"index": thinkingIdx,
-						})
-						thinkingOpen = false
-					}
-					*textIndex++
-					emit("content_block_start", map[string]any{
-						"type":  "content_block_start",
-						"index": *textIndex,
-						"content_block": map[string]any{
-							"type": "text",
-							"text": "",
-						},
-					})
-				}
-				emit("content_block_delta", map[string]any{
-					"type":  "content_block_delta",
-					"index": *textIndex,
-					"delta": map[string]any{
-						"type": "text_delta",
-						"text": sanitizeContent(c),
-					},
-				})
-			}
-
-			// Tool calls - accumulate and emit when complete
-			if tcRaw, ok := delta["tool_calls"].([]any); ok {
-				for _, tc := range tcRaw {
-					tcMap, _ := tc.(map[string]any)
-					if tcMap == nil {
-						continue
-					}
-					idx := 0
-					if i, ok := tcMap["index"].(float64); ok {
-						idx = int(i)
-					}
-					acc, exists := pendingTools[idx]
-					if !exists {
-						acc = &toolAccumulator{index: idx}
-						pendingTools[idx] = acc
-					}
-					if id, ok := tcMap["id"].(string); ok && id != "" {
-						acc.id = id
-					}
-					if fn, ok := tcMap["function"].(map[string]any); ok {
-						if name, ok := fn["name"].(string); ok && name != "" {
-							acc.name = name
-							sawNamedTool = true
-						}
-						if args, ok := fn["arguments"].(string); ok && args != "" {
-							acc.args += args
-						}
-					}
-				}
-			}
-
-			// Finish reason
-			if fr, ok := choice["finish_reason"].(string); ok && fr != "" {
-				switch fr {
-				case "length":
-					stopReason = "max_tokens"
-				case "tool_calls":
-					if sawNamedTool {
-						stopReason = "tool_use"
-					}
-				}
+			for _, ev := range st.PushDelta(choice) {
+				emit(ev.Name, ev.Data)
 			}
 		}
 	}
@@ -3743,55 +2873,19 @@ L:
 	// 视为本模型失败：返回 false 让调用方冷却该模型并换链上下一个模型重试。
 	// 此时客户端只收到信封与 ping，没有任何内容事件，因此重试完全无感
 	// （否则会重复 content_block index，客户端会错乱）。
-	if !hasText && !sawThinking && !sawNamedTool {
+	if !st.HasContent() {
 		log.Printf("  anthropic stream: model %q finished with no content, failing over", reqLog.Model)
 		return false
 	}
 
-	// Stop thinking block if still open (上游没有 text 输出时)
-	if thinkingOpen {
-		emit("content_block_stop", map[string]any{
-			"type":  "content_block_stop",
-			"index": thinkingIdx,
-		})
-		thinkingOpen = false
-	}
-
-	// Stop text block if active
-	if hasText {
-		emit("content_block_stop", map[string]any{
-			"type":  "content_block_stop",
-			"index": *textIndex,
-		})
-	}
-
-	// Emit tool blocks in deterministic order with proper indices,
-	// streaming args via input_json_delta (required by Anthropic clients).
-	nextIndex := *textIndex + 1
-	toolKeys := make([]int, 0, len(pendingTools))
-	for k := range pendingTools {
-		toolKeys = append(toolKeys, k)
-	}
-	sort.Ints(toolKeys)
-	for _, k := range toolKeys {
-		acc := pendingTools[k]
-		// 跳过没有名字的畸形 tool call（流式分片丢失 name 分片）
-		if acc.name == "" {
-			continue
-		}
-		if acc.id == "" {
-			acc.id = genToolUseID()
-		}
-		if !acc.emitted {
-			emitToolBlock(acc, nextIndex)
-			nextIndex++
-		}
+	for _, ev := range st.Finalize() {
+		emit(ev.Name, ev.Data)
 	}
 
 	msgDelta := map[string]any{
 		"type": "message_delta",
 		"delta": map[string]any{
-			"stop_reason":   stopReason,
+			"stop_reason":   st.StopReason(),
 			"stop_sequence": nil,
 		},
 		"usage": map[string]any{
@@ -3806,103 +2900,22 @@ L:
 	finalizeRequestLog(reqLog, latestUsage, firstOutputAt, reqLog.StartedAt, true, "")
 
 	emit("message_stop", map[string]any{"type": "message_stop"})
-	log.Printf("  anthropic stream done: hasText=%v tools=%d reason=%s", hasText, len(pendingTools), stopReason)
+	log.Printf("  anthropic stream done: hasText=%v tools=%d reason=%s", st.TextStarted(), st.ToolCount(), st.StopReason())
 	return true
 }
 
 func normalizeOpenAIResponse(obj map[string]any) map[string]any {
-	out := make(map[string]any)
-	for k, v := range obj {
-		if k == "provider_metadata" || k == "proxy_metadata" {
-			continue
-		}
-		out[k] = v
-	}
-
-	if choices, ok := out["choices"].([]any); ok {
-		normalized := make([]any, 0, len(choices))
-		for _, ch := range choices {
-			if c, ok := ch.(map[string]any); ok {
-				nc := make(map[string]any)
-				for k, v := range c {
-					if k == "provider_metadata" || k == "proxy_metadata" {
-						continue
-					}
-					nc[k] = v
-				}
-				if msg, ok := nc["message"].(map[string]any); ok {
-					nc["message"] = normalizeMessage(msg)
-				}
-				if delta, ok := nc["delta"].(map[string]any); ok {
-					nd := make(map[string]any)
-					for k, v := range delta {
-						if k == "provider_metadata" || k == "proxy_metadata" {
-							continue
-						}
-						nd[k] = v
-					}
-					if tc, ok := nd["tool_calls"].([]any); ok && len(tc) > 0 {
-						if nd["content"] == nil {
-							nd["content"] = ""
-						}
-					}
-					nc["delta"] = nd
-				}
-				normalized = append(normalized, nc)
-			} else {
-				normalized = append(normalized, ch)
-			}
-		}
-		out["choices"] = normalized
-	}
-
-	return out
+	return openaichat.NormalizeResponse(obj)
 }
 
-func sanitizeContent(s string) string {
-	return s
-}
+func sanitizeContent(s string) string { return protocol.SanitizeContent(s) }
 
 func normalizeMessage(msg map[string]any) map[string]any {
-	out := make(map[string]any)
-	for k, v := range msg {
-		if k == "provider_metadata" || k == "proxy_metadata" {
-			continue
-		}
-		out[k] = v
-	}
-	if tc, ok := out["tool_calls"].([]any); ok && len(tc) > 0 {
-		if out["content"] == nil {
-			out["content"] = ""
-		}
-	}
-	if c, ok := out["content"].(string); ok {
-		out["content"] = sanitizeContent(c)
-	}
-	return out
+	return openaichat.NormalizeMessage(msg)
 }
 
 func getNested(obj map[string]any, keys ...any) any {
-	current := any(obj)
-	for _, key := range keys {
-		switch k := key.(type) {
-		case string:
-			if m, ok := current.(map[string]any); ok {
-				current = m[k]
-			} else {
-				return nil
-			}
-		case int:
-			if arr, ok := current.([]any); ok && k < len(arr) {
-				current = arr[k]
-			} else {
-				return nil
-			}
-		default:
-			return nil
-		}
-	}
-	return current
+	return protocol.GetNested(obj, keys...)
 }
 
 func freePort(port int) {

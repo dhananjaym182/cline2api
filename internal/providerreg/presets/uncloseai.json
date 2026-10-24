@@ -1,0 +1,13 @@
+{
+  "id": "uncloseai",
+  "name": "UncloseAI",
+  "baseURL": "https://hermes.ai.unturf.com/v1",
+  "notes": "uncloseai (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "adamo1139/Hermes-3-Llama-3.1-8B-FP8-Dynamic",
+    "qwen3.6:27b",
+    "gemma4:31b"
+  ],
+  "kind": "free"
+}

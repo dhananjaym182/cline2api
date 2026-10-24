@@ -1,0 +1,8 @@
+{
+  "id": "nanobanana",
+  "name": "NanoBanana API",
+  "baseURL": "https://api.nanobananaapi.ai/v1",
+  "notes": "nanobanana (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "speka",
+  "name": "Speka AI",
+  "baseURL": "https://speka.me/v1",
+  "notes": "speka (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

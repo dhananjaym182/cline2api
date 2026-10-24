@@ -21,10 +21,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"regexp"
@@ -33,42 +31,10 @@ import (
 	"time"
 )
 
-// ComboEntry 是组合里的一个有序条目。
-type ComboEntry struct {
-	// Model 引用的现有模型 ID（必须是目录里已知模型，不能是 "free" 别名或另一组合）。
-	Model string `json:"model"`
-	// Disabled 条目级停用：保留在配置里但运行时跳过（不改动组合顺序语义）。
-	Disabled bool `json:"disabled,omitempty"`
-	// Source 可选上游固定：""=自动(默认优先级) | "cline" | "zen" | "provider"。
-	Source string `json:"source,omitempty"`
-	// Provider 仅当 Source=="provider" 时生效：目标自定义 Provider 的 Name。
-	Provider string `json:"provider,omitempty"`
-}
-
 // comboEntryKey 组合条目去重键：同一模型但不同上游固定（Source/Provider）不算重复，
 // 允许把同一模型分别钉到不同的上游。
 func comboEntryKey(e ComboEntry) string {
 	return strings.TrimSpace(e.Model) + "\x00" + strings.TrimSpace(e.Source) + "\x00" + strings.TrimSpace(e.Provider)
-}
-
-// ModelCombo 是一个具名、有序、可启停的模型组合。
-type ModelCombo struct {
-	// ID 稳定唯一标识，直接作为客户端可请求的模型名。不可与任何真实模型 ID/
-	// 保留别名冲突（保存时校验），避免静默遮蔽真实上游模型。
-	ID string `json:"id"`
-	// Name 显示名；Description/Category 为可选元数据。
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Category    string `json:"category,omitempty"`
-	// Enabled 整组启停：停用后不进 /v1/models，直接请求返回明确客户端错误。
-	Enabled bool `json:"enabled"`
-	// EmergencyFallback 显式允许在组合全部条目失败后落到全局 free 链（应急）。
-	// 默认 false：组合只走自己的序列，不会隐式触发全局回退。
-	EmergencyFallback bool `json:"emergencyFallback,omitempty"`
-	// Entries 有序条目列表，顺序即回退优先级。
-	Entries   []ComboEntry `json:"entries"`
-	CreatedAt time.Time    `json:"createdAt"`
-	UpdatedAt time.Time    `json:"updatedAt"`
 }
 
 // comboIDRe 组合 ID 允许的字符集：字母数字开头，后接字母数字/点/下划线/连字符。
@@ -779,12 +745,43 @@ func callSingleModel(params map[string]any, entry ComboEntry, stream bool, sessi
 	}
 }
 
+// comboCompactionModel 取候选条目中最小的有效上下文窗口作为组合压缩预算：
+// 组合里最窄的模型决定上限，压缩后的历史对所有条目都安全。未知模型落到
+// effectiveCompactContext 的默认封顶。
+func comboCompactionModel(combo ModelCombo) Model {
+	var chosen Model
+	best := 0
+	for _, e := range combo.Entries {
+		m := strings.TrimSpace(e.Model)
+		if m == "" || e.Disabled {
+			continue
+		}
+		zm := modelForCompaction(m)
+		ctx := effectiveCompactContext(zm)
+		if best == 0 || ctx < best {
+			best = ctx
+			chosen = zm
+		}
+	}
+	if best == 0 {
+		return Model{Context: defaultCompactContextCeiling}
+	}
+	chosen.Context = best
+	return chosen
+}
+
 // runCombo 按配置顺序执行组合，返回首个成功的上游响应；失败/跳过的条目记入轨迹。
 func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID string) comboRun {
 	trace := make([]AttemptLog, 0, len(combo.Entries))
 	tried := make(map[string]bool, len(combo.Entries))
 	failed := 0
 	var lastErr error
+	// 组合级主动压缩：以候选模型中最小的有效上下文为预算，一次压缩写回共享
+	// params（callSingleModel 压缩的是 map 副本，条目之间不会传递）。
+	if out := maybeCompact(params, comboCompactionModel(combo), sessionID); out.changed {
+		log.Printf("  combo %q %s", combo.ID, out.note)
+	}
+
 	// 上下文超限的「截断重试」整条组合只做一次：截断后的 params 在后续条目间共享。
 	truncatedForRun := false
 
@@ -810,6 +807,15 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 				Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
 			continue
 		}
+		if getProxyConfig().OnlyFree {
+			bare, _ := splitProviderPin(m)
+			if !modelFreeOnlyEligible(bare) {
+				trace = append(trace, AttemptLog{Model: m, Order: order, Outcome: "skipped",
+					Reason: fmt.Sprintf("not eligible under onlyFree (access class: %s)", modelRouteAccess(bare).Class),
+					Source: strings.TrimSpace(entry.Source), Provider: strings.TrimSpace(entry.Provider)})
+				continue
+			}
+		}
 		tried[key] = true
 
 		start := time.Now()
@@ -821,11 +827,7 @@ func runCombo(params map[string]any, combo ModelCombo, stream bool, sessionID st
 		if err != nil && isContextLengthError(err) && !truncatedForRun {
 			truncatedForRun = true
 			log.Printf("  combo %q: entry %d %q context length exceeded, truncating and retrying", combo.ID, order, m)
-			zm, ok := resolveZenInfo(m)
-			if !ok {
-				zm = Model{}
-			}
-			if out := fallbackTruncate(params, zm); out.changed {
+			if out := fallbackTruncate(params, modelForCompaction(m)); out.changed {
 				log.Printf("  combo %s", out.note)
 				start = time.Now()
 				resp, acc, upstream, provName, err = callSingleModel(params, entry, stream, sessionID)
@@ -982,101 +984,25 @@ func combosCatalog() []map[string]any {
 
 // GET /admin/api/combos
 func handleCombosList(w http.ResponseWriter, r *http.Request) {
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
-		"combos":          listCombos(),
-		"modelCatalog":    combosCatalog(),
-		"reservedAliases": []string{"free"},
-	}})
+	adminCombos.List(w, r)
 }
 
 // POST /admin/api/combos/save  body: ModelCombo
 func handleComboSave(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
-		return
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
-		return
-	}
-	defer r.Body.Close()
-	var combo ModelCombo
-	if err := json.Unmarshal(body, &combo); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
-		return
-	}
-	// 保留既有条目的创建时间等信息
-	if existing, ok := findCombo(combo.ID); ok && combo.CreatedAt.IsZero() {
-		combo.CreatedAt = existing.CreatedAt
-	}
-	saved, err := upsertCombo(combo)
-	if err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: localizeComboError(r, err)})
-		return
-	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "combo_saved"), Data: map[string]any{"combo": saved}})
+	adminCombos.Save(w, r)
 }
 
 // POST /admin/api/combos/delete  body: {id}
 func handleComboDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
-		return
-	}
-	var req struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
-		return
-	}
-	if !deleteCombo(req.ID) {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: tAPI(r, "combo_not_found")})
-		return
-	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "combo_deleted")})
+	adminCombos.Delete(w, r)
 }
 
 // POST /admin/api/combos/toggle  body: {id, enabled}
 func handleComboToggle(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
-		return
-	}
-	var req struct {
-		ID      string `json:"id"`
-		Enabled bool   `json:"enabled"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
-		return
-	}
-	combo, err := setComboEnabled(req.ID, req.Enabled)
-	if err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: err.Error()})
-		return
-	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"combo": combo}})
+	adminCombos.Toggle(w, r)
 }
 
 // POST /admin/api/combos/clone  body: {id}
 func handleComboClone(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
-		return
-	}
-	var req struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: tAPI(r, "invalid_json")})
-		return
-	}
-	combo, err := cloneCombo(req.ID)
-	if err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: localizeComboError(r, err)})
-		return
-	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Message: tAPI(r, "combo_cloned"), Data: map[string]any{"combo": combo}})
+	adminCombos.Clone(w, r)
 }

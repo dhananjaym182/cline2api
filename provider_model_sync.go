@@ -13,14 +13,15 @@ package main
 // ============================================================================
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"sync"
 	"time"
+
+	"cline-go-proxy/internal/modelcatalog"
+	"cline-go-proxy/internal/store/syncstate"
 )
 
 const (
@@ -30,25 +31,18 @@ const (
 	providerRecheckGap       = 2 * time.Second // 相邻 provider 检测间隔，避免同时打同一上游
 )
 
-type providerRecheckState struct {
-	LastCheckedMs  int64  `json:"lastCheckedMs"`
-	LastError      string `json:"lastError,omitempty"`
-	DelistedMarked int    `json:"delistedMarked,omitempty"` // 本轮检测后该 provider 池内已下架数
-	MissCounting   int    `json:"missCounting,omitempty"`   // 第 1 次缺失、尚未下架的模型数
-	NewQueued      int    `json:"newQueued,omitempty"`      // 本轮新模型入队预览的条数
-	BatchID        string `json:"batchId,omitempty"`
-}
+type providerRecheckState = syncstate.State
 
 var (
-	provRecheckMu       sync.Mutex
-	providerRecheckStat = map[string]*providerRecheckState{} // providerID → 展示状态
-	provRecheckMiss     = map[string]map[string]int{}        // providerID → modelID → 连续缺失次数（内存）
-	provRecheckLoaded   bool
-	provRecheckBusy     bool
+	provRecheckMu        sync.Mutex
+	providerRecheckStat  = map[string]*providerRecheckState{} // providerID → 展示状态
+	provRecheckMiss      = map[string]map[string]int{}        // providerID → modelID → 连续缺失次数（内存）
+	provRecheckLoaded    bool
+	provRecheckBusy      bool
 	providerSyncFilePath = ""
 )
 
-func init() { providerSyncFilePath = resolveDataPath(".cline-providers-sync.json") }
+func init() { providerSyncFilePath = resolveDataPath(syncstate.FileName) }
 
 func loadProviderRecheckState() {
 	provRecheckMu.Lock()
@@ -57,12 +51,8 @@ func loadProviderRecheckState() {
 		return
 	}
 	provRecheckLoaded = true
-	data, err := os.ReadFile(providerSyncFilePath)
+	persisted, err := syncstate.Load(providerSyncFilePath)
 	if err != nil {
-		return
-	}
-	var persisted map[string]*providerRecheckState
-	if err := json.Unmarshal(data, &persisted); err != nil {
 		backupCorruptFile(providerSyncFilePath, err)
 		return
 	}
@@ -78,11 +68,7 @@ func saveProviderRecheckStateLocked() {
 	for id, st := range providerRecheckStat {
 		out[id] = *st
 	}
-	data, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		return
-	}
-	if err := writeFileAtomic(providerSyncFilePath, data, 0600); err != nil {
+	if err := syncstate.Save(providerSyncFilePath, out); err != nil {
 		log.Printf("provider sync state save failed: %v", err)
 	}
 }
@@ -138,10 +124,14 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 	}
 
 	upstream := make(map[string]bool, len(entries))
-	entryByID := make(map[string]upstreamModelEntry, len(entries))
 	for _, e := range entries {
 		upstream[e.ID] = true
-		entryByID[e.ID] = e
+	}
+	declared := make(map[string]bool, len(p.ModelIDs))
+	for _, id := range p.ModelIDs {
+		if id != "" {
+			declared[id] = true
+		}
 	}
 
 	// 1) 声明模型的缺失计数（连续 2 次才下架；出现即清零并撤标记）
@@ -151,33 +141,7 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 		miss = map[string]int{}
 		provRecheckMiss[p.ID] = miss
 	}
-	declared := make(map[string]bool, len(p.ModelIDs))
-	for _, id := range p.ModelIDs {
-		if id == "" {
-			continue
-		}
-		declared[id] = true
-		if upstream[id] {
-			delete(miss, id)
-		} else {
-			miss[id]++
-		}
-	}
-	// 已从声明里移除的 id 不再跟踪
-	for id := range miss {
-		if !declared[id] {
-			delete(miss, id)
-		}
-	}
-	var toMark []string
-	counting := 0
-	for id, n := range miss {
-		if n >= providerRecheckMissLimit {
-			toMark = append(toMark, id)
-		} else {
-			counting++
-		}
-	}
+	toMark, counting := modelcatalog.TrackMissing(p.ModelIDs, upstream, miss, providerRecheckMissLimit)
 	provRecheckMu.Unlock()
 
 	// 2) 写池：打/撤 Delisted（只动 Source=provider 且在本 provider 声明内的条目）
@@ -210,19 +174,13 @@ func recheckProviderModels(p CustomProvider) providerRecheckState {
 	}
 
 	// 3) 新上游模型 → Auto 预览批次（不在声明里也不在池里；每 provider 至多一个待审批次）
-	var fresh []upstreamModelEntry
 	poolHas := map[string]bool{}
 	poolMu.Lock()
 	for _, m := range pool.Models {
 		poolHas[m.ID] = true
 	}
 	poolMu.Unlock()
-	for _, e := range entries {
-		if declared[e.ID] || poolHas[e.ID] {
-			continue
-		}
-		fresh = append(fresh, e)
-	}
+	fresh := modelcatalog.FilterNew(entries, declared, poolHas)
 	batchID, queued := "", 0
 	if len(fresh) > 0 {
 		importsMu.Lock()
@@ -354,56 +312,13 @@ func startProviderModelRecheck() {
 
 // POST /admin/api/providers/recheck  body: {id} 或 {all:true}
 // 手动触发检测（同步执行返回摘要）。all 时串行检测全部启用 provider。
+// POST /admin/api/providers/recheck  body: {id} 或 {all:true}
+// 手动触发检测（同步执行返回摘要）。all 时串行检测全部启用 provider。
 func handleProviderRecheck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: "method_not_allowed"})
-		return
-	}
-	var req struct {
-		ID  string `json:"id"`
-		All bool   `json:"all"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "invalid_json"})
-		return
-	}
-	if req.All {
-		res := runAllProviderRechecks()
-		if res == nil {
-			writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"busy": true}})
-			return
-		}
-		writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"results": res}})
-		return
-	}
-	if req.ID == "" {
-		writeAPI(w, http.StatusBadRequest, apiResponse{Error: "id or all required"})
-		return
-	}
-	st, err := recheckOneProvider(req.ID)
-	if err != nil {
-		writeAPI(w, http.StatusNotFound, apiResponse{Error: err.Error()})
-		return
-	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: st})
+	adminSync.ProviderRecheck(w, r)
 }
 
 // GET /admin/api/providers/sync-status — 各 provider 最近检测状态（含从未检测的启用 provider）。
 func handleProviderSyncStatus(w http.ResponseWriter, r *http.Request) {
-	loadProviderRecheckState()
-	provRecheckMu.Lock()
-	out := map[string]providerRecheckState{}
-	for id, st := range providerRecheckStat {
-		out[id] = *st
-	}
-	provRecheckMu.Unlock()
-	for _, p := range listProviders() {
-		if !p.Enabled {
-			continue
-		}
-		if _, ok := out[p.ID]; !ok {
-			out[p.ID] = providerRecheckState{}
-		}
-	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"providers": out}})
+	adminSync.ProviderStatus(w, r)
 }

@@ -1,0 +1,12 @@
+{
+  "id": "inxorastudio",
+  "name": "InxoraStudio Labs",
+  "baseURL": "https://labs.inxorastudio.com/v1",
+  "notes": "inxorastudio (from extremerouter registry)",
+  "freeTier": true,
+  "modelsFetcher": {
+    "url": "https://labs.inxorastudio.com/api/ai/models",
+    "type": "inxora"
+  },
+  "kind": "freeTier"
+}

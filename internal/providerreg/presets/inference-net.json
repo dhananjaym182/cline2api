@@ -1,0 +1,8 @@
+{
+  "id": "inference-net",
+  "name": "Inference.net",
+  "baseURL": "https://api.inference.net/v1",
+  "notes": "inference-net (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

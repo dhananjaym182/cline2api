@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // ============================================================================
@@ -21,6 +25,11 @@ import (
 const (
 	toolOutputMaxChars = 2000 // 工具结果序列化截断长度
 	defaultSummaryOut  = 4096
+	// summaryInputMaxChars bounds the transcript sent to the summary model.
+	// The omitted history can be hundreds of thousands of characters; free-tier
+	// summarizers reject that, which used to make every summary fail and fall
+	// back to lossy truncation.
+	summaryInputMaxChars = 120000
 )
 
 // summaryTemplate 锚定摘要模板：固定章节结构，保证多轮压缩增量可读。
@@ -181,7 +190,7 @@ func selectRecent(serialized []string, keepTokens int) *selectResult {
 		if next > keepTokens {
 			remaining := keepTokens - total
 			if remaining > 0 {
-				remainingChars := remaining * 4
+				remainingChars := remaining * 3
 				rs := []rune(serialized[i])
 				if len(rs) > remainingChars {
 					splitPrefix = string(rs[:len(rs)-remainingChars])
@@ -226,14 +235,85 @@ func buildSummaryPrompt(previousSummary string, context []string) string {
 	return strings.Join(parts, "\n\n")
 }
 
-// generateSummary 调用 zen 上游生成摘要文本。
+// generateSummary builds the summary through a small route chain instead of
+// zen only. Zen's free tier is routinely rate-limited (429), and treating that
+// as fatal made every compaction fall back to truncation — i.e. "auto compact
+// never works". The chain tries the configured/request model, a free zen model
+// while zen is healthy, and finally the Cline free chain.
 func generateSummary(modelID, prompt string, maxSummary int) (string, error) {
+	candidates := summaryModelCandidates(modelID)
+	var failures []string
+	for _, model := range candidates {
+		text, err := callSummaryModel(model, prompt, maxSummary)
+		if err == nil && strings.TrimSpace(text) != "" {
+			if model != modelID {
+				log.Printf("  compact: summary served by fallback model %q", model)
+			}
+			return strings.TrimSpace(text), nil
+		}
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", model, err))
+		} else {
+			failures = append(failures, fmt.Sprintf("%s: empty summary", model))
+		}
+	}
+	if len(failures) == 0 {
+		return "", fmt.Errorf("no summary backend available")
+	}
+	return "", fmt.Errorf("all summary backends failed (%s)", strings.Join(failures, "; "))
+}
+
+// summaryModelCandidates returns the summary backends in preference order.
+// When zen is in its failover window every zen candidate is skipped: each
+// attempt costs several retries of backoff before the same 429.
+func summaryModelCandidates(preferred string) []string {
+	cfg := getZenConfig()
+	zenDown := cfg.Failover && zenFailedNow()
+	var out []string
+	seen := map[string]bool{}
+	add := func(m string) {
+		m = strings.TrimSpace(m)
+		if m == "" || seen[m] {
+			return
+		}
+		seen[m] = true
+		out = append(out, m)
+	}
+	if !zenDown {
+		add(preferred)
+	}
+	add("free")
+	if !zenDown {
+		for _, m := range currentZenModels() {
+			if isZenFreeModel(m) {
+				add(m.ID)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// callSummaryModel routes one summary request: zen free models go through
+// callZenAPI, everything else reuses the regular Cline/provider path (which
+// also owns the free-chain fallback).
+func callSummaryModel(model, prompt string, maxSummary int) (string, error) {
 	body := map[string]any{
-		"model":      modelID,
+		"model":      model,
 		"messages":   []any{map[string]any{"role": "user", "content": prompt}},
 		"max_tokens": maxSummary,
+		"stream":     false,
+		// Summaries are mechanical: skip upstream reasoning to keep them fast
+		// and cheap on free tiers ("none" is stripped from the Cline body).
+		"reasoning_effort": "none",
 	}
-	resp, err := callZenAPI(body, false)
+	var resp *http.Response
+	var err error
+	if zm, ok := resolveZenInfo(model); ok && isZenFreeModel(zm) {
+		resp, err = callZenAPI(body, false)
+	} else {
+		resp, _, err = callClineAPI(body, false)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -261,9 +341,31 @@ func generateSummary(modelID, prompt string, maxSummary int) (string, error) {
 	return "", fmt.Errorf("no content in summary response")
 }
 
-// ============ Token 估算（JSON 字节 / 4 近似） ============
+// ============ Token 估算 ============
+//
+// The estimator is deliberately conservative (same 3-chars-per-token assumption
+// ExtremeRouter uses): JSON-bytes/4 is ~20% optimistic for dense code, so
+// requests reached the upstream context window before compaction fired.
 
-func estimateText(s string) int { return len([]rune(s)) / 4 }
+// countTokenWeight returns a pessimistic character weight: non-whitespace
+// ASCII counts 1 while every non-ASCII rune counts 3 (one CJK char ≈ 1 token).
+func countTokenWeight(s string) int {
+	weight := 0
+	for _, r := range s {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		if r < utf8.RuneSelf {
+			weight++
+		} else {
+			weight += 3
+		}
+	}
+	return weight
+}
+
+// estimateText estimates the token count of plain text.
+func estimateText(s string) int { return countTokenWeight(s) / 3 }
 
 func estimateJSON(v any) int {
 	b, err := json.Marshal(v)
@@ -271,6 +373,56 @@ func estimateJSON(v any) int {
 		return 0
 	}
 	return len(b) / 4
+}
+
+// estimateRequestTokens estimates the input tokens of a chat request, counting
+// message text, reasoning text, tool-call arguments, tool schemas and a
+// top-level system prompt. It falls back to estimateJSON for shapes without
+// recognisable messages.
+func estimateRequestTokens(params map[string]any) int {
+	weight := 0
+	counted := false
+	if msgs, ok := params["messages"].([]any); ok {
+		for _, raw := range msgs {
+			mm, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			counted = true
+			weight += countTokenWeight(msgText(mm))
+			weight += countTokenWeight(strField(mm, "reasoning_content"))
+			if tcs, ok := mm["tool_calls"].([]any); ok {
+				for _, tc := range tcs {
+					tcm, _ := tc.(map[string]any)
+					fn, _ := tcm["function"].(map[string]any)
+					if fn == nil {
+						continue
+					}
+					weight += countTokenWeight(strField(fn, "name"))
+					weight += countTokenWeight(strField(fn, "arguments"))
+				}
+			}
+		}
+	}
+	if system := strField(params, "system"); system != "" {
+		counted = true
+		weight += countTokenWeight(system)
+	}
+	for _, key := range []string{"tools", "functions"} {
+		v, ok := params[key]
+		if !ok {
+			continue
+		}
+		b, err := json.Marshal(v)
+		if err != nil {
+			continue
+		}
+		weight += countTokenWeight(string(b))
+	}
+	if !counted {
+		return estimateJSON(params)
+	}
+	return weight / 3
 }
 
 // requestSessionID 会话标识：优先 x-opencode-session 头，其次 body.session_id。
@@ -310,12 +462,50 @@ func effectiveCompactContext(zm Model) int {
 	return context
 }
 
+// modelForCompaction resolves the best-known context/output metadata for a
+// model so compaction budgets apply to every route (zen, Cline pool, custom
+// provider), not only to zen models.
+func modelForCompaction(model string) Model {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return Model{}
+	}
+	if zm, ok := resolveZenInfo(model); ok {
+		return zm
+	}
+	p := loadPool()
+	poolMu.Lock()
+	for _, m := range p.Models {
+		if m.ID == model {
+			poolMu.Unlock()
+			return m
+		}
+	}
+	poolMu.Unlock()
+	if meta, ok := lookupClineModelMeta(model); ok {
+		return Model{ID: model, Context: meta.Context, Output: meta.Output}
+	}
+	return Model{ID: model}
+}
+
+// compactForRequest applies proactive compaction and logs the outcome under the
+// caller's label ("chat", "anthropic", "responses", "combo").
+func compactForRequest(params map[string]any, zm Model, sessionID, label string) {
+	if out := maybeCompact(params, zm, sessionID); out.changed {
+		log.Printf("  %s %s", label, out.note)
+	}
+}
+
 // maybeCompact 估算超限时执行摘要压缩并原地改写 params["messages"]。
 func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutcome {
 	cfg := getZenConfig()
 	if !cfg.Compaction.Auto {
 		return compactOutcome{}
 	}
+	// Clients often send no session header (Anthropic /v1/messages has none), so
+	// derive a stable per-conversation key; otherwise the previous summary was
+	// never reused and every turn re-summarised the whole history.
+	sessionID = compactSessionKey(params, sessionID)
 	context := effectiveCompactContext(zm)
 	buffer := cfg.Compaction.Buffer
 	if buffer <= 0 {
@@ -335,7 +525,8 @@ func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutc
 		output = buffer
 	}
 	threshold := context - output
-	if estimateJSON(params) <= threshold {
+	est := estimateRequestTokens(params)
+	if est <= threshold {
 		return compactOutcome{}
 	}
 
@@ -362,7 +553,7 @@ func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutc
 	}
 	st := loadCompactState(sessionID)
 
-	head := strings.Join(sel.head, "\n\n")
+	head := clampSummaryHead(strings.Join(sel.head, "\n\n"))
 	var contextParts []string
 	if st.recent != "" {
 		contextParts = append(contextParts, st.recent)
@@ -375,12 +566,15 @@ func maybeCompact(params map[string]any, zm Model, sessionID string) compactOutc
 	}
 	prompt := buildSummaryPrompt(previousSummary, contextParts)
 
-	summaryModel := cfg.Compaction.SummaryModel
+	// A configured summary model wins; otherwise the request model is tried
+	// first (cheap when it is a zen model) and generateSummary falls back to a
+	// free zen model and then the Cline free chain.
+	summaryModel := strings.TrimSpace(cfg.Compaction.SummaryModel)
 	if summaryModel == "" {
 		summaryModel = zm.ID
 	}
 	log.Printf("  compact: model=%s ctx=%d est=%d threshold=%d keep=%d split@%d/%d summary_model=%s",
-		zm.ID, context, estimateJSON(params), threshold, keep, sel.split, len(messages), summaryModel)
+		zm.ID, context, est, threshold, keep, sel.split, len(messages), summaryModel)
 	summary, err := generateSummary(summaryModel, prompt, maxSum)
 	if err != nil {
 		log.Printf("  compact: summary generation failed (%v), falling back to truncation", err)
@@ -431,6 +625,65 @@ func updateCompactState(sessionID, summary, recent string) {
 	compactStates[sessionID] = &compactState{summary: summary, recent: recent, updated: time.Now()}
 }
 
+// compactSessionKey prefers the explicit session id and otherwise derives a
+// stable fingerprint from the first system/user messages. The fingerprint keeps
+// incremental summaries working for clients (Claude Code, Anthropic API) that
+// do not send a session header.
+func compactSessionKey(params map[string]any, sessionID string) string {
+	if sessionID != "" {
+		return sessionID
+	}
+	msgs, _ := params["messages"].([]any)
+	var b strings.Builder
+	haveUser := false
+	for _, raw := range msgs {
+		mm, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch strField(mm, "role") {
+		case "system":
+			if b.Len() == 0 {
+				b.WriteString(tailRunes(msgText(mm), 400))
+			}
+		case "user":
+			if haveUser {
+				continue
+			}
+			haveUser = true
+			b.WriteString("\x00")
+			b.WriteString(tailRunes(msgText(mm), 400))
+		}
+		if b.Len() > 1600 {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return "fp_" + hex.EncodeToString(sum[:12])
+}
+
+// clampSummaryHead bounds the transcript handed to the summary model, keeping
+// the most recent part. Older facts are expected to live in the previous
+// summary that buildSummaryPrompt already merges in.
+func clampSummaryHead(head string) string {
+	rs := []rune(head)
+	if len(rs) <= summaryInputMaxChars {
+		return head
+	}
+	return "[earlier history omitted for summary]\n" + string(rs[len(rs)-summaryInputMaxChars:])
+}
+
+func tailRunes(s string, n int) string {
+	rs := []rune(s)
+	if len(rs) <= n {
+		return s
+	}
+	return string(rs[len(rs)-n:])
+}
+
 // findExistingSummary 从已有消息中寻找客户端带来的历史摘要。
 func findExistingSummary(messages []any, upTo int) string {
 	if upTo < 0 || upTo > len(messages) {
@@ -441,7 +694,7 @@ func findExistingSummary(messages []any, upTo int) string {
 		if !ok {
 			continue
 		}
-		c := strField(mm, "content")
+		c := msgText(mm)
 		for _, prefix := range []string{"[Conversation Summary]", "[Previous Conversation Summary]"} {
 			if strings.HasPrefix(c, prefix) {
 				return strings.TrimSpace(strings.TrimPrefix(c, prefix))
@@ -461,6 +714,17 @@ func fallbackTruncate(params map[string]any, zm Model) compactOutcome {
 	// 会落到 200k 默认并封顶，截断预算始终合理。
 	ctxBudget := effectiveCompactContext(zm)
 	budget := int(float64(ctxBudget) * 0.6)
+	// Tool schemas are sent on every request and cannot be dropped here; leave
+	// room for them so truncation does not keep the request over the window
+	// anyway (which used to surface as an upstream 400 right after "compaction").
+	if v, ok := params["tools"]; ok {
+		if b, err := json.Marshal(v); err == nil {
+			budget -= countTokenWeight(string(b)) / 3
+		}
+	}
+	if budget < 1000 {
+		budget = 1000
+	}
 
 	type idxMsg struct {
 		idx int

@@ -1,0 +1,11 @@
+{
+  "id": "mimocode",
+  "name": "MiMoCode (Free)",
+  "baseURL": "https://api.xiaomimimo.com",
+  "notes": "mimocode (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "mimo-auto"
+  ],
+  "kind": "free"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "ai21",
+  "name": "AI21 Labs",
+  "baseURL": "https://api.ai21.com/studio/v1",
+  "notes": "ai21 (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "jamba-large-1.7",
+    "jamba-mini-2"
+  ],
+  "kind": "hasFree"
+}

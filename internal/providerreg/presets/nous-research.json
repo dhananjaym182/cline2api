@@ -1,0 +1,12 @@
+{
+  "id": "nous-research",
+  "name": "Nous Research",
+  "baseURL": "https://inference-api.nousresearch.com/v1",
+  "notes": "nous-research (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "Hermes-4-405B",
+    "Hermes-4-70B"
+  ],
+  "kind": "hasFree"
+}

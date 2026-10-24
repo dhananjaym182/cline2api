@@ -1,0 +1,25 @@
+{
+  "id": "inferx",
+  "name": "InferX",
+  "baseURL": "https://model.inferx.net/endpoints/v1",
+  "notes": "inferx (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
+    "Qwen3.6-35B-A3B-FP8",
+    "Qwen3.6-35B-A3B-fp8-no-thinking",
+    "Qwen3-Coder-Next-FP8",
+    "gemma-4-31B-it-fp8",
+    "glm-52",
+    "Agents-A1",
+    "Devstral-2-123B-Instruct-2512-int4-AutoRound",
+    "Ornith-1.0-35B-FP8",
+    "Qwen3.6-27B-FP8"
+  ],
+  "modelsFetcher": {
+    "url": "https://model.inferx.net/endpoints/v1/models",
+    "type": "openai"
+  },
+  "kind": "hasFree"
+}

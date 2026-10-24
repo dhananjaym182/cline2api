@@ -2,18 +2,18 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/http/httpproxy"
+
+	"cline-go-proxy/internal/config"
 )
 
 // ============================================================================
@@ -25,10 +25,7 @@ import (
 // 拨号复用 zen_proxy.go 的 dialViaProxy；配置与冷却状态与 zen 代理池相互独立。
 // ============================================================================
 
-type clineProxyConfigData struct {
-	Proxies       []string `json:"proxies"`
-	ProxyStrategy string   `json:"proxyStrategy"` // round_robin / random / fill
-}
+type clineProxyConfigData = config.ClineEgress
 
 var (
 	clineProxyCfg   *clineProxyConfigData
@@ -37,7 +34,8 @@ var (
 )
 
 func defaultClineProxyConfig() *clineProxyConfigData {
-	return &clineProxyConfigData{Proxies: []string{}, ProxyStrategy: "round_robin"}
+	cfg := config.DefaultClineEgress()
+	return &cfg
 }
 
 // getClineProxyConfig 惰性加载配置（避免依赖包初始化顺序）。
@@ -45,15 +43,12 @@ func getClineProxyConfig() *clineProxyConfigData {
 	clineProxyCfgMu.Lock()
 	defer clineProxyCfgMu.Unlock()
 	if clineProxyCfg == nil {
-		cfg := defaultClineProxyConfig()
-		proxyPath := resolveDataPath(".cline-proxy.json")
-		if data, err := os.ReadFile(proxyPath); err == nil {
-			if err := json.Unmarshal(data, cfg); err != nil {
-				backupCorruptFile(proxyPath, err)
-			}
+		path := resolveDataPath(config.ClineEgressPath)
+		cfg, err := config.LoadClineEgress(path)
+		if err != nil {
+			backupCorruptFile(path, err)
 		}
-		normalizeClineProxyConfig(cfg)
-		clineProxyCfg = cfg
+		clineProxyCfg = &cfg
 	}
 	return clineProxyCfg
 }
@@ -78,13 +73,12 @@ func getClineProxyPersistErr() error {
 
 // setClineProxyConfig 原子替换配置并持久化。传输层按请求读取配置，无需重建。
 func setClineProxyConfig(c *clineProxyConfigData) {
-	normalizeClineProxyConfig(c)
+	c.Normalize()
 	clineProxyCfgMu.Lock()
 	clineProxyCfg = c
 	clineProxyCfgMu.Unlock()
 
-	data, _ := json.MarshalIndent(c, "", "  ")
-	if err := writeFileAtomic(resolveDataPath(".cline-proxy.json"), data, 0600); err != nil {
+	if err := config.SaveClineEgress(resolveDataPath(config.ClineEgressPath), c); err != nil {
 		log.Printf("cline proxy config save failed: %v", err)
 		setClineProxyPersistErr(err)
 		return
@@ -93,16 +87,7 @@ func setClineProxyConfig(c *clineProxyConfigData) {
 }
 
 func normalizeClineProxyConfig(c *clineProxyConfigData) {
-	cleaned := make([]string, 0, len(c.Proxies))
-	for _, p := range c.Proxies {
-		if line := strings.TrimSpace(p); line != "" {
-			cleaned = append(cleaned, line)
-		}
-	}
-	c.Proxies = cleaned
-	if c.ProxyStrategy != "random" && c.ProxyStrategy != "fill" {
-		c.ProxyStrategy = "round_robin"
-	}
+	c.Normalize()
 }
 
 // snapshotClineProxyConfig 返回调用时刻的配置快照（深拷贝代理列表）。
@@ -112,8 +97,7 @@ func snapshotClineProxyConfig() (proxies []string, strategy string) {
 	cfg := getClineProxyConfig()
 	clineProxyCfgMu.Lock()
 	defer clineProxyCfgMu.Unlock()
-	proxies = append([]string(nil), cfg.Proxies...)
-	return proxies, cfg.ProxyStrategy
+	return cfg.Snapshot()
 }
 
 func clineProxiesActive() bool {

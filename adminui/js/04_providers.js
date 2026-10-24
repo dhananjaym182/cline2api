@@ -825,11 +825,74 @@ async function loadConnections() {
   } catch (e) {
     _connFlows = []; _connList = [];
   }
+  renderConnectionProviders();
   renderConnectionsList();
   const dl = _('connProviderList');
   if (dl) dl.innerHTML = _connFlows.map(p => '<option value="' + esc(p) + '" label="' + esc(flowLabel(p)) + '">').join('');
   const ed = _('providerEditor');
   if (ed && ed.classList.contains('open')) renderConnPick();
+}
+
+// Wave-5: OAuth providers render as tiles grouped by connection state, so
+// login starts from the provider itself instead of a dropdown. Connected
+// providers keep an "Add Account" action for multi-account round-robin.
+function connsForProvider(provider) {
+  return _connList.filter(c => c.provider === provider);
+}
+
+function flowIconText(provider) {
+  return flowLabel(provider).trim().slice(0, 2).toUpperCase();
+}
+
+function renderConnectionProviders() {
+  const box = _('connProviderGroups');
+  if (!box) return;
+  if (!_connFlows.length) { box.innerHTML = ''; return; }
+
+  const byProv = {};
+  _connList.forEach(c => { const k = c.provider || ''; (byProv[k] = byProv[k] || []).push(c); });
+  const connected = [], unconnected = [];
+  _connFlows.slice().sort((a, b) => flowLabel(a).localeCompare(flowLabel(b))).forEach(p => {
+    (byProv[p] && byProv[p].length ? connected : unconnected).push(p);
+  });
+  connected.sort((a, b) =>
+    (byProv[b] || []).length - (byProv[a] || []).length || flowLabel(a).localeCompare(flowLabel(b)));
+
+  const tile = (p) => {
+    const list = byProv[p] || [];
+    const active = list.filter(c => c.status === 'active').length;
+    const reauth = list.length - active;
+    const has = list.length > 0;
+    let state;
+    if (!has) {
+      state = '<span class="conn-tile-state"><span class="status-dot disabled"></span>' + t('未连接') + '</span>';
+    } else {
+      state = '<span class="conn-tile-state"><span class="status-dot active"></span>' + active + ' ' + t('个账号');
+      if (reauth) state += ' · <span style="color:var(--yellow)">' + reauth + ' ' + t('需重新登录') + '</span>';
+      state += '</span>';
+    }
+    const action = '<button class="btn btn-sm' + (has ? '' : ' btn-primary') + '" onclick="startProviderLogin(\'' + escAttr(p) + '\', this)">' +
+      t(has ? '添加账号' : '连接') + '</button>';
+    return '<div class="conn-provider-tile' + (has ? ' connected' : '') + '">' +
+      '<div class="conn-tile-main">' +
+        '<div class="conn-tile-icon">' + esc(flowIconText(p)) + '</div>' +
+        '<div class="conn-tile-body">' +
+          '<div class="conn-tile-name">' + esc(flowLabel(p)) + '</div>' +
+          '<div class="conn-tile-sub mono">' + esc(p) + '</div>' +
+        '</div>' + state +
+      '</div>' +
+      '<div class="conn-tile-foot">' +
+        '<span class="conn-tile-meta">' + (has ? list.length + ' ' + t('个连接') : t('设备码登录')) + '</span>' +
+        '<div class="conn-tile-actions">' + action + '</div>' +
+      '</div>' +
+    '</div>';
+  };
+  const group = (title, list) => !list.length ? '' :
+    '<div class="conn-provider-group">' +
+      '<div class="conn-provider-group-title">' + title + ' <span class="conn-provider-count">' + list.length + '</span></div>' +
+      '<div class="conn-provider-grid">' + list.map(tile).join('') + '</div>' +
+    '</div>';
+  box.innerHTML = group(t('已连接'), connected) + group(t('未连接'), unconnected);
 }
 
 // Wave-4: connection rows live on the merged Accounts page (账号与连接),
@@ -894,16 +957,17 @@ function toggleConnStats(id, btn) {
   btn.title = hidden ? t('收起') : t('展开');
 }
 
-function openDeviceLogin() {
-  const sel = _('connLoginProvider');
-  if (sel) {
-    sel.innerHTML = _connFlows.length
-      ? _connFlows.map(p => '<option value="' + esc(p) + '">' + esc(flowLabel(p)) + '</option>').join('')
-      : '<option value="kilocode">Kilo Code</option>';
-  }
-  _('connLoginStep1').style.display = '';
-  _('connLoginStep2').style.display = 'none';
+function startProviderLogin(provider, btn) {
+  if (!provider) return;
+  const title = _('connLoginTitle');
+  if (title) title.textContent = t('设备码登录') + ' · ' + flowLabel(provider);
+  _('connLoginCode').textContent = '';
+  const link = _('connLoginUrl');
+  link.textContent = ''; link.removeAttribute('href');
+  _('connLoginCode').parentElement.style.display = '';
+  _('connLoginStatus').innerHTML = '<span class="loading"></span> ' + t('发起中...');
   _('connLoginModal').style.display = 'flex';
+  beginDeviceLogin(btn, provider);
 }
 
 function closeDeviceLogin() {
@@ -913,14 +977,17 @@ function closeDeviceLogin() {
   if (m) m.style.display = 'none';
 }
 
-async function beginDeviceLogin(btn) {
-  const provider = (_('connLoginProvider') && _('connLoginProvider').value) || 'kilocode';
+async function beginDeviceLogin(btn, provider) {
+  provider = provider || 'kilocode';
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('发起中...'); }
   try {
     const d = await api('POST', '/connections/login/start', { provider: provider });
     const r = d.data || {};
-    if (r.error) { toast(t('发起登录失败: ') + r.error, 'error'); return; }
+    if (r.error) {
+      _('connLoginStatus').innerHTML = renderTestResultHTML(false, r.error);
+      return;
+    }
     _loginSessionId = r.sessionId;
     _('connLoginCode').textContent = r.userCode || '';
     // Qoder identifies the device by nonce+verifier: the user just opens the
@@ -937,12 +1004,10 @@ async function beginDeviceLogin(btn) {
     const a = _('connLoginUrl');
     a.href = r.authUrl || '#'; a.textContent = r.authUrl || '';
     _('connLoginStatus').innerHTML = '<span class="loading"></span> ' + t('等待授权...');
-    _('connLoginStep1').style.display = 'none';
-    _('connLoginStep2').style.display = '';
     if (_loginPollTimer) clearInterval(_loginPollTimer);
     _loginPollTimer = setInterval(pollDeviceLogin, 2000);
   } catch (e) {
-    toast(t('发起登录失败: ') + e.message, 'error');
+    _('connLoginStatus').innerHTML = renderTestResultHTML(false, e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
@@ -956,7 +1021,8 @@ async function pollDeviceLogin() {
     if (!r.done) return;
     clearInterval(_loginPollTimer); _loginPollTimer = null;
     if (r.success) {
-      toast(t('登录成功') + ': ' + (r.userCode || ''), 'success');
+      const email = r.email || (r.connection && r.connection.email) || '';
+      toast(t('登录成功') + (email ? ': ' + email : ''), 'success');
       closeDeviceLogin();
       loadConnections();
     } else {

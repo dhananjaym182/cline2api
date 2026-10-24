@@ -1,0 +1,8 @@
+{
+  "id": "lm-studio",
+  "name": "LM Studio",
+  "baseURL": "http://localhost:1234/v1",
+  "notes": "lm-studio (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "local"
+}

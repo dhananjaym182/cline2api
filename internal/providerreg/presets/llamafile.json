@@ -1,0 +1,8 @@
+{
+  "id": "llamafile",
+  "name": "Llamafile",
+  "baseURL": "http://127.0.0.1:8080/v1",
+  "notes": "llamafile (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "local"
+}

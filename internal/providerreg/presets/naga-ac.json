@@ -1,0 +1,8 @@
+{
+  "id": "naga-ac",
+  "name": "Naga.ac",
+  "baseURL": "https://api.naga.ac/v1",
+  "notes": "naga-ac (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

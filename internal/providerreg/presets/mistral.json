@@ -1,0 +1,7 @@
+{
+  "id": "mistral",
+  "name": "Mistral (La Plateforme)",
+  "baseURL": "https://api.mistral.ai/v1",
+  "notes": "Free experiment tier. Key: console.mistral.ai",
+  "freeTier": true
+}

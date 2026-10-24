@@ -1,0 +1,8 @@
+{
+  "id": "tokenreply",
+  "name": "TokenReply",
+  "baseURL": "https://api.tokenreply.com/v1",
+  "notes": "tokenreply (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

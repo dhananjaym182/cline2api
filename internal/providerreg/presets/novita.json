@@ -1,0 +1,23 @@
+{
+  "id": "novita",
+  "name": "Novita AI",
+  "baseURL": "https://api.novita.ai/v3/openai",
+  "notes": "novita (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "deepseek/deepseek-r1",
+    "deepseek/deepseek-v3",
+    "deepseek/deepseek-r1-distill-llama-70b",
+    "deepseek/deepseek-r1-distill-qwen-32b",
+    "meta-llama/llama-3.3-70b-instruct",
+    "meta-llama/llama-3.1-405b-instruct",
+    "qwen/qwen-2.5-72b-instruct",
+    "qwen/qwen-2.5-coder-32b-instruct",
+    "mistralai/mistral-nemo"
+  ],
+  "modelsFetcher": {
+    "url": "https://api.novita.ai/v3/openai/models",
+    "type": "openai"
+  },
+  "kind": "hasFree"
+}

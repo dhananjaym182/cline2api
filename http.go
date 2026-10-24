@@ -1,14 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"os/exec"
-	"strings"
 	"time"
 )
 
@@ -38,43 +32,6 @@ var httpClient = &http.Client{
 	// 会把超过 5 分钟的流式响应拦腰截断（表现为「流式中途断掉」）。
 	// 超时改为 transport 级：拨号/TLS/响应头限时，body 读取不限时，
 	// 由客户端断开（request ctx）或上游错误/关闭自然终止。
-}
-
-func httpPostForm(rawURL string, form url.Values) (*http.Response, error) {
-	req, err := http.NewRequest("POST", rawURL, strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return httpClient.Do(req)
-}
-
-func httpPostJSON(rawURL string, body any) (*http.Response, error) {
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequest("POST", rawURL, bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return httpClient.Do(req)
-}
-
-func readBody(resp *http.Response) string {
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Sprintf("<read error: %v>", err)
-	}
-	return string(data)
-}
-
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }
 
 func runCommand(name string, args ...string) error {

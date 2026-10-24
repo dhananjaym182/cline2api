@@ -293,10 +293,10 @@
     <div class="section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>OAuth 连接池</span>
       <span class="title-tools">
         <button class="btn btn-sm" onclick="showConnectionImport()">导入 Token</button>
-        <button class="btn btn-sm btn-primary" onclick="openDeviceLogin()">设备码登录</button>
       </span>
     </div>
-    <div class="section-desc">所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与轮转派发；Token 只存服务端，不写进 Provider。</div>
+    <div class="section-desc">所有需要登录签票的上游账号（OAuth 设备码 / 粘贴 Token）统一在此管理：每个连接独立统计自己服务过的模型与用量，并按 Provider 分组。点击下方 Provider 卡片直接登录；已连接的 Provider 可继续「添加账号」，多个账号会一起参与轮转派发。登录后在 Provider 编辑器的「账号连接池」里勾选即可参与派发；Token 只存服务端，不写进 Provider。</div>
+    <div id="connProviderGroups"></div>
     <div class="section-body flush">
       <div id="connectionsList"></div>
     </div>
@@ -901,19 +901,12 @@
       </div>
 </div>
 
-  <!-- 设备码登录弹窗：选择 provider → 展示 user code + 验证链接 → 轮询状态 -->
+  <!-- 设备码登录弹窗：从 Provider 卡片直接发起 → 展示 user code + 验证链接 → 轮询状态 -->
   <!-- 连接弹窗位于 tab 面板之外：账号与连接页打开，跨标签页可用 -->
   <div id="connLoginModal" class="overlay-modal" onclick="if(event.target===this)closeDeviceLogin()">
     <div class="modal-card modal-card-col w480" role="dialog" aria-modal="true" aria-label="设备码登录">
-      <div class="modal-title">设备码登录</div>
-      <div id="connLoginStep1" style="margin-top:12px">
-        <div class="field"><label>选择服务</label><select id="connLoginProvider" style="width:100%"></select></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
-          <button class="btn btn-sm" onclick="closeDeviceLogin()">取消</button>
-          <button class="btn btn-sm btn-primary" onclick="beginDeviceLogin(this)">开始登录</button>
-        </div>
-      </div>
-      <div id="connLoginStep2" style="display:none;margin-top:12px">
+      <div class="modal-title" id="connLoginTitle">设备码登录</div>
+      <div id="connLoginStep2" style="margin-top:12px">
         <div style="font-size:12px;color:var(--text3)" id="connLoginHint">在浏览器中打开下面的地址并输入此代码，然后保持本窗口打开。</div>
         <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
           <div id="connLoginCode" class="mono" style="font-size:26px;font-weight:700;letter-spacing:2px;color:var(--text);background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px 16px"></div>

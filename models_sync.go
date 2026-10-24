@@ -56,16 +56,16 @@ type modelSyncResult struct {
 }
 
 var (
-	modelSyncMu    sync.Mutex
-	lastModelSync  modelSyncResult
-	modelSyncRan   bool // 启动后是否已同步过（避免重复）
-	modelSyncBusy  bool // 同步进行中（防并发触发）
+	modelSyncMu   sync.Mutex
+	lastModelSync modelSyncResult
+	modelSyncRan  bool // 启动后是否已同步过（避免重复）
+	modelSyncBusy bool // 同步进行中（防并发触发）
 )
 
 // remoteModelsEnabled 远程同步成功后置 true：此后 getAllModels 以远程模型为主，
 // 内置硬编码模型（已失效）仅作为离线 fallback。
 var (
-	remoteModelsEnabled bool
+	remoteModelsEnabled   bool
 	remoteModelsEnabledMu sync.Mutex
 )
 
@@ -377,14 +377,5 @@ func remoteModelsActive() bool {
 
 // POST /admin/api/models/sync — 手动触发一次模型同步
 func handleAdminModelSync(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
-		return
-	}
-	res := triggerModelSync()
-	if res.Error != "" {
-		writeAPI(w, http.StatusBadGateway, apiResponse{Success: false, Error: res.Error, Message: tAPI(r, "model_sync_failed")})
-		return
-	}
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: res, Message: tAPI(r, "model_sync_done")})
+	adminSync.Models(w, r)
 }

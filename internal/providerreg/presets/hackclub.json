@@ -1,0 +1,13 @@
+{
+  "id": "hackclub",
+  "name": "Hack Club AI",
+  "baseURL": "https://ai.hackclub.com/proxy/v1",
+  "notes": "hackclub (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "meta-llama/llama-3.3-70b-instruct",
+    "mistralai/mistral-7b-instruct",
+    "deepseek-ai/deepseek-coder-33b"
+  ],
+  "kind": "free"
+}

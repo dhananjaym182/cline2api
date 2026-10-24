@@ -1,0 +1,15 @@
+{
+  "id": "workbuddy",
+  "name": "WorkBuddy (Free)",
+  "baseURL": "https://www.workbuddy.ai/v2",
+  "notes": "浏览器授权轮询登录（state-poll，无需 API Key）；WorkBuddy /v2/chat/completions，含混元预览模型",
+  "freeTier": true,
+  "modelIds": [
+    "hy3",
+    "hy4-preview",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "minimax-m3"
+  ],
+  "loginFlow": true
+}

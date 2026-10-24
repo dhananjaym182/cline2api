@@ -1,0 +1,8 @@
+{
+  "id": "literouter",
+  "name": "LiteRouter",
+  "baseURL": "https://api.literouter.com/v1",
+  "notes": "literouter (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

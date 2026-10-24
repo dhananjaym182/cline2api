@@ -1,0 +1,12 @@
+{
+  "id": "poolside",
+  "name": "Poolside",
+  "baseURL": "https://inference.poolside.ai/v1",
+  "notes": "poolside (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "poolside/laguna-xs-2.1",
+    "poolside/laguna-s-2.1"
+  ],
+  "kind": "hasFree"
+}

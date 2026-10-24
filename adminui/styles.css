@@ -253,6 +253,28 @@ table{width:100%;border-collapse:collapse;table-layout:fixed}
 .conn-pick-warn{color:var(--yellow);font-size:11px;white-space:nowrap}
 .conn-pick-usage{color:var(--text3);font-size:11px;white-space:nowrap;margin-left:auto}
 tr.conn-group-row td{background:var(--surface2);color:var(--text2);font-size:12px;font-weight:600;padding:6px var(--sp-3)}
+
+/* ===== OAuth provider cards: connected / not connected ===== */
+.conn-provider-group{margin:14px var(--sp-3) 0}
+.conn-provider-group:last-of-type{margin-bottom:16px}
+.conn-provider-group-title{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px}
+.conn-provider-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--surface2);color:var(--text3);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.conn-provider-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px}
+.conn-provider-tile{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow-sm);transition:border-color .15s var(--ease)}
+.conn-provider-tile:hover{border-color:var(--border)}
+.conn-tile-main{display:flex;align-items:center;gap:10px;min-width:0}
+.conn-tile-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface2);color:var(--text2);font-size:12px;font-weight:700;letter-spacing:.5px}
+.conn-provider-tile.connected .conn-tile-icon{background:var(--green-soft);color:var(--green)}
+.conn-tile-body{flex:1;min-width:0}
+.conn-tile-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conn-tile-sub{font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conn-tile-state{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3);white-space:nowrap;flex-shrink:0}
+.conn-provider-tile.connected .conn-tile-state{color:var(--text2)}
+.conn-tile-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.conn-tile-meta{font-size:11px;color:var(--text3)}
+.conn-tile-actions{display:flex;gap:6px}
+@media (max-width:640px){.conn-provider-grid{grid-template-columns:1fr}.conn-provider-group{margin-left:0;margin-right:0}}
+
 /* 数字列统一右对齐 + 等宽数字（Provider 优先级 / 组合条目数等） */
 .num-col,th.num-col,td.num-col{text-align:right;font-variant-numeric:tabular-nums}
 th,td{text-align:left;padding:10px var(--sp-3);border-bottom:1px solid var(--border2);font-size:var(--fs-base);vertical-align:middle;overflow-wrap:break-word}

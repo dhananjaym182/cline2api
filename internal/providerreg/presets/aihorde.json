@@ -1,0 +1,13 @@
+{
+  "id": "aihorde",
+  "name": "AI Horde",
+  "baseURL": "https://oai.aihorde.net/v1",
+  "notes": "aihorde (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "aphrodite/TheDrummer/Cydonia-24B-v4.3",
+    "aphrodite/TheDrummer/Skyfall-31B-v4.2",
+    "google/gemma-4-31b"
+  ],
+  "kind": "free"
+}

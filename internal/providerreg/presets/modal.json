@@ -1,0 +1,11 @@
+{
+  "id": "modal",
+  "name": "Modal",
+  "baseURL": "https://api.modal.ai/v1",
+  "notes": "modal (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "google/gemini-2.0-flash"
+  ],
+  "kind": "hasFree"
+}

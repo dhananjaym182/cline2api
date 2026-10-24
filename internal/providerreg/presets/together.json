@@ -1,0 +1,7 @@
+{
+  "id": "together",
+  "name": "Together AI",
+  "baseURL": "https://api.together.xyz/v1",
+  "notes": "Some free models (e.g. Llama Vision free). Key: api.together.ai",
+  "freeTier": true
+}

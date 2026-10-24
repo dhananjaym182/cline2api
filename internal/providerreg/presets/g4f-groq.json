@@ -1,0 +1,12 @@
+{
+  "id": "g4f-groq",
+  "name": "g4f.space — Groq",
+  "baseURL": "https://g4f.space/api/groq/v1",
+  "notes": "g4f-groq (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant"
+  ],
+  "kind": "free"
+}

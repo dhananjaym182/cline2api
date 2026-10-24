@@ -1,0 +1,15 @@
+{
+  "id": "mimo-free",
+  "name": "MiMo Code Free",
+  "baseURL": "https://api.xiaomimimo.com/api/free-ai/openai/chat",
+  "notes": "mimo-free (from extremerouter registry)",
+  "freeTier": true,
+  "modelIds": [
+    "mimo-auto"
+  ],
+  "modelsFetcher": {
+    "url": "https://models.dev/api.json",
+    "type": "mimo-free"
+  },
+  "kind": "free"
+}

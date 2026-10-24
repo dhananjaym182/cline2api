@@ -1,0 +1,11 @@
+{
+  "id": "dgrid",
+  "name": "DGrid Free",
+  "baseURL": "https://api.dgrid.ai/v1",
+  "notes": "dgrid (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "dgridai/free"
+  ],
+  "kind": "hasFree"
+}

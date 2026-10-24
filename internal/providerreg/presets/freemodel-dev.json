@@ -1,0 +1,14 @@
+{
+  "id": "freemodel-dev",
+  "name": "FreeModel.dev",
+  "baseURL": "https://api.freemodel.dev/v1",
+  "notes": "freemodel-dev (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex"
+  ],
+  "kind": "hasFree"
+}

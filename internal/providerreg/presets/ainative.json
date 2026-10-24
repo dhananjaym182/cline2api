@@ -1,0 +1,19 @@
+{
+  "id": "ainative",
+  "name": "AINative Studio",
+  "baseURL": "https://api.ainative.studio/api/v1",
+  "notes": "ainative (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "qwen3-235b-cerebras",
+    "qwen3-32b",
+    "qwen3-14b",
+    "qwen3-8b",
+    "llama-4-maverick",
+    "llama3.1-8b-cerebras",
+    "deepseek-r1",
+    "nous-coder",
+    "gemini-flash"
+  ],
+  "kind": "hasFree"
+}

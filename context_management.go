@@ -43,14 +43,14 @@ type cmClearAtLeast struct {
 
 // CMEdit is one entry in context_management.edits.
 type CMEdit struct {
-	Type              string           `json:"type"`
-	Trigger           *cmTrigger       `json:"trigger,omitempty"`
-	Keep               json.RawMessage `json:"keep,omitempty"`
-	Instructions      *string          `json:"instructions,omitempty"`
-	PauseAfterCompact bool             `json:"pause_after_compaction,omitempty"`
-	ClearAtLeast      *cmClearAtLeast  `json:"clear_at_least,omitempty"`
-	ClearToolInputs   any              `json:"clear_tool_inputs,omitempty"`
-	ExcludeTools      []string         `json:"exclude_tools,omitempty"`
+	Type              string          `json:"type"`
+	Trigger           *cmTrigger      `json:"trigger,omitempty"`
+	Keep              json.RawMessage `json:"keep,omitempty"`
+	Instructions      *string         `json:"instructions,omitempty"`
+	PauseAfterCompact bool            `json:"pause_after_compaction,omitempty"`
+	ClearAtLeast      *cmClearAtLeast `json:"clear_at_least,omitempty"`
+	ClearToolInputs   any             `json:"clear_tool_inputs,omitempty"`
+	ExcludeTools      []string        `json:"exclude_tools,omitempty"`
 }
 
 // CMConfig is the parsed context_management object.
@@ -140,7 +140,7 @@ func applyContextManagement(ctx context.Context, req anthropicReq, openAIReq map
 				compactEdit = &ce
 			}
 		case "clear_tool_uses_20250919":
-			est := estimateJSON(openAIReq)
+			est := estimateRequestTokens(openAIReq)
 			triggered := true
 			if e.Trigger != nil && e.Trigger.Type == "input_tokens" && e.Trigger.Value > 0 {
 				if est < e.Trigger.Value {
@@ -308,7 +308,7 @@ func runCompaction(ctx context.Context, req anthropicReq, openAIReq map[string]a
 		trigger = edit.Trigger.Value
 	}
 
-	est := estimateJSON(openAIReq)
+	est := estimateRequestTokens(openAIReq)
 	if est < trigger {
 		return "not_triggered", "", false
 	}
@@ -359,20 +359,11 @@ func runCompaction(ctx context.Context, req anthropicReq, openAIReq map[string]a
 	}
 	prompt := buildSummaryPrompt(previousSummary, contextParts)
 
-	summaryModel := cfg.Compaction.SummaryModel
+	summaryModel := strings.TrimSpace(cfg.Compaction.SummaryModel)
 	if summaryModel == "" {
-		// try the request model itself only if zen is enabled; otherwise no summary model
-		if cfg.Enabled {
-			summaryModel = req.Model
-		}
-	}
-	if summaryModel == "" {
-		// no eligible summary model -> safe fallback truncation
-		outcome := fallbackTruncate(openAIReq, modelForCM(req))
-		if outcome.changed {
-			return "truncated", "", edit.PauseAfterCompact
-		}
-		return "skipped", "", false
+		// The request model is only a hint: generateSummary falls back to a free
+		// zen model and then the Cline free chain when it is unavailable.
+		summaryModel = req.Model
 	}
 
 	log.Printf("  cm: compact triggered est=%d trigger=%d keep=%d split@%d/%d summary_model=%s",
@@ -442,7 +433,9 @@ func toSerialized(messages []any) []string {
 }
 
 func modelForCM(req anthropicReq) Model {
-	// best-effort Model for fallbackTruncate which needs zm.Context/Output
+	if zm := modelForCompaction(req.Model); zm.Context > 0 {
+		return zm
+	}
 	return Model{ID: req.Model, Context: 200000, Output: 20000}
 }
 
@@ -466,8 +459,8 @@ func handleAnthropicCountTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	openAIReq := anthropicToOpenAI(req)
-	// safety margin ~10%? Keep raw estimate to stay consistent with maybeCompact.
-	est := estimateJSON(openAIReq)
+	// Keep the same conservative estimator used by maybeCompact.
+	est := estimateRequestTokens(openAIReq)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"input_tokens": est,
 		"context_management": map[string]any{
@@ -483,7 +476,7 @@ func handleAnthropicCountTokens(w http.ResponseWriter, r *http.Request) {
 func emitCompactionBlock(sw *sseWriter, summary string) {
 	emit := func(event string, data any) {
 		d, _ := json.Marshal(data)
-		sw.write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(d))))
+		sw.Write([]byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(d))))
 	}
 	emit("content_block_start", map[string]any{
 		"type":  "content_block_start",

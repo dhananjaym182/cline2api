@@ -1,0 +1,15 @@
+{
+  "id": "codebuddy-cn",
+  "name": "CodeBuddy CN (Free)",
+  "baseURL": "https://copilot.tencent.com/v2",
+  "notes": "浏览器授权轮询登录（state-poll，无需 API Key）；腾讯 CodeBuddy 国内站 /v2/chat/completions",
+  "freeTier": true,
+  "modelIds": [
+    "glm-5.3",
+    "glm-5.3-flash",
+    "glm-5.2",
+    "minimax-m3",
+    "kimi-k2.7"
+  ],
+  "loginFlow": true
+}

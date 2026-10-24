@@ -1,0 +1,12 @@
+{
+  "id": "llm-kiwi",
+  "name": "LLM.Kiwi",
+  "baseURL": "https://api.llm.kiwi/v1",
+  "notes": "llm-kiwi (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "auto",
+    "hrLLM"
+  ],
+  "kind": "hasFree"
+}

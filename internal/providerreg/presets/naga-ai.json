@@ -1,0 +1,8 @@
+{
+  "id": "naga-ai",
+  "name": "Naga AI",
+  "baseURL": "https://api.naga.ac/v1",
+  "notes": "naga-ai (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

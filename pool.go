@@ -1,16 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
-	"testing"
 	"time"
+
+	"cline-go-proxy/internal/dispatch"
+	"cline-go-proxy/internal/store/accounts"
 )
 
 var (
@@ -23,209 +21,6 @@ func init() {
 	poolPath = resolveDataPath(".cline-accounts.json")
 }
 
-// dataDirEnv 数据目录环境变量。设置后所有数据文件固定存放在该目录（最高优先级），
-// Docker 部署依赖它把数据落到挂载卷（Dockerfile 中 ENV CLINE2API_DATA_DIR=/app/data），
-// 否则数据会写进容器可写层、重建容器即丢失。
-const dataDirEnv = "CLINE2API_DATA_DIR"
-
-// knownDataFiles 全部已知数据文件名，切换数据目录时用于旧数据的一次性迁移。
-var knownDataFiles = []string{
-	".cline-accounts.json",
-	".cline-config.json",
-	".cline-providers.json",
-	".cline-request-logs.json",
-	".cline-zen.json",
-	".cline-proxy.json",
-	".cline-credentials.json",
-}
-
-// migrateOnce 保证旧数据迁移在进程生命周期内只执行一次。
-var migrateOnce sync.Once
-
-var (
-	testDataDirOnce sync.Once
-	// testDataDir 测试隔离的数据目录（惰性创建一次，进程内所有数据文件共用）。
-	testDataDir string
-)
-
-// testIsolatedDataDir 在 go test 运行时惰性创建一个全新的临时数据目录，
-// 所有数据文件统一重定向到这里，测试因此永远碰不到开发/生产环境的真实数据。
-func testIsolatedDataDir() string {
-	testDataDirOnce.Do(func() {
-		dir, err := os.MkdirTemp(os.TempDir(), "cline2api-test-data-")
-		if err != nil {
-			log.Printf("Failed to create isolated test data dir: %v", err)
-			return
-		}
-		testDataDir = dir
-	})
-	return testDataDir
-}
-
-// envDataDir 返回环境变量指定的数据目录（未设置返回空串），并确保目录存在。
-func envDataDir() string {
-	dir := strings.TrimSpace(os.Getenv(dataDirEnv))
-	if dir == "" {
-		return ""
-	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		log.Printf("Failed to create data dir %s: %v", dir, err)
-	}
-	return dir
-}
-
-// resolveDataPath 解析数据文件路径：
-//  1. 设置了 CLINE2API_DATA_DIR 时固定使用该目录（首次调用会把旧位置的已有数据迁移过来）；
-//  2. 未设置时按优先级查找：exe 目录 → 工作目录 → 用户主目录。
-//     找到则用该路径（兼容旧版本在项目根目录存储的文件）；
-//     都找不到则回退到 exe 目录（首次运行在该位置创建）。
-func resolveDataPath(filename string) string {
-	// 0. 环境变量指定的数据目录（Docker 卷挂载点）。显式设置优先级最高：
-	// go test 中也可用它把数据指向指定目录交互调试。
-	if dir := envDataDir(); dir != "" {
-		migrateOnce.Do(func() { migrateLegacyDataFiles(dir) })
-		return filepath.Join(dir, filename)
-	}
-	// 0.5 测试隔离：go test 且未显式设置 CLINE2API_DATA_DIR 时，把全部数据文件
-	// 重定向到一次性临时目录。真实事故：go test 的 fixture 曾把仓库根目录的
-	// live .cline-config.json 覆盖写坏（fixture 组合替换了用户的 premium-coding）。
-	// go build 的正式二进制不受影响（testing.Testing() 恒为 false）。
-	if testing.Testing() {
-		if dir := testIsolatedDataDir(); dir != "" {
-			return filepath.Join(dir, filename)
-		}
-	}
-	// 1. exe 所在目录
-	if exe, err := os.Executable(); err == nil {
-		p := filepath.Join(filepath.Dir(exe), filename)
-		if fileExists(p) {
-			return p
-		}
-	}
-	// 2. 当前工作目录
-	if pwd, err := os.Getwd(); err == nil {
-		p := filepath.Join(pwd, filename)
-		if fileExists(p) {
-			return p
-		}
-	}
-	// 3. 用户主目录下的 .cline2api/
-	if home, err := os.UserHomeDir(); err == nil {
-		p := filepath.Join(home, ".cline2api", filename)
-		if fileExists(p) {
-			return p
-		}
-	}
-	// 回退：exe 目录（首次运行在此创建）
-	if exe, err := os.Executable(); err == nil {
-		return filepath.Join(filepath.Dir(exe), filename)
-	}
-	pwd, _ := os.Getwd()
-	return filepath.Join(pwd, filename)
-}
-
-// currentDataDir 返回当前生效的数据目录（新文件将创建的位置），用于启动日志与排查。
-func currentDataDir() string {
-	if dir := envDataDir(); dir != "" {
-		return dir
-	}
-	if exe, err := os.Executable(); err == nil {
-		return filepath.Dir(exe)
-	}
-	pwd, _ := os.Getwd()
-	return pwd
-}
-
-// legacyDataDirsOverride 仅供测试替换旧目录探测逻辑（nil 时使用默认探测）。
-var legacyDataDirsOverride func() []string
-
-// legacyDataCandidates 返回旧版本可能存放数据文件的目录（去重后的绝对路径）。
-func legacyDataCandidates() []string {
-	if legacyDataDirsOverride != nil {
-		return legacyDataDirsOverride()
-	}
-	var dirs []string
-	if exe, err := os.Executable(); err == nil {
-		dirs = append(dirs, filepath.Dir(exe))
-	}
-	if pwd, err := os.Getwd(); err == nil {
-		dirs = append(dirs, pwd)
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		dirs = append(dirs, filepath.Join(home, ".cline2api"))
-	}
-	seen := make(map[string]bool, len(dirs))
-	out := dirs[:0]
-	for _, d := range dirs {
-		abs, err := filepath.Abs(d)
-		if err != nil {
-			abs = d
-		}
-		if !seen[abs] {
-			seen[abs] = true
-			out = append(out, abs)
-		}
-	}
-	return out
-}
-
-// migrateLegacyDataFiles 把旧位置已有的数据文件拷贝到数据目录（仅当目标不存在时）。
-// 设置 CLINE2API_DATA_DIR 后升级部署时自动接管历史数据；幂等，可重复调用。
-func migrateLegacyDataFiles(dir string) {
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		log.Printf("Failed to create data dir %s for migration: %v", dir, err)
-		return
-	}
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		absDir = dir
-	}
-	for _, name := range knownDataFiles {
-		dst := filepath.Join(dir, name)
-		if fileExists(dst) {
-			continue
-		}
-		for _, d := range legacyDataCandidates() {
-			if d == absDir {
-				continue
-			}
-			src := filepath.Join(d, name)
-			data, err := os.ReadFile(src)
-			if err != nil {
-				continue
-			}
-			if err := writeFileAtomic(dst, data, 0600); err != nil {
-				log.Printf("Failed to migrate %s from %s to %s: %v", name, d, dst, err)
-				break
-			}
-			log.Printf("Migrated %s from %s to %s", name, d, dst)
-			break
-		}
-	}
-}
-
-// writeFileAtomic 原子写文件：先写临时文件再 rename 覆盖。
-// 直接 WriteFile 会截断原文件，进程写一半被杀（如 docker stop）会留下损坏的 JSON，
-// 下次启动加载失败被当作空数据，再被空数据写回覆盖，造成数据永久丢失。
-func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, perm); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
-
-// backupCorruptFile 把解析失败的数据文件改名备份（.corrupt-<unix 秒>），
-// 保留原始内容供人工恢复，避免后续保存把损坏文件静默覆盖。
-func backupCorruptFile(path string, cause error) {
-	backup := fmt.Sprintf("%s.corrupt-%d", path, time.Now().Unix())
-	if err := os.Rename(path, backup); err != nil {
-		log.Printf("CORRUPT data file %s (%v); rename to backup failed: %v", path, cause, err)
-		return
-	}
-	log.Printf("CORRUPT data file %s (%v); backed up to %s", path, cause, backup)
-}
-
 func loadPool() *AccountPool {
 	poolMu.Lock()
 	defer poolMu.Unlock()
@@ -234,35 +29,16 @@ func loadPool() *AccountPool {
 		return pool
 	}
 
-	data, err := os.ReadFile(poolPath)
+	p, err := accounts.Load(poolPath)
 	if err != nil {
-		pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{}}
-		return pool
-	}
-
-	var p AccountPool
-	if err := json.Unmarshal(data, &p); err != nil {
 		backupCorruptFile(poolPath, err)
-		pool = &AccountPool{Accounts: []*Account{}, Keys: []string{}, Models: []Model{}}
-		return pool
 	}
-
-	if p.Accounts == nil {
-		p.Accounts = []*Account{}
-	}
-	if p.Keys == nil {
-		p.Keys = []string{}
-	}
-	if p.Models == nil {
-		p.Models = []Model{}
-	}
-	pool = &p
+	pool = p
 	return pool
 }
 
 func savePool() {
-	data, _ := json.MarshalIndent(pool, "", "  ")
-	if err := writeFileAtomic(poolPath, data, 0600); err != nil {
+	if err := accounts.Save(poolPath, pool); err != nil {
 		log.Printf("Failed to save accounts to %s: %v", poolPath, err)
 	}
 }
@@ -567,14 +343,8 @@ func sortModelsByAvailability(chain []string) []string {
 	defer poolMu.Unlock()
 
 	now := time.Now()
-	type cand struct {
-		model     string
-		avail     bool
-		minUsage  int64
-		origOrder int
-	}
-	cs := make([]cand, 0, len(chain))
-	for i, m := range chain {
+	cands := make([]dispatch.ModelAvailability, 0, len(chain))
+	for _, m := range chain {
 		avail := false
 		minUsage := int64(-1)
 		for _, a := range p.Accounts {
@@ -597,21 +367,9 @@ func sortModelsByAvailability(chain []string) []string {
 				minUsage = cnt
 			}
 		}
-		cs = append(cs, cand{model: m, avail: avail, minUsage: minUsage, origOrder: i})
+		cands = append(cands, dispatch.ModelAvailability{Model: m, Available: avail, MinUsage: minUsage})
 	}
-	sort.SliceStable(cs, func(x, y int) bool {
-		if cs[x].avail != cs[y].avail {
-			return cs[x].avail
-		}
-		if cs[x].avail && cs[x].minUsage != cs[y].minUsage {
-			return cs[x].minUsage < cs[y].minUsage
-		}
-		return cs[x].origOrder < cs[y].origOrder
-	})
-	out := make([]string, len(cs))
-	for i, c := range cs {
-		out[i] = c.model
-	}
+	out := dispatch.OrderByAvailability(cands)
 	savePool()
 	return out
 }

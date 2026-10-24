@@ -1,0 +1,8 @@
+{
+  "id": "zylo-api",
+  "name": "Zylo API",
+  "baseURL": "https://api.zyloai.net/v1",
+  "notes": "zylo-api (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

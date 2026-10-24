@@ -1,0 +1,23 @@
+{
+  "id": "helyxai",
+  "name": "Helyx AI",
+  "baseURL": "https://helyxai.space/v1",
+  "notes": "helyxai (from extremerouter registry)",
+  "freeTier": false,
+  "modelIds": [
+    "DeepSeek-V4-Flash",
+    "gpt-5.6-luna",
+    "gemini-3.1-flash-lite",
+    "GLM-5.2",
+    "Qwen3-32B",
+    "MiniMax-M3",
+    "DeepSeek-V4-Pro",
+    "Mistral-4",
+    "gemma-4-31B-it",
+    "gpt-oss-120b",
+    "Kimi-K3",
+    "llama-3.1-8b-instruct",
+    "kling-video"
+  ],
+  "kind": "hasFree"
+}

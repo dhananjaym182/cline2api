@@ -11,41 +11,32 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
+
+	"cline-go-proxy/internal/modelcatalog"
 )
 
 // Tier signals (stored in Model.TierSignal; admin UI shows why a model is free
 // and supports manual override to "manual"). Ordered strongest-first.
 const (
-	tierSignalPricingZero  = "pricing-zero"      // upstream pricing: prompt/completion 0 (and no per-request fee)
-	tierSignalFlagFree     = "flag-free"         // entry declares free itself: free=true or mode:"free"
-	tierSignalSuffixFree   = "suffix-free"       // id ends with :free / -free
-	tierSignalNameToken    = "name-token-free"   // id has a standalone free segment (free-x, free/ns/x, x:free:y, cline-free/x)
-	tierSignalDisplayName  = "display-name-free" // upstream display name carries a standalone free word, e.g. "Flash (Free)"
-	tierSignalAllowlist    = "allowlist"         // tags contain free, or hit the built-in zen seed allowlist
-	tierSignalProviderFree = "provider-free"     // whole provider is free (Free=true / no-key source)
-	tierSignalPricingPaid  = "pricing-paid"      // explicit nonzero upstream pricing → paid, outranks provider-free
-	tierSignalPaidDefault  = "paid-default"      // no free signal → paid, never guessed
+	tierSignalPricingZero  = modelcatalog.TierSignalPricingZero
+	tierSignalFlagFree     = modelcatalog.TierSignalFlagFree
+	tierSignalSuffixFree   = modelcatalog.TierSignalSuffixFree
+	tierSignalNameToken    = modelcatalog.TierSignalNameToken
+	tierSignalDisplayName  = modelcatalog.TierSignalDisplayName
+	tierSignalAllowlist    = modelcatalog.TierSignalAllowlist
+	tierSignalProviderFree = modelcatalog.TierSignalProviderFree
+	tierSignalPricingPaid  = modelcatalog.TierSignalPricingPaid
+	tierSignalPaidDefault  = modelcatalog.TierSignalPaidDefault
 )
 
 // upstreamModelEntry is one parsed /models item (OpenAI list + OpenRouter-style pricing).
-type upstreamModelEntry struct {
-	ID             string
-	Name           string // display name (OpenAI "name" / "display_name")
-	PricingPrompt  *float64
-	PricingComplet *float64
-	PricingRequest *float64 // per-request fee, when the catalog exposes pricing.request
-	Tags           []string
-	FreeFlag       bool   // boolean free:true on the entry (some gateways mark it this way)
-	Mode           string // string mode field (Cline catalog uses mode:"free")
-}
+type upstreamModelEntry = modelcatalog.Entry
 
 // freeIDAllowlist 内置免费模型 id 白名单（zen 种子表 + 别名），随包初始化。
 var freeIDAllowlist = func() map[string]bool {
@@ -59,244 +50,34 @@ var freeIDAllowlist = func() map[string]bool {
 	return m
 }()
 
-// freeWord reports whether s carries a standalone "free" word. Any
-// non-alphanumeric rune is a separator, so Cline/Zen style ids
-// ("cline-free/x", "y-free") and display names ("Flash (Free)") match while
-// freemap/freemium substrings never do.
-func freeWord(s string) bool {
-	for _, tok := range strings.FieldsFunc(strings.ToLower(strings.TrimSpace(s)), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-	}) {
-		if tok == "free" {
-			return true
-		}
-	}
-	return false
-}
+func freeWord(s string) bool { return modelcatalog.FreeWord(s) }
 
 // classifyUpstreamModel checks signals in order and returns on the first hit.
-// Explicit free markers (flags, :free/-free suffixes, free words in the id or
-// display name, tags, the zen seed allowlist) outrank explicit non-zero
-// pricing: gateway catalogs commonly list their free variants with the
-// reference (non-zero) list price, mirroring how Cline (FREE tag / free array)
-// and Zen (-free suffix / seed allowlist) decide.
+// Explicit free markers rank above explicit non-zero pricing.
 func classifyUpstreamModel(e upstreamModelEntry, providerFree bool) (tier, signal string) {
-	if e.PricingPrompt != nil && e.PricingComplet != nil && *e.PricingPrompt == 0 && *e.PricingComplet == 0 &&
-		(e.PricingRequest == nil || *e.PricingRequest == 0) {
-		return "free", tierSignalPricingZero
-	}
-	if e.FreeFlag || strings.EqualFold(strings.TrimSpace(e.Mode), "free") {
-		return "free", tierSignalFlagFree
-	}
-	lower := strings.ToLower(e.ID)
-	if strings.HasSuffix(lower, ":free") || strings.HasSuffix(lower, "-free") {
-		return "free", tierSignalSuffixFree
-	}
-	if freeWord(lower) {
-		return "free", tierSignalNameToken
-	}
-	if freeWord(e.Name) {
-		return "free", tierSignalDisplayName
-	}
-	for _, tag := range e.Tags {
-		if strings.EqualFold(strings.TrimSpace(tag), "free") {
-			return "free", tierSignalAllowlist
-		}
-	}
-	if freeIDAllowlist[lower] {
-		return "free", tierSignalAllowlist
-	}
-	// Explicit non-zero pricing (including "-1" variable/unknown, e.g. kilo auto
-	// routing) means paid, and it outranks the provider-wide free flag so a
-	// mixed catalog marked free:true does not turn every model free.
-	if (e.PricingPrompt != nil && *e.PricingPrompt != 0) || (e.PricingComplet != nil && *e.PricingComplet != 0) ||
-		(e.PricingRequest != nil && *e.PricingRequest != 0) {
-		return "pass", tierSignalPricingPaid
-	}
-	if providerFree {
-		return "free", tierSignalProviderFree
-	}
-	return "pass", tierSignalPaidDefault
-}
-
-// fetcherBaseForBase 按规范化 baseURL 匹配预设的 ModelsFetcher 目录端点。
-// 仅采信以 /models 结尾的 fetcher URL（openrouter / kilo 形态）；其他自定义格式
-// （pricing 页等）解析不了，宁可不回退也不瞎猜。返回去掉尾部 /models 的基址。
-func fetcherBaseForBase(baseURL string) string {
-	norm := func(u string) string {
-		u = strings.ToLower(strings.TrimRight(strings.TrimSpace(u), "/"))
-		u = strings.TrimSuffix(u, "/chat/completions")
-		return strings.Replace(u, "//localhost", "//127.0.0.1", 1)
-	}
-	target := norm(baseURL)
-	if target == "" {
-		return ""
-	}
-	for _, m := range []map[string]providerPreset{providerPresets, providerPresetsImported} {
-		for _, p := range m {
-			if p.ModelsFetcher == nil || !strings.HasSuffix(strings.ToLower(p.ModelsFetcher.URL), "/models") {
-				continue
-			}
-			if norm(p.BaseURL) == target {
-				fb := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(p.ModelsFetcher.URL, "/"), "/models"), "/")
-				if fb != "" && fb != target {
-					return fb
-				}
-			}
-		}
-	}
-	return ""
+	return modelcatalog.Classify(e, providerFree, freeIDAllowlist)
 }
 
 // discoverModelEntries 拉取 {baseURL}/models（404 时补试 /v1/models，再回退预设
 // ModelsFetcher 目录端点），解析 id + 定价 + 标签。
 func discoverModelEntries(baseURL, apiKey string, headers map[string]string) ([]upstreamModelEntry, error) {
-	baseURL = strings.TrimRight(baseURL, "/")
-	if baseURL == "" {
-		return nil, fmt.Errorf("baseURL is empty")
-	}
-	client := oauthHTTPClient(15 * time.Second)
-	rawNum := func(v any) *float64 {
-		switch n := v.(type) {
-		case float64:
-			return &n
-		case string:
-			var f float64
-			if _, err := fmt.Sscanf(strings.TrimSpace(n), "%g", &f); err == nil {
-				return &f
-			}
-		}
-		return nil
-	}
-	parse := func(body []byte) ([]upstreamModelEntry, error) {
-		var payload struct {
-			Data   []map[string]any `json:"data"`
-			Models []map[string]any `json:"models"`
-		}
-		if err := json.Unmarshal(body, &payload); err != nil {
-			return nil, fmt.Errorf("unexpected response format")
-		}
-		var out []upstreamModelEntry
-		seen := map[string]bool{}
-		for _, list := range [][]map[string]any{payload.Data, payload.Models} {
-			for _, it := range list {
-				id, _ := it["id"].(string)
-				id = strings.TrimSpace(id)
-				if id == "" || seen[id] {
-					continue
-				}
-				seen[id] = true
-				e := upstreamModelEntry{ID: id}
-				if n, ok := it["name"].(string); ok {
-					e.Name = strings.TrimSpace(n)
-				} else if n, ok := it["display_name"].(string); ok {
-					e.Name = strings.TrimSpace(n)
-				}
-				if pr, ok := it["pricing"].(map[string]any); ok {
-					e.PricingPrompt = rawNum(pr["prompt"])
-					e.PricingComplet = rawNum(pr["completion"])
-					e.PricingRequest = rawNum(pr["request"])
-				}
-				if tags, ok := it["tags"].([]any); ok {
-					for _, t := range tags {
-						if s, ok := t.(string); ok {
-							e.Tags = append(e.Tags, s)
-						}
-					}
-				}
-				switch fv := it["free"].(type) {
-				case bool:
-					e.FreeFlag = fv
-				case string:
-					e.FreeFlag = strings.EqualFold(strings.TrimSpace(fv), "true")
-				}
-				if mv, ok := it["mode"].(string); ok {
-					e.Mode = strings.TrimSpace(mv)
-				}
-				out = append(out, e)
-			}
-		}
-		if len(out) == 0 {
-			return nil, fmt.Errorf("upstream returned no models")
-		}
-		return out, nil
-	}
-	fetch := func(u string) (int, []byte, error) {
-		req, err := http.NewRequest(http.MethodGet, u, nil)
-		if err != nil {
-			return 0, nil, err
-		}
-		req.Header.Set("Accept", "application/json")
-		if apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-		}
-		for k, v := range headers {
-			if strings.TrimSpace(v) != "" {
-				req.Header.Set(strings.TrimSpace(k), v)
-			}
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return 0, nil, err
-		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-		return resp.StatusCode, body, nil
-	}
-	tryBase := func(b string) ([]upstreamModelEntry, error) {
-		status, body, err := fetch(b + "/models")
-		if err != nil {
-			return nil, fmt.Errorf("request failed: %v", err)
-		}
-		if status == http.StatusNotFound {
-			s2, b2, e2 := fetch(b + "/v1/models")
-			if e2 == nil && s2 == http.StatusOK {
-				status, body = s2, b2
-			}
-		}
-		if status != http.StatusOK {
-			return nil, fmt.Errorf("HTTP %d: %s", status, truncate(strings.TrimSpace(string(body)), 200))
-		}
-		return parse(body)
-	}
-	bases := []string{baseURL}
-	if fb := fetcherBaseForBase(baseURL); fb != "" {
-		bases = append(bases, fb)
-	}
-	var entries []upstreamModelEntry
-	var lastErr error
-	for _, b := range bases {
-		entries, lastErr = tryBase(b)
-		if lastErr == nil {
-			break
-		}
-	}
-	if lastErr != nil {
-		return nil, lastErr
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
-	return entries, nil
+	return modelcatalog.Discover(
+		oauthHTTPClient(15*time.Second),
+		baseURL, apiKey, headers,
+		fetcherBaseForBase(baseURL),
+	)
+}
+
+// fetcherBaseForBase 按规范化 baseURL 匹配预设的 ModelsFetcher 目录端点。
+func fetcherBaseForBase(baseURL string) string {
+	return modelcatalog.FetcherBaseFor(baseURL)
 }
 
 // ---------- 预览批次 ----------
 
-type importItem struct {
-	ModelID string `json:"modelId"`
-	Tier    string `json:"tier"`
-	Signal  string `json:"signal"`
-	Action  string `json:"action"` // add | tier_change | nochange | protected
-	OldTier string `json:"oldTier,omitempty"`
-	Reason  string `json:"reason,omitempty"` // protected 的原因
-}
+type importItem = modelcatalog.ImportItem
 
-type importBatch struct {
-	ID           string       `json:"id"`
-	ProviderID   string       `json:"providerId"`
-	ProviderName string       `json:"providerName"`
-	CreatedAt    time.Time    `json:"createdAt"`
-	Auto         bool         `json:"auto,omitempty"` // 后台自动检测生成（同一 provider 至多一个，重复检测时刷新）
-	Items        []importItem `json:"items"`
-}
+type importBatch = modelcatalog.ImportBatch
 
 var (
 	importsMu      sync.Mutex
@@ -316,28 +97,13 @@ func buildImportBatch(p CustomProvider, entries []upstreamModelEntry) *importBat
 	batch := &importBatch{ID: newImportBatchID(), ProviderID: p.ID, ProviderName: p.Name, CreatedAt: time.Now()}
 	pool := loadPool()
 	poolMu.Lock()
-	existing := make(map[string]*Model, len(pool.Models))
+	existing := make(map[string]modelcatalog.Existing, len(pool.Models))
 	for i := range pool.Models {
-		existing[pool.Models[i].ID] = &pool.Models[i]
+		m := &pool.Models[i]
+		existing[m.ID] = modelcatalog.Existing{Source: m.Source, TierSignal: m.TierSignal, Cost: m.Cost}
 	}
 	poolMu.Unlock()
-	for _, e := range entries {
-		tier, signal := classifyUpstreamModel(e, p.Free)
-		item := importItem{ModelID: e.ID, Tier: tier, Signal: signal, Action: "add"}
-		if m, ok := existing[e.ID]; ok {
-			switch {
-			case m.Source != "" && m.Source != "provider":
-				item.Action, item.Reason = "protected", "模型归属 "+m.Source+" 同步链，不跨源改层级"
-			case m.TierSignal == "manual":
-				item.Action, item.Reason = "protected", "用户手动设置过层级"
-			case m.Cost == tier:
-				item.Action = "nochange"
-			default:
-				item.Action, item.OldTier = "tier_change", m.Cost
-			}
-		}
-		batch.Items = append(batch.Items, item)
-	}
+	batch.Items = modelcatalog.BuildImportItems(entries, p.Free, existing, freeIDAllowlist)
 	importsMu.Lock()
 	for id, old := range pendingImports {
 		if len(pendingImports) >= 20 && time.Since(old.CreatedAt) > time.Hour {

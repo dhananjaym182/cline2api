@@ -1,0 +1,8 @@
+{
+  "id": "freeinference",
+  "name": "FreeInference",
+  "baseURL": "https://freeinference.org/v1",
+  "notes": "freeinference (from extremerouter registry)",
+  "freeTier": false,
+  "kind": "hasFree"
+}

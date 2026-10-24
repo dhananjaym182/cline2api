@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /home/dhan3713/cline2api status --short --branch && git -C /home/dhan3713/cline2api diff --stat)",
+      "Bash(ls -la /home/dhan3713/cline2api/tools/ && go build ./... 2>&1 | head -30)",
+      "Bash(git:*)",
+      "Bash(head -1 /home/dhan3713/cline2api/main.go /home/dhan3713/cline2api/providers.go && grep -n \"isDeterministicRequestError\" /home/dhan3713/cline2api/*.go | head)",
+      "Bash(cd /home/dhan3713/cline2api && gofmt -l . 2>&1; go build ./... && echo BUILD_OK)",
+      "Bash(cd /home/dhan3713/cline2api && gofmt -d providers.go | head -60)",
+      "Bash(cd /home/dhan3713/cline2api && gofmt -w providers.go providers_presets_generated.go && go build ./... && go vet ./... 2>&1 | head -10 && echo VET_DONE)",
+      "Bash(cd /home/dhan3713/cline2api && grep -n \"预设\\\\|preset\" admin_html.go | head -40)",
+      "Bash(cd /home/dhan3713/cline2api && grep -n \"admin/api\" admin.go | head -30 && grep -n \"func handle\" admin_model_test_api.go)"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "openai",
+  "name": "OpenAI",
+  "baseURL": "https://api.openai.com/v1",
+  "notes": "Paid. Key: platform.openai.com",
+  "freeTier": false
+}
