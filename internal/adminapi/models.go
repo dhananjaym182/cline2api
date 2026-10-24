@@ -24,6 +24,14 @@ const (
 	ModelBuiltin
 )
 
+// ModelCapabilities describes what a model accepts and produces. Empty slices
+// mean unknown and leave the client request untouched.
+type ModelCapabilities struct {
+	ThinkingLevels   []string
+	InputModalities  []string
+	OutputModalities []string
+}
+
 // ModelStore is the account-pool's model catalog as seen by the admin API.
 // Implementations own locking and persistence.
 type ModelStore interface {
@@ -31,6 +39,7 @@ type ModelStore interface {
 	Add(domain.Model)
 	Delete(id string) DeleteModelResult
 	UpdateContext(id string, context, output int) bool
+	UpdateCapabilities(id string, caps ModelCapabilities) bool
 	SetDisabled(ids []string, disabled bool) int
 }
 
@@ -215,6 +224,72 @@ func (m *Models) UpdateContext(w http.ResponseWriter, r *http.Request) {
 	}
 	m.logf("  model context updated: %s ctx=%d out=%d", req.ID, req.Context, req.Output)
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Message: m.msg(r, "model_context_saved")})
+}
+
+// UpdateCapabilities handles POST /admin/api/models/capabilities with body
+// {id, thinkingLevels?, inputModalities?, outputModalities?}. Omitted fields
+// stay unchanged; an explicit empty array clears them.
+func (m *Models) UpdateCapabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpx.WriteAPI(w, http.StatusMethodNotAllowed, httpx.Response{Error: m.msg(r, "method_not_allowed")})
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
+		return
+	}
+	defer r.Body.Close()
+
+	var req struct {
+		ID               string    `json:"id"`
+		ThinkingLevels   *[]string `json:"thinkingLevels"`
+		InputModalities  *[]string `json:"inputModalities"`
+		OutputModalities *[]string `json:"outputModalities"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: m.msg(r, "invalid_json")})
+		return
+	}
+	if req.ID == "" {
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: m.msg(r, "model_id_required")})
+		return
+	}
+	if req.ThinkingLevels == nil && req.InputModalities == nil && req.OutputModalities == nil {
+		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: m.msg(r, "invalid_json")})
+		return
+	}
+	caps := ModelCapabilities{
+		ThinkingLevels:   normalizeCapabilityList(req.ThinkingLevels),
+		InputModalities:  normalizeCapabilityList(req.InputModalities),
+		OutputModalities: normalizeCapabilityList(req.OutputModalities),
+	}
+	if m.Store == nil || !m.Store.UpdateCapabilities(req.ID, caps) {
+		httpx.WriteAPI(w, http.StatusNotFound, httpx.Response{Error: m.msg(r, "model_not_found")})
+		return
+	}
+	m.logf("  model capabilities updated: %s thinking=%v in=%v out=%v", req.ID,
+		caps.ThinkingLevels, caps.InputModalities, caps.OutputModalities)
+	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Message: m.msg(r, "model_context_saved")})
+}
+
+// normalizeCapabilityList trims, lowercases, and de-duplicates a capability
+// list; nil means "leave unchanged".
+func normalizeCapabilityList(in *[]string) []string {
+	if in == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(*in))
+	for _, raw := range *in {
+		v := strings.ToLower(strings.TrimSpace(raw))
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
 }
 
 // Toggle handles POST /admin/api/models/toggle with body {ids, disabled}.

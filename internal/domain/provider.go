@@ -13,6 +13,13 @@ type CustomProvider struct {
 	Enabled    bool              `json:"enabled"`
 	Priority   int               `json:"priority"`
 	TimeoutSec int               `json:"timeoutSec,omitempty"`
+	// ProxyURL overrides the egress for this provider: empty inherits the
+	// global transport, "direct"/"none" bypasses every proxy, and any other
+	// value must be a supported proxy URL.
+	ProxyURL string `json:"proxyUrl,omitempty"`
+	// Weight is used by the weighted_round_robin strategy. 0 means 1;
+	// negative values exclude the provider from that strategy.
+	Weight int `json:"weight,omitempty"`
 	// Free is a provider-level flag used for statistics and fallback hints.
 	// It is not a per-model access entitlement.
 	Free bool `json:"free"`

@@ -16,8 +16,24 @@ type Response struct {
 	Message string `json:"message,omitempty"`
 }
 
+// bodySerializer is implemented by writers that serialize a background
+// keepalive with the handler's own writes (see keepaliveWriter). WriteJSON
+// holds the writer's lock across the whole header+status+body sequence so a
+// concurrent keepalive tick can never interleave with the real response.
+type bodySerializer interface {
+	WithLock(func())
+}
+
 // WriteJSON writes data as JSON with the given status.
 func WriteJSON(w http.ResponseWriter, status int, data any) {
+	if s, ok := w.(bodySerializer); ok {
+		s.WithLock(func() { writeJSONBody(w, status, data) })
+		return
+	}
+	writeJSONBody(w, status, data)
+}
+
+func writeJSONBody(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)

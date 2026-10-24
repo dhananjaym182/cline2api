@@ -46,6 +46,14 @@ type Model struct {
 	TierSignal string `json:"tierSignal,omitempty"`
 	// TierDecidedAt is the classification time in Unix seconds.
 	TierDecidedAt int64 `json:"tierDecidedAt,omitempty"`
+	// ThinkingLevels lists the reasoning efforts the model actually accepts
+	// (e.g. ["low","medium","high"]). Empty means unknown; a requested effort
+	// outside a non-empty list is dropped before the upstream call.
+	ThinkingLevels []string `json:"thinkingLevels,omitempty"`
+	// InputModalities / OutputModalities describe what the model accepts and
+	// produces ("text", "image", "audio", ...). Empty means unknown.
+	InputModalities  []string `json:"inputModalities,omitempty"`
+	OutputModalities []string `json:"outputModalities,omitempty"`
 }
 
 // ModelStat is per-model usage for one account (free models only).

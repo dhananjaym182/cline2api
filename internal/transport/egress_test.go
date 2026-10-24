@@ -38,3 +38,32 @@ func TestValidateProxyListRejects(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeProxySpec(t *testing.T) {
+	cases := []struct {
+		in    string
+		want  string
+		isErr bool
+	}{
+		{"", "", false},
+		{"  ", "", false},
+		{"direct", "direct", false},
+		{"None", "direct", false},
+		{"http://user:pass@127.0.0.1:8080", "http://user:pass@127.0.0.1:8080", false},
+		{"socks5://10.0.0.1:1080", "socks5://10.0.0.1:1080", false},
+		{"ftp://127.0.0.1:21", "", true},
+		{"http://127.0.0.1", "", true},
+	}
+	for _, c := range cases {
+		got, err := NormalizeProxySpec(c.in)
+		if c.isErr {
+			if err == nil {
+				t.Errorf("NormalizeProxySpec(%q) expected error", c.in)
+			}
+			continue
+		}
+		if err != nil || got != c.want {
+			t.Errorf("NormalizeProxySpec(%q) = %q, %v; want %q", c.in, got, err, c.want)
+		}
+	}
+}

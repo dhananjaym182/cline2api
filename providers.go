@@ -16,6 +16,7 @@ import (
 	"cline-go-proxy/internal/dispatch"
 	"cline-go-proxy/internal/providerreg"
 	"cline-go-proxy/internal/store/providers"
+	"cline-go-proxy/internal/transport"
 	"cline-go-proxy/internal/upstream/openaicompat"
 )
 
@@ -182,10 +183,10 @@ func resolveProvidersForModel(model string) []*CustomProvider {
 			break
 		}
 	}
-	sortProviderCands(cs, model)
+	cs = orderProviderCands(cs, model)
 	out := make([]*CustomProvider, 0, len(cs))
-	for _, c := range cs {
-		out = append(out, &c.p)
+	for i := range cs {
+		out = append(out, &cs[i].p)
 	}
 	return out
 }
@@ -233,8 +234,13 @@ func callProvider(p *CustomProvider, params map[string]any, stream bool) (*http.
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
-	// Reuse the global transport (tests/proxy customization go through httpClient.Transport).
-	httpCli := &http.Client{Transport: httpClient.Transport, Timeout: timeout}
+	// Provider overrides get their own cached transport; an empty override
+	// keeps reusing the global transport so existing behavior is unchanged.
+	tr, err := providerTransportFor(p.ProxyURL)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: %w", p.Name, err)
+	}
+	httpCli := &http.Client{Transport: tr, Timeout: timeout}
 	pc := &openaicompat.Client{
 		HTTP:    httpCli,
 		BaseURL: p.BaseURL,
@@ -333,9 +339,23 @@ func providerRateLimitedKeys(body string) bool {
 }
 
 // providerCooldownUntil classifies an upstream failure into a cooldown window.
-// Returning the zero time means no cooldown.
+// Returning the zero time means no cooldown. Transient failures (408/5xx)
+// honor Retry.TransientCooldownSeconds: >0 overrides the built-in window,
+// -1 disables the cooldown, 0 keeps dispatch's default classification.
 func providerCooldownUntil(status int, retryAfterHeader, body string) time.Time {
-	return dispatch.ProviderCooldownUntil(status, retryAfterHeader, body)
+	until := dispatch.ProviderCooldownUntil(status, retryAfterHeader, body)
+	t := getProxyConfig().Retry.TransientCooldownSeconds
+	if t == 0 || !isTransientUpstreamStatus(status) {
+		return until
+	}
+	if t < 0 {
+		return time.Time{}
+	}
+	return time.Now().Add(time.Duration(t) * time.Second)
+}
+
+func isTransientUpstreamStatus(status int) bool {
+	return status == http.StatusRequestTimeout || (status >= 500 && status < 600)
 }
 
 // ============================================================================
@@ -661,6 +681,84 @@ func sortProviderCands(cs []providerCand, model string) {
 	})
 }
 
+// ---- 加权轮询（smooth weighted round-robin）--------------------------------
+//
+// weighted_round_robin 策略下，候选按整数权重比例分布，而不是按优先级轮流。
+// 权重为 0 视为 1（未设置），负值把候选从该策略排除。每个模型维护一份
+// current-weight 状态，请求顺序在长期收敛到权重比例，且同轮内稳定可测。
+var (
+	providerWRRMu    sync.Mutex
+	providerWRRState = map[string]float64{}
+)
+
+func effectiveProviderWeight(p CustomProvider) int {
+	if p.Weight == 0 {
+		return 1
+	}
+	return p.Weight
+}
+
+// orderProviderCandsWeighted 执行一次 smooth weighted round-robin 单选：
+// 每个候选 current += weight，选 current 最大者放首位（并列取基线序前者），
+// 其 current -= total，其余候选保持基线（优先级）顺序用于故障转移。
+// 负权候选被剔除；全部非正时返回 nil（调用方落入回退链）。
+func orderProviderCandsWeighted(cs []providerCand, model string) []providerCand {
+	remaining := make([]providerCand, 0, len(cs))
+	total := 0
+	for _, c := range cs {
+		w := effectiveProviderWeight(c.p)
+		if w <= 0 {
+			continue
+		}
+		total += w
+		remaining = append(remaining, c)
+	}
+	if total == 0 {
+		return nil
+	}
+	sort.SliceStable(remaining, func(i, j int) bool {
+		if remaining[i].p.Priority != remaining[j].p.Priority {
+			return remaining[i].p.Priority < remaining[j].p.Priority
+		}
+		return remaining[i].p.CreatedAt.Before(remaining[j].p.CreatedAt)
+	})
+
+	providerWRRMu.Lock()
+	defer providerWRRMu.Unlock()
+	if len(providerWRRState) > 10000 {
+		providerWRRState = map[string]float64{}
+	}
+	best := 0
+	var bestVal float64
+	for i := range remaining {
+		key := remaining[i].p.ID + ":" + model
+		providerWRRState[key] += float64(effectiveProviderWeight(remaining[i].p))
+		if i == 0 || providerWRRState[key] > bestVal {
+			best, bestVal = i, providerWRRState[key]
+		}
+	}
+	providerWRRState[remaining[best].p.ID+":"+model] -= float64(total)
+
+	out := make([]providerCand, 0, len(remaining))
+	out = append(out, remaining[best])
+	for i := range remaining {
+		if i != best {
+			out = append(out, remaining[i])
+		}
+	}
+	return out
+}
+
+// orderProviderCands 按当前路由策略产出候选顺序；weighted_round_robin 会重排
+// 并可能剔除负权候选，其余策略沿用 sortProviderCands 的排序语义。
+func orderProviderCands(cs []providerCand, model string) []providerCand {
+	if getProxyConfig().Strategy == "weighted_round_robin" {
+		return orderProviderCandsWeighted(cs, model)
+	}
+	sortProviderCands(cs, model)
+	return cs
+}
+
 // ============================================================================
 // Provider 预设（市面常见免费/低成本 OpenAI 兼容上游）
 // ============================================================================
@@ -959,6 +1057,16 @@ func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, 
 					return resp, nil, true, p.Name
 				}
 				log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
+				if stop, cooldown, matched := ruleDecision(err); matched {
+					if cooldown {
+						setProviderCooldown(p.ID, model, ruleCooldownUntil(clineErrorStatus(err)))
+					}
+					if stop {
+						stickyClear(sk)
+						logRuleHit("stop", clineErrorStatus(err), "provider "+p.Name+" (sticky)")
+						return nil, &requestErrorStop{err: err}, true, p.Name
+					}
+				}
 			}
 			stickyClear(sk) // 解钉：失败/不满足条件时融入正常组内转移
 		}
@@ -980,6 +1088,16 @@ func callCustomProviderAPI(params map[string]any, stream bool) (*http.Response, 
 		log.Printf("  provider attempt failed name=%s model=%q: %v", p.Name, model, err)
 		lastErr = err
 		lastName = p.Name
+		if stop, cooldown, matched := ruleDecision(err); matched {
+			if cooldown {
+				setProviderCooldown(p.ID, model, ruleCooldownUntil(clineErrorStatus(err)))
+			}
+			if stop {
+				logRuleHit("stop", clineErrorStatus(err), "provider "+p.Name)
+				return nil, &requestErrorStop{err: err}, true, p.Name
+			}
+			logRuleHit("continue", clineErrorStatus(err), "provider "+p.Name)
+		}
 	}
 	return nil, lastErr, true, lastName
 }
@@ -1051,7 +1169,7 @@ func resolveProvidersNamedForModel(model, name string) []*CustomProvider {
 			break
 		}
 	}
-	sortProviderCands(cs, model)
+	cs = orderProviderCands(cs, model)
 	out := make([]*CustomProvider, 0, len(cs))
 	for i := range cs {
 		out = append(out, &cs[i].p)
@@ -1084,6 +1202,12 @@ func callCustomProviderAPINamed(params map[string]any, stream bool, name string)
 		log.Printf("  provider attempt failed name=%s model=%q (pinned): %v", p.Name, model, err)
 		lastErr = err
 		lastName = p.Name
+		// A pinned-provider failure is already fatal to the caller; rules can
+		// only add the cooldown side effect here, not change the flow.
+		if _, cooldown, matched := ruleDecision(err); matched && cooldown {
+			setProviderCooldown(p.ID, model, ruleCooldownUntil(clineErrorStatus(err)))
+			logRuleHit("cooldown", clineErrorStatus(err), "provider "+p.Name+" (pinned)")
+		}
 	}
 	return nil, lastErr, true, lastName
 }
@@ -1144,6 +1268,18 @@ func handleProviderSave(w http.ResponseWriter, r *http.Request) {
 	p.Headers = hdrs
 	if p.TimeoutSec < 0 || p.TimeoutSec > 600 {
 		p.TimeoutSec = 0
+	}
+	normalizedProxy, proxyErr := transport.NormalizeProxySpec(p.ProxyURL)
+	if proxyErr != nil {
+		writeAPI(w, http.StatusBadRequest, apiResponse{Error: proxyErr.Error()})
+		return
+	}
+	p.ProxyURL = normalizedProxy
+	if p.Weight < 0 {
+		p.Weight = -1 // explicit exclusion from weighted_round_robin
+	}
+	if p.Weight > 1_000_000 {
+		p.Weight = 1_000_000
 	}
 	if p.RpmLimit < 0 {
 		p.RpmLimit = 0

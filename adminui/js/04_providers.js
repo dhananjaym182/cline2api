@@ -176,6 +176,8 @@ function showProviderEditor(p) {
   _('provTimeout').value = p ? (p.timeoutSec || 300) : 300;
   _('provRpmLimit').value = p ? (p.rpmLimit || 0) : 0;
   _('provDailyLimit').value = p ? (p.dailyRequestLimit || 0) : 0;
+  _('provProxyUrl').value = p ? (p.proxyUrl || '') : '';
+  _('provWeight').value = p ? (p.weight || 0) : 0;
   _('provModels').value = p ? (p.modelIds || []).join(', ') : '';
   _('provHeaders').value = p ? Object.entries(p.headers || {}).map(([k, v]) => k + ': ' + v).join('\n') : '';
   _('provEnabled').value = p ? String(p.enabled !== false) : 'true';
@@ -228,6 +230,8 @@ async function saveProvider(btn) {
     timeoutSec: parseInt(_('provTimeout').value, 10) || 300,
     rpmLimit: parseInt(_('provRpmLimit').value, 10) || 0,
     dailyRequestLimit: parseInt(_('provDailyLimit').value, 10) || 0,
+    proxyUrl: _('provProxyUrl').value.trim(),
+    weight: parseInt(_('provWeight').value, 10) || 0,
     modelIds: _('provModels').value.split(',').map(s => s.trim()).filter(Boolean),
     headers: parseHeaderText(_('provHeaders').value),
     enabled: _('provEnabled').value === 'true',

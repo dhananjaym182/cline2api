@@ -35,3 +35,20 @@ func ValidateProxyList(proxies []string) error {
 	}
 	return nil
 }
+
+// NormalizeProxySpec canonicalizes a per-provider egress override.
+// An empty spec inherits the global transport, "direct"/"none" bypass proxies,
+// and anything else must be a valid proxy URL.
+func NormalizeProxySpec(spec string) (string, error) {
+	s := strings.TrimSpace(spec)
+	switch strings.ToLower(s) {
+	case "":
+		return "", nil
+	case "direct", "none":
+		return "direct", nil
+	}
+	if err := ValidateProxyList([]string{s}); err != nil {
+		return "", err
+	}
+	return s, nil
+}

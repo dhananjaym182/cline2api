@@ -135,6 +135,7 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/models/add", auth(handleAdminModelAdd))
 	mux.HandleFunc("/admin/api/models/delete", auth(handleAdminModelDelete))
 	mux.HandleFunc("/admin/api/models/context", auth(handleAdminModelContext))
+	mux.HandleFunc("/admin/api/models/capabilities", auth(handleAdminModelCapabilities))
 	mux.HandleFunc("/admin/api/models/toggle", auth(handleAdminModelToggle))
 	mux.HandleFunc("/admin/api/models/test", auth(handleAdminModelTest))
 	mux.HandleFunc("/admin/api/config", auth(handleAdminConfig))
@@ -392,6 +393,13 @@ func handleAdminModelDelete(w http.ResponseWriter, r *http.Request) {
 // 0 = 清除为未知（zen 同步会回填默认值）。设置后 zen 模型同步保留该值不再覆盖。
 func handleAdminModelContext(w http.ResponseWriter, r *http.Request) {
 	adminModels.UpdateContext(w, r)
+}
+
+// POST /admin/api/models/capabilities  body: { id, thinkingLevels?, inputModalities?, outputModalities? }
+// 声明模型的能力元数据（推理档位/输入输出模态）。未提供的字段保持不变，
+// 显式空数组清除该字段。推理请求带不支持的档位时在入口被丢弃。
+func handleAdminModelCapabilities(w http.ResponseWriter, r *http.Request) {
+	adminModels.UpdateCapabilities(w, r)
 }
 
 // POST /admin/api/models/toggle  body: { ids: [...], disabled }

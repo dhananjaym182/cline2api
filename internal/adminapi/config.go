@@ -76,6 +76,16 @@ func (h *Config) Get(w http.ResponseWriter, r *http.Request) {
 		"defaultModel": h.DefaultModel(),
 		"headers":      cfg.Headers,
 		"onlyFree":     cfg.OnlyFree,
+		// Tuning policies surfaced for the admin UI (task #68).
+		"retry":                     cfg.Retry,
+		"stream":                    cfg.Stream,
+		"sessionAffinity":           cfg.SessionAffinity,
+		"modelAliases":              cfg.ModelAliases,
+		"excludedModels":            cfg.ExcludedModels,
+		"requestErrorRules":         cfg.RequestErrorRules,
+		"maxRequestBodyBytes":       cfg.MaxRequestBodyBytes,
+		"passthroughHeaders":        cfg.PassthroughHeaders,
+		"nonstreamKeepaliveSeconds": cfg.NonstreamKeepaliveSeconds,
 	}
 	if h.ZenHeaders != nil {
 		data["zenHeaders"] = h.ZenHeaders()
@@ -111,6 +121,16 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 		Host         string            `json:"host"`
 		ModelChain   *[]string         `json:"modelChain"`
 		OnlyFree     *bool             `json:"onlyFree"`
+
+		Retry               *configpkg.RetryPolicy           `json:"retry"`
+		Stream              *configpkg.StreamPolicy          `json:"stream"`
+		SessionAffinity     *configpkg.SessionAffinityPolicy `json:"sessionAffinity"`
+		ModelAliases        *[]configpkg.ModelAlias          `json:"modelAliases"`
+		ExcludedModels      *[]string                        `json:"excludedModels"`
+		RequestErrorRules   *[]configpkg.RequestErrorRule    `json:"requestErrorRules"`
+		MaxRequestBodyBytes *int64                           `json:"maxRequestBodyBytes"`
+		PassthroughHeaders  *bool                            `json:"passthroughHeaders"`
+		NonstreamKeepalive  *int                             `json:"nonstreamKeepaliveSeconds"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: h.msg(r, "invalid_json")})
@@ -121,9 +141,38 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 	changed := false
 	restarting := false
 
+	// Validate model policies before touching the live config: a bad alias,
+	// duplicate, or unusable error rule must be a 400, not a silent drop.
+	// scratch is built from fresh slice copies so validation + in-place
+	// normalization never mutate the live config's backing arrays.
+	if req.ModelAliases != nil || req.ExcludedModels != nil || req.RequestErrorRules != nil {
+		scratch := configpkg.Proxy{
+			ModelAliases:      copyAliases(valueOr(req.ModelAliases, cfg.ModelAliases)),
+			ExcludedModels:    copyStrings(valueOr(req.ExcludedModels, cfg.ExcludedModels)),
+			RequestErrorRules: copyRules(valueOr(req.RequestErrorRules, cfg.RequestErrorRules)),
+		}
+		if err := scratch.ValidateModelPolicies(); err != nil {
+			httpx.WriteAPI(w, http.StatusBadRequest, httpx.Response{Error: err.Error()})
+			return
+		}
+		scratch.NormalizeModelPolicies()
+		if req.ModelAliases != nil {
+			cfg.ModelAliases = scratch.ModelAliases
+			changed = true
+		}
+		if req.ExcludedModels != nil {
+			cfg.ExcludedModels = scratch.ExcludedModels
+			changed = true
+		}
+		if req.RequestErrorRules != nil {
+			cfg.RequestErrorRules = scratch.RequestErrorRules
+			changed = true
+		}
+	}
+
 	if req.Strategy != "" {
 		switch req.Strategy {
-		case "round_robin", "fill", "random", "quality":
+		case "round_robin", "weighted_round_robin", "fill", "random", "quality":
 			cfg.Strategy = req.Strategy
 			changed = true
 		default:
@@ -170,6 +219,48 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 
 	if req.OnlyFree != nil {
 		cfg.OnlyFree = *req.OnlyFree
+		changed = true
+	}
+
+	if req.Retry != nil {
+		p := *req.Retry
+		p.Normalize()
+		cfg.Retry = p
+		changed = true
+	}
+	if req.Stream != nil {
+		p := *req.Stream
+		p.Normalize()
+		cfg.Stream = p
+		changed = true
+	}
+	if req.SessionAffinity != nil {
+		p := *req.SessionAffinity
+		p.Normalize()
+		cfg.SessionAffinity = p
+		changed = true
+	}
+	if req.MaxRequestBodyBytes != nil {
+		v := *req.MaxRequestBodyBytes
+		if v < 0 {
+			v = 0
+		}
+		cfg.MaxRequestBodyBytes = v
+		changed = true
+	}
+	if req.PassthroughHeaders != nil {
+		cfg.PassthroughHeaders = *req.PassthroughHeaders
+		changed = true
+	}
+	if req.NonstreamKeepalive != nil {
+		v := *req.NonstreamKeepalive
+		if v < 0 {
+			v = 0
+		}
+		if v > 300 {
+			v = 300
+		}
+		cfg.NonstreamKeepaliveSeconds = v
 		changed = true
 	}
 
@@ -234,13 +325,49 @@ func (h *Config) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{Success: true, Data: map[string]any{
-		"strategy":        cfg.Strategy,
-		"headers":         cfg.Headers,
-		"onlyFree":        cfg.OnlyFree,
-		"defaultModel":    h.DefaultModel(),
-		"host":            host,
-		"address":         h.address(host),
-		"restarting":      restarting,
-		"chainUnverified": chainUnverified,
+		"strategy":                  cfg.Strategy,
+		"headers":                   cfg.Headers,
+		"onlyFree":                  cfg.OnlyFree,
+		"defaultModel":              h.DefaultModel(),
+		"host":                      host,
+		"address":                   h.address(host),
+		"restarting":                restarting,
+		"chainUnverified":           chainUnverified,
+		"retry":                     cfg.Retry,
+		"stream":                    cfg.Stream,
+		"sessionAffinity":           cfg.SessionAffinity,
+		"modelAliases":              cfg.ModelAliases,
+		"excludedModels":            cfg.ExcludedModels,
+		"requestErrorRules":         cfg.RequestErrorRules,
+		"maxRequestBodyBytes":       cfg.MaxRequestBodyBytes,
+		"passthroughHeaders":        cfg.PassthroughHeaders,
+		"nonstreamKeepaliveSeconds": cfg.NonstreamKeepaliveSeconds,
 	}})
+}
+
+// valueOr picks the patch value when present, else the current config value.
+func valueOr[T any](patch *T, current T) T {
+	if patch != nil {
+		return *patch
+	}
+	return current
+}
+
+// The copy helpers detach the scratch policy slices from the live config so
+// in-place normalization cannot reorder shared backing arrays.
+func copyAliases(in []configpkg.ModelAlias) []configpkg.ModelAlias {
+	return append([]configpkg.ModelAlias(nil), in...)
+}
+
+func copyStrings(in []string) []string {
+	return append([]string(nil), in...)
+}
+
+func copyRules(in []configpkg.RequestErrorRule) []configpkg.RequestErrorRule {
+	out := make([]configpkg.RequestErrorRule, 0, len(in))
+	for _, r := range in {
+		r.StatusCodes = append([]int(nil), r.StatusCodes...)
+		out = append(out, r)
+	}
+	return out
 }

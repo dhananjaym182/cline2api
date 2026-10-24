@@ -166,6 +166,10 @@ func buildModelsList(onlyFree bool) []map[string]any {
 		if m.Disabled {
 			continue
 		}
+		// 通配符排除的模型不进列表（与请求入口同一策略）
+		if excludedForListing(m.ID) {
+			continue
+		}
 		if onlyFree && !isFreeModelEntry(m) {
 			continue
 		}
@@ -173,14 +177,33 @@ func buildModelsList(onlyFree bool) []map[string]any {
 		if m.Source == "zen" || m.Provider == "opencode" {
 			ownedBy = "opencode"
 		}
-		list = append(list, map[string]any{
+		entry := map[string]any{
 			"id":       m.ID,
 			"object":   "model",
 			"created":  time.Now().UnixMilli(),
 			"owned_by": ownedBy,
-		})
+		}
+		if m.Context > 0 {
+			entry["context_length"] = m.Context
+		}
+		if m.Output > 0 {
+			entry["max_output_tokens"] = m.Output
+		}
+		if len(m.ThinkingLevels) > 0 {
+			entry["thinking_levels"] = m.ThinkingLevels
+		}
+		if len(m.InputModalities) > 0 {
+			entry["input_modalities"] = m.InputModalities
+		}
+		if len(m.OutputModalities) > 0 {
+			entry["output_modalities"] = m.OutputModalities
+		}
+		list = append(list, entry)
 	}
 	for _, c := range comboEnabledList() {
+		if excludedForListing(c.ID) {
+			continue
+		}
 		list = append(list, map[string]any{
 			"id":       c.ID,
 			"object":   "model",
@@ -188,6 +211,7 @@ func buildModelsList(onlyFree bool) []map[string]any {
 			"owned_by": "combo",
 		})
 	}
+	list = append(list, aliasListingEntries()...)
 	return list
 }
 
@@ -459,6 +483,19 @@ func startProxy(host string, port int) error {
 		model, _ := params["model"].(string)
 		log.Printf("  client: stream=%v tools=%d model=%s", isStream, toolCount, model)
 
+		// Administrator model policy: alias rewrite + wildcard exclusions,
+		// enforced before routing and before the disabled check.
+		if resolved, reject := resolveClientModel(model); reject != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error": map[string]string{"message": reject, "type": "invalid_request_error"},
+			})
+			return
+		} else if resolved != model {
+			model = resolved
+			params["model"] = resolved
+		}
+		applyThinkingPolicy(params, model)
+
 		// 管理员手动停用的模型在入口直接拒绝（不进列表，也不可点名调用）
 		if model != "" && isModelDisabled(model) {
 			msg := "model " + model + " is disabled"
@@ -478,6 +515,18 @@ func startProxy(host string, port int) error {
 				"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 			})
 			return
+		}
+
+		// Opt-in nonstream keepalive (NonstreamKeepaliveSeconds): a single
+		// space every interval while the upstream call blocks, to outlive
+		// byte-level read timeouts in intermediaries. The wrapped writer
+		// serializes those writes with the eventual body write and stops the
+		// keepalive once real bytes are committed, so the two never race.
+		if !isStream {
+			if kw := newKeepaliveWriter(w); kw != nil {
+				w = kw
+				defer kw.stop()
+			}
 		}
 
 		// Override system prompt from override.md for OpenAI format
@@ -687,8 +736,8 @@ func startProxy(host string, port int) error {
 			handleNonStreamResponse(w, resp, acc, &reqLog)
 		}
 	})
-	mux.HandleFunc("/v1/chat/completions", chatHandler)
-	mux.HandleFunc("/chat/completions", chatHandler)
+	mux.HandleFunc("/v1/chat/completions", withBodyLimit(chatHandler))
+	mux.HandleFunc("/chat/completions", withBodyLimit(chatHandler))
 
 	// Anthropic Messages API support
 	anthropicHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
@@ -698,8 +747,8 @@ func startProxy(host string, port int) error {
 		}
 		handleAnthropicMessages(w, r)
 	})
-	mux.HandleFunc("/v1/messages", anthropicHandler)
-	mux.HandleFunc("/messages", anthropicHandler)
+	mux.HandleFunc("/v1/messages", withBodyLimit(anthropicHandler))
+	mux.HandleFunc("/messages", withBodyLimit(anthropicHandler))
 
 	// Anthropic Messages API token counting (polyfilled)
 	countTokensHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
@@ -709,8 +758,8 @@ func startProxy(host string, port int) error {
 		}
 		handleAnthropicCountTokens(w, r)
 	})
-	mux.HandleFunc("/v1/messages/count_tokens", countTokensHandler)
-	mux.HandleFunc("/messages/count_tokens", countTokensHandler)
+	mux.HandleFunc("/v1/messages/count_tokens", withBodyLimit(countTokensHandler))
+	mux.HandleFunc("/messages/count_tokens", withBodyLimit(countTokensHandler))
 
 	// OpenAI Responses API support（所有上游：zen 免费模型 + Cline 账号池）
 	responsesHandler := apiKeyHandler(func(w http.ResponseWriter, r *http.Request) {
@@ -720,8 +769,8 @@ func startProxy(host string, port int) error {
 		}
 		handleResponses(w, r)
 	})
-	mux.HandleFunc("/v1/responses", responsesHandler)
-	mux.HandleFunc("/responses", responsesHandler)
+	mux.HandleFunc("/v1/responses", withBodyLimit(responsesHandler))
+	mux.HandleFunc("/responses", withBodyLimit(responsesHandler))
 
 	if host == "" {
 		host = "127.0.0.1"
@@ -1093,62 +1142,103 @@ func callClineAPI(params map[string]any, stream bool) (*http.Response, *Account,
 			return nil, nil, fmt.Errorf("onlyFree is enabled and model %q has no verified free route", model)
 		}
 	}
-	for _, m := range chain {
-		// 先试自定义 provider
-		if pResp, pErr, attempted, provName := callCustomProviderAPI(withModel(params, m), stream); attempted {
-			if pErr == nil {
-				if m != model {
-					log.Printf("  model fallback: %q unavailable, serving via provider %q", model, m)
-				}
-				params["model"] = m // 回写实际服务模型，供请求日志归因
-				params[servedByParam] = upstreamProvider
-				params[providerNameParam] = provName
-				return pResp, nil, nil
-			}
-			// callCustomProviderAPI 已逐个记录 provider 失败原因，链上不重复打日志
+	// 会话亲和（管理员开关，默认关闭）：同一会话在 TTL 内钉到同一 Cline 账号。
+	var affinitySk string
+	if getProxyConfig().SessionAffinity.Enabled {
+		affinitySk = sessionKeyFromParams(params)
+	}
+	// 回退轮数/每轮凭证上限由管理员 RetryPolicy 决定；默认 rounds=1、
+	// credCap=0（不限），与旧行为完全一致。rounds>1 时每轮之间等待一个有界
+	// 窗口，给短冷却账号恢复的机会；确定性错误/stop 规则走 return 直接终止，
+	// 不会被后续轮次空转重跑。
+	rounds, credCap, roundInterval := retryRoundSettings()
+	for round := 0; round < rounds; round++ {
+		if round > 0 && roundInterval > 0 {
+			log.Printf("  retry round %d/%d for %q after %s cooldown window", round+1, rounds, model, roundInterval)
+			time.Sleep(roundInterval)
 		}
+		for _, m := range chain {
+			// 先试自定义 provider
+			if pResp, pErr, attempted, provName := callCustomProviderAPI(withModel(params, m), stream); attempted {
+				if pErr == nil {
+					if m != model {
+						log.Printf("  model fallback: %q unavailable, serving via provider %q", model, m)
+					}
+					params["model"] = m // 回写实际服务模型，供请求日志归因
+					params[servedByParam] = upstreamProvider
+					params[providerNameParam] = provName
+					return pResp, nil, nil
+				}
+				// callCustomProviderAPI 已逐个记录 provider 失败原因，链上不重复打日志
+				var st *requestErrorStop
+				if errors.As(pErr, &st) {
+					return nil, nil, st.err // 错误规则声明终止：不再走账号池/链
+				}
+			}
 
-		// 点名模型保持原有轮询语义；链上的降级模型改用「最久未用优先」，
-		// 避免所有降级流量都压到第一个可用账号/模型的额度上。
-		pickAcc := pickAccountForModelStrict
-		if m != model {
-			pickAcc = pickAccountForModelLeastUsed
-		}
-		for {
-			acc := pickAcc(m)
-			if acc == nil {
-				break // 该模型所有账号均冷却/不可用 → 尝试链上下一个模型
+			// 点名模型保持原有轮询语义；链上的降级模型改用「最久未用优先」，
+			// 避免所有降级流量都压到第一个可用账号/模型的额度上。
+			pickAcc := pickAccountForModelStrict
+			if m != model {
+				pickAcc = pickAccountForModelLeastUsed
 			}
-			resp, usedAcc, err := callClineAPIWithAccountCtx(context.Background(), acc, withModel(params, m), stream)
-			if err == nil {
-				if m != model {
-					log.Printf("  model fallback: %q cooling on all accounts, serving via %q", model, m)
+			attempts := 0
+			for {
+				if credCap > 0 && attempts >= credCap {
+					break // 本轮该模型已试满 maxCredentialsPerRound 个账号
 				}
-				params["model"] = m // 回写实际服务模型，供请求日志归因
-				return resp, usedAcc, nil
-			}
-			var accountErr *clineAccountUnavailableError
-			if errors.As(err, &accountErr) {
-				continue
-			}
-			apiErr, ok := err.(*clineAPIError)
-			if ok && apiErr.statusCode == http.StatusPaymentRequired {
-				// 402 余额不足是账号级问题（该账号扣费额度耗尽），不是模型级：
-				// 冷却该账号上的这个模型（30min），换下一个账号继续试当前模型。
-				// 不换账号会导致轮询反复选中同一破产账号，每个请求先烧一次 402 往返；
-				// 不能整账号冷却 —— 同账号上仍在免费列表的模型零成本可用。
-				setModelCooldown(usedAcc, m, time.Now().Add(30*time.Minute))
-				log.Printf("  model %q on %s: insufficient credits (402), cooling for 30m, trying next account", m, usedAcc.Email)
-				continue
-			}
-			if !ok || apiErr.statusCode != http.StatusTooManyRequests {
-				// 非 429/402 错误：若后面还有候选（provider / 链）则继续降级，否则透传
-				if !hasAnyFallbackLeft(model, m) {
-					return nil, usedAcc, err
+				acc, pinned := pickAffinityAccount(affinitySk, m)
+				if !pinned {
+					acc = pickAcc(m)
 				}
-				break
+				if acc == nil {
+					break // 该模型所有账号均冷却/不可用 → 尝试链上下一个模型
+				}
+				attempts++
+				resp, usedAcc, err := callClineAPIWithAccountCtx(context.Background(), acc, withModel(params, m), stream)
+				observeAffinityOutcome(affinitySk, usedAcc, err)
+				if err == nil {
+					if m != model {
+						log.Printf("  model fallback: %q cooling on all accounts, serving via %q", model, m)
+					}
+					params["model"] = m // 回写实际服务模型，供请求日志归因
+					return resp, usedAcc, nil
+				}
+				var accountErr *clineAccountUnavailableError
+				if errors.As(err, &accountErr) {
+					continue
+				}
+				// 管理员错误规则先于内置 402/429 分类：stop 立即中止整条链，
+				// continue 落到下面照常轮转（仅可能附加冷却），二者都不改变成功路径。
+				if stop, cooldown, matched := ruleDecision(err); matched {
+					if cooldown && usedAcc != nil {
+						setModelCooldown(usedAcc, m, ruleCooldownUntil(clineErrorStatus(err)))
+					}
+					if stop {
+						logRuleHit("stop", clineErrorStatus(err), "pool model "+m)
+						return nil, usedAcc, err
+					}
+					logRuleHit("continue", clineErrorStatus(err), "pool model "+m)
+				}
+				apiErr, ok := err.(*clineAPIError)
+				if ok && apiErr.statusCode == http.StatusPaymentRequired {
+					// 402 余额不足是账号级问题（该账号扣费额度耗尽），不是模型级：
+					// 冷却该账号上的这个模型（30min），换下一个账号继续试当前模型。
+					// 不换账号会导致轮询反复选中同一破产账号，每个请求先烧一次 402 往返；
+					// 不能整账号冷却 —— 同账号上仍在免费列表的模型零成本可用。
+					setModelCooldown(usedAcc, m, time.Now().Add(30*time.Minute))
+					log.Printf("  model %q on %s: insufficient credits (402), cooling for 30m, trying next account", m, usedAcc.Email)
+					continue
+				}
+				if !ok || apiErr.statusCode != http.StatusTooManyRequests {
+					// 非 429/402 错误：若后面还有候选（provider / 链）则继续降级，否则透传
+					if !hasAnyFallbackLeft(model, m) {
+						return nil, usedAcc, err
+					}
+					break
+				}
+				// 429：模型冷却已记录，换下一个账号；全部冷却后降级到下一个模型
 			}
-			// 429：模型冷却已记录，换下一个账号；全部冷却后降级到下一个模型
 		}
 	}
 	// 终极兜底：free 链（手动链全部失败时自动切换）
@@ -1374,6 +1464,10 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 	}
 	delete(params, servedByParam)     // 本次调用重新归因
 	delete(params, providerNameParam) // 同步清掉上次归因的 provider 名
+	var affinitySk string
+	if getProxyConfig().SessionAffinity.Enabled {
+		affinitySk = sessionKeyFromParams(params)
+	}
 	var lastErr error
 	lastWas429 := false
 	for _, model := range chain {
@@ -1387,21 +1481,47 @@ func callFreeClineAPI(params map[string]any, stream bool) (*http.Response, *Acco
 				return pResp, nil, nil
 			}
 			// callCustomProviderAPI 已逐个记录 provider 失败原因，链上不重复打日志
+			var st *requestErrorStop
+			if errors.As(pErr, &st) {
+				return nil, nil, st.err // 错误规则声明终止 free 链
+			}
 		}
 		// "free" 链是纯降级路径：全部用「最久未用优先」挑账号，摊平用量。
+		// 会话亲和开启时优先复用绑定的账号（free 别名请求正是上游 session
+		// 连续性最有价值的路径）。
+		var freeAffinity *Account
+		if affinitySk != "" {
+			freeAffinity = accountAffinity.get(affinitySk, model, time.Now())
+		}
 		for {
-			acc := pickAccountForModelLeastUsed(model)
+			acc := freeAffinity
+			freeAffinity = nil // 绑定账号只试一次，失败后融入常规轮转
+			if acc == nil {
+				acc = pickAccountForModelLeastUsed(model)
+			}
 			if acc == nil {
 				break
 			}
 
 			resp, usedAcc, err := callClineAPIWithAccountCtx(context.Background(), acc, params, stream)
+			observeAffinityOutcome(affinitySk, usedAcc, err)
 			if err == nil {
 				return resp, usedAcc, nil
 			}
 			var accountErr *clineAccountUnavailableError
 			if errors.As(err, &accountErr) {
 				continue
+			}
+			// 管理员错误规则先于内置分类：stop 中止整条 free 链。
+			if stop, cooldown, matched := ruleDecision(err); matched {
+				if cooldown && usedAcc != nil {
+					setModelCooldown(usedAcc, model, ruleCooldownUntil(clineErrorStatus(err)))
+				}
+				if stop {
+					logRuleHit("stop", clineErrorStatus(err), "free-chain model "+model)
+					return nil, usedAcc, err
+				}
+				logRuleHit("continue", clineErrorStatus(err), "free-chain model "+model)
 			}
 			lastErr = err
 			lastWas429 = false
@@ -1793,6 +1913,7 @@ func hasFirstOutput(obj map[string]any) bool {
 }
 
 func handleNonStreamResponse(w http.ResponseWriter, upstream *http.Response, acc *Account, reqLog *RequestLog) {
+	copyPassthroughHeaders(w, upstream.Header)
 	var raw map[string]any
 	if err := json.NewDecoder(upstream.Body).Decode(&raw); err != nil {
 		finalizeRequestLog(reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
@@ -1934,7 +2055,7 @@ func clineFailoverToZen(params map[string]any, stream bool) (*http.Response, boo
 			continue
 		}
 		attempts++
-		if attempts > 3 {
+		if attempts > failoverModelCap() {
 			break
 		}
 		log.Printf("  cline failover: %q exhausted, trying zen free model %q", orig, m.ID)
@@ -1979,6 +2100,19 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 	log.Printf("  anthropic: model=%s stream=%v msgs=%d", req.Model, req.Stream, len(req.Messages))
 
 	reqLog := RequestLog{StartedAt: time.Now(), Protocol: "anthropic", Model: req.Model, Stream: req.Stream}
+
+	// Administrator model policy: alias rewrite + wildcard exclusions.
+	if resolved, reject := resolveClientModel(req.Model); reject != "" {
+		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, reject)
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": map[string]string{"message": reject, "type": "invalid_request_error"},
+		})
+		return
+	} else if resolved != req.Model {
+		req.Model = resolved
+		reqLog.Model = resolved
+		openAIReq["model"] = resolved
+	}
 
 	if msg := freeOnlyRejection(req.Model); msg != "" {
 		finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, msg)
@@ -2111,6 +2245,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer run.Resp.Body.Close()
+		copyPassthroughHeaders(w, run.Resp.Header)
 		var raw map[string]any
 		if err := json.NewDecoder(run.Resp.Body).Decode(&raw); err != nil {
 			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
@@ -2174,6 +2309,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 						reqLog.AccountEmail = fbAcc.Email
 					}
 					defer fbResp.Body.Close()
+					copyPassthroughHeaders(w, fbResp.Header)
 					if req.Stream {
 						sw := newSSEWriter(w)
 						// 这条降级路径没有重试，所以用宽容的上限，尽量把慢但能出的流交给客户端。
@@ -2217,6 +2353,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer resp.Body.Close()
+		copyPassthroughHeaders(w, resp.Header)
 		if req.Stream {
 			sw := newSSEWriter(w)
 			// 同样是单次尝试（无重试），用宽容的上限。
@@ -2318,6 +2455,7 @@ func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+	copyPassthroughHeaders(w, resp.Header)
 	if acc != nil {
 		reqLog.AccountID = acc.AccountID
 		reqLog.AccountEmail = acc.Email
@@ -2644,6 +2782,9 @@ func handleAnthropicStream(ctx context.Context, sw *sseWriter, upstream *http.Re
 		io.Copy(io.Discard, upstream.Body)
 		upstream.Body.Close()
 		return false
+	}
+	if !sw.Started {
+		copyPassthroughHeaders(sw.W, upstream.Header)
 	}
 	log.Printf("  anthropic stream: waiting for first token")
 

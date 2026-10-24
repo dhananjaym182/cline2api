@@ -67,6 +67,32 @@ func (rootModelStore) UpdateContext(id string, context, output int) bool {
 	return false
 }
 
+func (rootModelStore) UpdateCapabilities(id string, caps adminapi.ModelCapabilities) bool {
+	p := loadPool()
+	poolMu.Lock()
+	for i := range p.Models {
+		if p.Models[i].ID != id {
+			continue
+		}
+		// nil means "leave unchanged" (the handler distinguishes it from an
+		// explicit empty list, which clears the field).
+		if caps.ThinkingLevels != nil {
+			p.Models[i].ThinkingLevels = caps.ThinkingLevels
+		}
+		if caps.InputModalities != nil {
+			p.Models[i].InputModalities = caps.InputModalities
+		}
+		if caps.OutputModalities != nil {
+			p.Models[i].OutputModalities = caps.OutputModalities
+		}
+		poolMu.Unlock()
+		savePool()
+		return true
+	}
+	poolMu.Unlock()
+	return false
+}
+
 func (rootModelStore) SetDisabled(ids []string, disabled bool) int {
 	target := make(map[string]bool, len(ids))
 	for _, id := range ids {

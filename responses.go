@@ -97,18 +97,29 @@ func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream 
 	}
 
 	lines := pumpSSE(ctx, upstream.Body)
-	heartbeat := time.NewTicker(streamHeartbeatInterval)
-	defer heartbeat.Stop()
 	sink := newSSESink(w)
+	hb, stopHB := newHeartbeat()
+	defer stopHB()
+	stallC, stopStall := firstContentDeadline(sink)
+	defer stopStall()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return gone()
 
-		case <-heartbeat.C:
+		case <-hb:
 			if !sink.heartbeat() {
 				return gone()
+			}
+
+		case <-stallC:
+			// Bootstrap window without first content: abort as retryable, the
+			// same contract as an empty attempt.
+			if sink.boot != nil && !sink.boot.committed {
+				upstream.Body.Close()
+				res.stalled = true
+				return res
 			}
 
 		case ev, ok := <-lines:
@@ -118,6 +129,7 @@ func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream 
 					s.Complete(st, responsesconv.Usage{
 						Prompt: latestUsage.Prompt, Completion: latestUsage.Completion, Cached: latestUsage.Cached, Total: latestUsage.Total,
 					})
+					sink.release()
 					res.terminal = true
 					finalize(true, "")
 					return res
@@ -174,6 +186,11 @@ func chatStreamToResponses(ctx context.Context, w http.ResponseWriter, upstream 
 				}
 				start()
 				s.EmitDelta(d, st)
+				if res.produced {
+					// First semantic content: release everything held by the
+					// bootstrap buffer; later frames pass straight through.
+					sink.release()
+				}
 			}
 		}
 	}
@@ -207,6 +224,17 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 	isStream, _ := params["stream"].(bool)
 	log.Printf("  responses: model=%s stream=%v", model, isStream)
 
+	// Administrator model policy: alias rewrite + wildcard exclusions.
+	if resolved, reject := resolveClientModel(model); reject != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": map[string]string{"message": reject, "type": "invalid_request_error"},
+		})
+		return
+	} else if resolved != model {
+		model = resolved
+		params["model"] = resolved
+	}
+
 	// 管理员手动停用的模型在入口直接拒绝（不进列表，也不可点名调用）
 	if model != "" && isModelDisabled(model) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
@@ -223,6 +251,14 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 			"error": map[string]string{"message": msg, "type": "invalid_request_error"},
 		})
 		return
+	}
+
+	// Opt-in nonstream keepalive (NonstreamKeepaliveSeconds): see chatHandler.
+	if !isStream {
+		if kw := newKeepaliveWriter(w); kw != nil {
+			w = kw
+			defer kw.stop()
+		}
 	}
 
 	chat := responsesToChat(params)
@@ -266,6 +302,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 			serveResponsesStream(r.Context(), w, run.Resp, &reqLog, run.Acc, nil)
 			return
 		}
+		copyPassthroughHeaders(w, run.Resp.Header)
 		var raw map[string]any
 		if err := json.NewDecoder(run.Resp.Body).Decode(&raw); err != nil {
 			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
@@ -329,6 +366,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 						})
 						return
 					}
+					copyPassthroughHeaders(w, fbResp.Header)
 					var raw map[string]any
 					if err := json.NewDecoder(fbResp.Body).Decode(&raw); err != nil {
 						finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
@@ -372,6 +410,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		copyPassthroughHeaders(w, upResp.Header)
 		var raw map[string]any
 		if err := json.NewDecoder(upResp.Body).Decode(&raw); err != nil {
 			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())
@@ -431,6 +470,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		copyPassthroughHeaders(w, upResp.Header)
 		var raw map[string]any
 		if err := json.NewDecoder(upResp.Body).Decode(&raw); err != nil {
 			finalizeRequestLog(&reqLog, tokenUsage{}, time.Time{}, reqLog.StartedAt, false, "decode response: "+err.Error())

@@ -750,6 +750,7 @@ async function loadConfig() {
         '</tr>'
       ).join('');
     }
+    if (typeof fillTuning === 'function') fillTuning(c);
   } catch (e) { toast(t('加载失败') + ': ' + e.message, 'error'); }
 }
 

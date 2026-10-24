@@ -212,8 +212,12 @@ func syncClineModels() modelSyncResult {
 			}
 			// 用户手动停用的模型（Disabled）在重建条目时保留标记，
 			// 避免周期同步把停用状态冲掉（与 MetaLocked 同思路）。
-			if old, ok := oldRemote[m.ID]; ok && old.Disabled {
-				entry.Disabled = true
+			// 能力元数据（thinking/modalities）上游不提供，同样保留旧值。
+			if old, ok := oldRemote[m.ID]; ok {
+				entry.Disabled = old.Disabled
+				entry.ThinkingLevels = old.ThinkingLevels
+				entry.InputModalities = old.InputModalities
+				entry.OutputModalities = old.OutputModalities
 			}
 			// 远程接口不带 context/maxTokens：按已知硬限制表补全，
 			// 用户锁定过的值（MetaLocked）优先于表；未收录的模型默认 1M

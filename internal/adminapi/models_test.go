@@ -16,6 +16,9 @@ type fakeModelStore struct {
 	deleteRes DeleteModelResult
 	ctxCalls  []string
 	ctxFound  bool
+	capsCalls []string
+	capsFound bool
+	capsLast  ModelCapabilities
 	disabled  []string
 	changed   int
 }
@@ -32,6 +35,12 @@ func (f *fakeModelStore) Delete(id string) DeleteModelResult {
 func (f *fakeModelStore) UpdateContext(id string, context, output int) bool {
 	f.ctxCalls = append(f.ctxCalls, id)
 	return f.ctxFound
+}
+
+func (f *fakeModelStore) UpdateCapabilities(id string, caps ModelCapabilities) bool {
+	f.capsCalls = append(f.capsCalls, id)
+	f.capsLast = caps
+	return f.capsFound
 }
 
 func (f *fakeModelStore) SetDisabled(ids []string, disabled bool) int {
@@ -185,5 +194,43 @@ func TestModelsToggle(t *testing.T) {
 	m.Toggle(rec, postJSON("/admin/api/models/toggle", `{"ids":[]}`))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("empty ids status = %d", rec.Code)
+	}
+}
+
+func TestModelsUpdateCapabilities(t *testing.T) {
+	store := &fakeModelStore{capsFound: true}
+	m := newModels(store)
+
+	rec := httptest.NewRecorder()
+	m.UpdateCapabilities(rec, postJSON("/admin/api/models/capabilities",
+		`{"id":"gpt-5","thinkingLevels":["Low"," high ","high"],"inputModalities":["text","image"]}`))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(store.capsLast.ThinkingLevels) != 2 || store.capsLast.ThinkingLevels[0] != "low" {
+		t.Fatalf("thinking levels = %v", store.capsLast.ThinkingLevels)
+	}
+	if store.capsLast.OutputModalities != nil {
+		t.Fatalf("omitted field must stay nil (unchanged), got %v", store.capsLast.OutputModalities)
+	}
+
+	rec = httptest.NewRecorder()
+	m.UpdateCapabilities(rec, postJSON("/admin/api/models/capabilities", `{"id":"gpt-5","outputModalities":[]}`))
+	if rec.Code != http.StatusOK || store.capsLast.OutputModalities == nil || len(store.capsLast.OutputModalities) != 0 {
+		t.Fatalf("explicit empty list must clear, code=%d caps=%+v", rec.Code, store.capsLast)
+	}
+
+	rec = httptest.NewRecorder()
+	m.UpdateCapabilities(rec, postJSON("/admin/api/models/capabilities", `{"id":"gpt-5"}`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("no fields status = %d", rec.Code)
+	}
+
+	store2 := &fakeModelStore{capsFound: false}
+	m2 := newModels(store2)
+	rec = httptest.NewRecorder()
+	m2.UpdateCapabilities(rec, postJSON("/admin/api/models/capabilities", `{"id":"ghost","thinkingLevels":["low"]}`))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown model status = %d", rec.Code)
 	}
 }

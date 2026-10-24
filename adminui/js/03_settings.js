@@ -80,6 +80,132 @@ async function updateConfig() {
   } catch (e) { toast(t('更新失败: ') + e.message, 'error'); }
 }
 
+// ========== 调优参数（retry/stream/affinity/wire/模型策略） ==========
+function tuningNum(id) {
+  const el = _(id);
+  if (!el || el.value === '') return 0;
+  const n = parseInt(el.value, 10);
+  return isNaN(n) ? 0 : n;
+}
+
+function parseAliasLines(text) {
+  const out = [];
+  (text || '').split('\n').forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    const idx = line.indexOf('->');
+    if (idx < 0) return;
+    let target = line.slice(idx + 2).trim();
+    let provider = '';
+    const at = target.lastIndexOf(' @');
+    if (at >= 0) { provider = target.slice(at + 2).trim(); target = target.slice(0, at).trim(); }
+    out.push({ alias: line.slice(0, idx).trim(), target: target, provider: provider });
+  });
+  return out;
+}
+
+function parseRuleLines(text) {
+  const out = [];
+  (text || '').split('\n').forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    const rule = { statusCodes: [], match: '', action: '', regex: false };
+    let known = false;
+    line.split(';').forEach(token => {
+      token = token.trim();
+      if (!token) return;
+      const eq = token.indexOf('=');
+      if (eq < 0) return;
+      const key = token.slice(0, eq).trim().toLowerCase();
+      const val = token.slice(eq + 1).trim();
+      if (key === 'codes') {
+        rule.statusCodes = val.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+        known = true;
+      } else if (key === 'match') {
+        rule.match = val;
+        known = true;
+      } else if (key === 'action') {
+        rule.action = val;
+        known = true;
+      } else if (key === 'regex') {
+        rule.regex = val === '1' || val.toLowerCase() === 'true';
+        known = true;
+      }
+    });
+    if (known) out.push(rule);
+  });
+  return out;
+}
+
+async function saveTuning(btn) {
+  const payload = {
+    retry: {
+      maxRounds: tuningNum('tunRetryRounds'),
+      maxCredentialsPerRound: tuningNum('tunRetryCreds'),
+      maxIntervalSeconds: tuningNum('tunRetryInterval'),
+      transientCooldownSeconds: tuningNum('tunRetryCooldown'),
+      maxFailoverModels: tuningNum('tunRetryFailover'),
+    },
+    stream: {
+      keepaliveSeconds: tuningNum('tunKeepalive'),
+      bootstrapRetries: tuningNum('tunBootstrapRetries'),
+      firstContentTimeoutSeconds: tuningNum('tunFirstContentTimeout'),
+      suppressKeepaliveBeforeFirstToken: _('tunSuppressKeepalive').value === 'true',
+    },
+    sessionAffinity: {
+      enabled: _('tunAffinityEnabled').value === 'true',
+      ttlSeconds: tuningNum('tunAffinityTTL'),
+    },
+    maxRequestBodyBytes: tuningNum('tunMaxBodyMB') * 1048576,
+    passthroughHeaders: _('tunPassthrough').value === 'true',
+    nonstreamKeepaliveSeconds: tuningNum('tunNonstreamKeepalive'),
+    modelAliases: parseAliasLines(_('tunAliases').value),
+    excludedModels: (_('tunExcluded').value || '').split(',').map(s => s.trim()).filter(Boolean),
+    requestErrorRules: parseRuleLines(_('tunErrorRules').value),
+  };
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
+  try {
+    await api('POST', '/config/update', payload);
+    toast(t('调优参数已保存'), 'success');
+    await loadConfig();
+  } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
+}
+
+// 用 GET /config 的策略字段回填调优表单；0/缺省显示为占位符（=内置默认）
+function fillTuning(c) {
+  const num = (id, v) => { const el = _(id); if (el) el.value = v ? String(v) : ''; };
+  const r = c.retry || {}, s = c.stream || {}, a = c.sessionAffinity || {};
+  num('tunRetryRounds', r.maxRounds);
+  num('tunRetryCreds', r.maxCredentialsPerRound);
+  num('tunRetryInterval', r.maxIntervalSeconds);
+  const cooldown = _('tunRetryCooldown');
+  if (cooldown) cooldown.value = (r.transientCooldownSeconds === undefined || r.transientCooldownSeconds === 0) ? '' : String(r.transientCooldownSeconds);
+  num('tunRetryFailover', r.maxFailoverModels);
+  const ka = _('tunKeepalive');
+  if (ka) ka.value = (s.keepaliveSeconds === undefined || s.keepaliveSeconds === 0) ? '' : String(s.keepaliveSeconds);
+  num('tunBootstrapRetries', s.bootstrapRetries);
+  num('tunFirstContentTimeout', s.firstContentTimeoutSeconds);
+  num('tunNonstreamKeepalive', c.nonstreamKeepaliveSeconds);
+  if (_('tunSuppressKeepalive')) _('tunSuppressKeepalive').value = String(!!s.suppressKeepaliveBeforeFirstToken);
+  if (_('tunAffinityEnabled')) _('tunAffinityEnabled').value = String(!!a.enabled);
+  num('tunAffinityTTL', a.ttlSeconds);
+  if (_('tunMaxBodyMB')) _('tunMaxBodyMB').value = c.maxRequestBodyBytes ? String(Math.round(c.maxRequestBodyBytes / 1048576)) : '';
+  if (_('tunPassthrough')) _('tunPassthrough').value = String(!!c.passthroughHeaders);
+  if (_('tunAliases')) _('tunAliases').value = (c.modelAliases || []).map(al =>
+    al.alias + ' -> ' + al.target + (al.provider ? ' @' + al.provider : '')).join('\n');
+  if (_('tunExcluded')) _('tunExcluded').value = (c.excludedModels || []).join(', ');
+  if (_('tunErrorRules')) _('tunErrorRules').value = (c.requestErrorRules || []).map(rl => {
+    const parts = [];
+    if (rl.statusCodes && rl.statusCodes.length) parts.push('codes=' + rl.statusCodes.join(','));
+    if (rl.match) parts.push('match=' + rl.match);
+    if (rl.action && rl.action !== 'continue') parts.push('action=' + rl.action);
+    if (rl.regex) parts.push('regex=1');
+    return parts.join('; ');
+  }).join('\n');
+}
+
 // 保存监听地址：保存后程序自动重启监听（立即生效）
 async function saveListenHost() {
   const host = _('settingListenHost').value;
