@@ -110,6 +110,20 @@ func TestMonitoringStats(t *testing.T) {
 	if _, ok := data["opencodeToday"].(map[string]any); !ok {
 		t.Fatalf("opencodeToday = %v", data["opencodeToday"])
 	}
+	if _, ok := data["startedAt"]; ok {
+		t.Fatalf("startedAt should be absent without StartedAt: %v", data["startedAt"])
+	}
+
+	m.StartedAt = func() time.Time { return time.Now().Add(-90 * time.Second) }
+	rec = httptest.NewRecorder()
+	m.Stats(rec, httptest.NewRequest(http.MethodGet, "/admin/api/stats", nil))
+	data, _ = decodeResponse(t, rec).Data.(map[string]any)
+	if _, ok := data["startedAt"].(string); !ok {
+		t.Fatalf("startedAt = %v", data["startedAt"])
+	}
+	if up, _ := data["uptimeSeconds"].(float64); up < 80 || up > 120 {
+		t.Fatalf("uptimeSeconds = %v", data["uptimeSeconds"])
+	}
 }
 
 func TestMonitoringLogsLimitValidation(t *testing.T) {

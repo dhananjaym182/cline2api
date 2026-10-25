@@ -52,12 +52,34 @@ function onAccSearch(v) {
   loadAccounts();
 }
 
+// ========== 账号最近成败热度（account-health） ==========
+let _acctHealth = null;
+
+async function ensureAcctHealth() {
+  if (_acctHealth) return;
+  try {
+    const d = await api('GET', '/account-health');
+    _acctHealth = (d.data && d.data.accounts) || {};
+  } catch (e) { _acctHealth = {}; }
+}
+
+function acctHeatHtml(id) {
+  if (!_acctHealth) return '';
+  const recent = _acctHealth[id] || [];
+  if (!recent.length) return '';
+  const ok = recent.filter(v => v).length;
+  const rate = (ok / recent.length * 100).toFixed(0);
+  const title = t('最近 ') + recent.length + t(' 次成功 ') + ok + ' (' + rate + '%)';
+  return '<div class="heat-blocks sm" title="' + escAttr(title) + '">' +
+    recent.map(v => '<i class="' + (v ? 'ok' : 'bad') + '"></i>').join('') + '</div>';
+}
+
 async function loadAccounts() {
   try {
     if (!_cachedModels.length) {
       try { const dm = await api('GET', '/models'); _cachedModels = dm.data.models || []; } catch (e) {}
     }
-    const d = await api('GET', '/accounts');
+    const [d] = await Promise.all([api('GET', '/accounts'), ensureAcctHealth()]);
     const list = d.data.accounts;
     _lastAccountList = list || [];
     if (window.renderAttention) renderAttention();
@@ -101,7 +123,7 @@ async function loadAccounts() {
         '<td style="text-align:center">' + selBox + '</td>' +
         '<td class="mono" style="font-size:12px;color:var(--text3)">' + seq + '</td>' +
         '<td class="mono" style="font-size:12px" title="' + esc(a.email) + '">' + esc(a.email) + '</td>' +
-        '<td>' + statusBadge + '</td>' +
+        '<td>' + statusBadge + acctHeatHtml(a.accountId) + '</td>' +
         '<td>' + formatNumber(a.usageCount) + '</td>' +
         '<td>' + formatTokenCount(a.promptTokens) + '</td>' +
         '<td>' + formatTokenCount(a.completionTokens) + '</td>' +
@@ -124,7 +146,7 @@ async function loadAccounts() {
         (coolingCount ? ' · <span style="color:var(--yellow)">⏳ ' + coolingCount + '</span>' : '') + '</div>';
       return '<article class="account-card">' +
         '<div class="account-card-header"><span class="account-email">' + esc(a.email) + '</span>' +
-        cardStatus + '</div>' +
+        cardStatus + '</div>' + acctHeatHtml(a.accountId) +
         '<div class="account-metrics">' +
           '<div class="account-metric"><span class="account-metric-label">' + t('请求') + '</span><span class="account-metric-value">' + formatNumber(a.usageCount) + '</span></div>' +
           '<div class="account-metric"><span class="account-metric-label">' + t('总 Token') + '</span><span class="account-metric-value">' + formatTokenCount(a.totalTokens) + '</span></div>' +

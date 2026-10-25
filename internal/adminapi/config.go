@@ -26,6 +26,7 @@ type Config struct {
 	ListenPort         func() int
 	EffectiveAdminHost func(string) string
 	Version            string
+	Build              func() map[string]any
 	ZenHeaders         func() map[string]string
 	PoolPath           string
 	HasPassword        func() bool
@@ -86,6 +87,11 @@ func (h *Config) Get(w http.ResponseWriter, r *http.Request) {
 		"maxRequestBodyBytes":       cfg.MaxRequestBodyBytes,
 		"passthroughHeaders":        cfg.PassthroughHeaders,
 		"nonstreamKeepaliveSeconds": cfg.NonstreamKeepaliveSeconds,
+	}
+	if h.Build != nil {
+		if b := h.Build(); len(b) > 0 {
+			data["build"] = b
+		}
 	}
 	if h.ZenHeaders != nil {
 		data["zenHeaders"] = h.ZenHeaders()

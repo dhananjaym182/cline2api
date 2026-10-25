@@ -109,9 +109,22 @@ const I18N = {
   '请求体上限(MB，0=不限)': 'Max request body (MB, 0 = unlimited)',
   '透传上游响应头（安全白名单外剔除）': 'Passthrough upstream response headers (unsafe ones stripped)',
   '模型别名 / 排除 / 错误规则': 'Model Aliases / Exclusions / Error Rules',
-  '模型别名（每行一条：别名 -> 目标 [@Provider]）': 'Model aliases (one per line: alias -> target [@provider])',
-  '错误规则（每行：codes=429; match=文本或正则; action=stop|stop_and_cooldown|continue|continue_and_cooldown; regex=1）': 'Error rules (per line: codes=429; match=text or regex; action=stop|stop_and_cooldown|continue|continue_and_cooldown; regex=1)',
+  '模型别名（请求名 -> 实际模型，可选限定 Provider）': 'Model aliases (requested name -> actual model, optional provider scope)',
+  '错误规则（命中上游错误后执行的调度动作，按顺序匹配）': 'Error rules (routing action when an upstream error matches, evaluated in order)',
   '排除模型（逗号分隔，支持 * 通配；对全部来源生效）': 'Excluded models (comma-separated, * wildcard; applies to all sources)',
+  // 结构化编辑器
+  '别名': 'Alias',
+  '目标模型': 'Target model',
+  'Provider（可选）': 'Provider (optional)',
+  '状态码 429,503': 'Status codes 429,503',
+  '错误文本 / 正则': 'Error text / regex',
+  '+ 添加别名': '+ Add alias',
+  '+ 添加规则': '+ Add rule',
+  '别名重复：保存会被拒绝': 'Duplicate aliases: saving will be rejected',
+  '存在重复别名，请先修正': 'Duplicate aliases exist — fix them first',
+  '搜索模型…': 'Search models…',
+  '模型列表尚未同步，先前往模型页同步后再勾选': 'Model list not synced yet — sync it on the Models page first',
+  '仅显示前 200 项，请缩小搜索范围': 'Showing first 200 only — narrow the search',
   '保存调优参数': 'Save Tuning',
   '非法别名/规则会整次拒绝并提示，不会部分生效': 'Invalid aliases/rules reject the whole save with an error; no partial apply',
   '调优参数已保存': 'Tuning parameters saved',
@@ -120,6 +133,9 @@ const I18N = {
   '权重（加权轮询；0=按1，-1=排除）': 'Weight (weighted round robin; 0 = 1, -1 = excluded)',
   '引擎版本': 'Engine Version',
   '账号文件': 'Account File',
+  '刷新当前页': 'Refresh this page',
+  '构建信息': 'Build info',
+  'API 地址': 'API address',
   '这些请求头会附加到所有转发给 Cline API 的请求中，以模拟官方客户端行为。': 'Attached to every request forwarded to the Cline API.',
   '请求头': 'Header',
   '值': 'Value',
@@ -392,6 +408,8 @@ const I18N = {
   '跨平台桌面端（Win/Mac/Linux）': 'Cross-platform desktop (Win/Mac/Linux)',
   '⚠️ 当前监听非本机回环地址（0.0.0.0 或局域网 IP），管理后台无鉴权，局域网内任何设备都可访问。请确认网络环境安全，或配合防火墙限制端口。': '⚠️ Listening on a non-loopback address (0.0.0.0 or LAN IP) exposes the admin panel without authentication to the whole network. Ensure the network is trusted or restrict the port via firewall.',
   '概览': 'Overview',
+  '模型与路由': 'Models & Routing',
+  '账户与安全': 'Accounts & Security',
   '账户': 'Accounts',
   '配置': 'Configuration',
   '系统': 'System',
@@ -438,6 +456,14 @@ const I18N = {
   '全部计费': 'All billing',
   '全部状态': 'All statuses',
   '全部启用': 'Enable all',
+  '展开全部': 'Expand all',
+  '折叠全部': 'Collapse all',
+  '测试失败': 'Test failed',
+  '启用当前筛选': 'Enable filtered',
+  '停用当前筛选': 'Disable filtered',
+  '上下文': 'Context',
+  '确定启用当前筛选的全部模型？': 'Enable all models in the current filter?',
+  '确定停用当前筛选的全部模型？': 'Disable all models in the current filter?',
   '全部停用': 'Disable all',
   '无匹配模型': 'No matching models',
   '点击启用该模型': 'Click to enable this model',
@@ -678,8 +704,119 @@ const I18N = {
   '按优先级逐条探测；可在结果中直接启停/移除条目，保存更改后才实际落盘，取消即放弃修改。': 'Entries are probed in priority order. Enable/disable or remove entries right in the results — save applies the changes, cancel discards them.',
   '✓ 全部通过': '✓ All passed',
   '保存更改': 'Save Changes',
+  '未保存的更改': 'Unsaved changes',
+  '放弃': 'Discard',
+  '变更预览': 'Change Preview',
+  '仅以下字段发生变化，确认后保存：': 'Only these fields changed — save after confirming:',
+  '确认保存': 'Confirm Save',
+  '敏感值已隐藏': 'sensitive value hidden',
+  '有未保存的修改，确定放弃？': 'You have unsaved changes. Discard them?',
+  '最大回退轮次': 'Max fallback rounds',
+  '每轮账号上限': 'Max credentials per round',
+  '瞬时错误冷却(秒)': 'Transient cooldown (s)',
+  '故障转移模型上限': 'Max failover models',
+  'SSE 心跳间隔(秒)': 'SSE keepalive (s)',
+  '首包前重试次数': 'Bootstrap retries',
+  '首内容超时(秒)': 'First-content timeout (s)',
+  '会话亲和': 'Session affinity',
+  '请求体上限(MB)': 'Max body (MB)',
+  '透传上游响应头': 'Passthrough headers',
+  '非流式占位心跳(秒)': 'Non-stream keepalive (s)',
+  '模型别名': 'Model Aliases',
+  '排除模型': 'Excluded Models',
+  '错误规则': 'Error Rules',
+  '检查中...': 'Checking...',
+  '检查失败': 'Check failed',
+  '发现新版本 ': 'New version available: ',
+  '当前 ': 'current ',
+  '开发版本': 'Dev build',
+  '最新 ': 'latest ',
+  '已是最新版本': 'Up to date',
+  '检查更新': 'Check for updates',
+  '更新检查': 'Update Check',
+  '未检查': 'Not checked',
+  '分钟请求上限': 'RPM Limit',
+  '每日请求上限': 'Daily Limit',
+  '出口代理': 'Egress Proxy',
+  '权重': 'Weight',
+  '自定义请求头': 'Custom Headers',
+  '免费来源': 'Free Source',
   // 仪表盘改版：池容量 / 关注清单 / 主题与侧栏收起
   '账号池容量与用量总览': 'Pool capacity and usage at a glance',
+  // 仪表盘总览（hero / 吞吐 / 上游分布）
+  '窗口内请求': 'Requests in window',
+  '窗口内请求 · 最近 ': 'requests · last ',
+  '加载中…': 'Loading…',
+  '成功失败占比': 'Success / failure ratio',
+  '时间窗口': 'Time window',
+  '平均时延': 'Avg latency',
+  '首字延迟': 'Time to first token',
+  '窗口 Token': 'Tokens in window',
+  '降级切换': 'Fallbacks',
+  '吞吐趋势': 'Throughput',
+  '上游分布': 'Upstream Fleet',
+  '热门模型': 'Top Models',
+  '无法连接服务': 'Cannot reach server',
+  '暂无流量': 'No traffic yet',
+  '失败率偏高': 'High failure rate',
+  '存在失败请求': 'Some requests failed',
+  '运行正常': 'All good',
+  '窗口内暂无请求流量': 'No request traffic in this window',
+  '策略': 'Strategy',
+  '默认': 'Default',
+  '仅免费模型': 'Free models only',
+  // 请求日志增强：筛选 / 跟随 / 详情 / 下载 / 清空
+  '跟随新日志': 'Follow new logs',
+  '已暂停跟随': 'Follow paused',
+  '点击恢复自动跟随': 'Click to resume auto-follow',
+  '已暂停跟随 · ': 'Paused · ',
+  ' 条新日志': ' new logs',
+  '恢复跟随': 'Resume following',
+  '自动跟随新日志': 'Automatically follow new logs',
+  '下载': 'Download',
+  '下载当前筛选结果': 'Download current filtered results',
+  '全屏': 'Fullscreen',
+  '清空全部日志': 'Clear all logs',
+  '详情': 'Details',
+  '请求详情': 'Request details',
+  '复制 JSON': 'Copy JSON',
+  '关闭弹窗': 'Close',
+  '全部协议': 'All protocols',
+  '协议筛选': 'Protocol filter',
+  '快捷筛选': 'Quick filters',
+  '搜索模型 / 账号 / 请求 ID…': 'Search model / account / request ID…',
+  '流式': 'Streaming',
+  '暂无匹配日志': 'No logs match the filters',
+  '双击复制 JSON': 'Double-click to copy JSON',
+  '确定清空所有请求日志？此操作不可恢复。': 'Clear all request logs? This cannot be undone.',
+  '清空中...': 'Clearing...',
+  '日志已清空': 'Logs cleared',
+  '清空失败: ': 'Clear failed: ',
+  '当前无可下载日志': 'Nothing to download',
+  '已下载 ': 'Downloaded ',
+  ' 条日志': ' logs',
+  '下载失败: ': 'Download failed: ',
+  '输入/输出/缓存/总': 'Input/Output/Cached/Total',
+  '错误': 'Error',
+  '原始 JSON': 'Raw JSON',
+  // Provider/账号健康：配额 / 冷却 / 热度 / 到期
+  '健康': 'Health',
+  '每日已用 ': 'Daily used ',
+  '每分钟已用 ': 'Per-minute used ',
+  '暂无样本': 'No samples',
+  '成功率': 'Success rate',
+  '样本': 'Samples',
+  '即将恢复': 'Recovering soon',
+  '剩 ': 'left ',
+  '点击清除该 Provider 全部冷却': 'Click to clear all cooldowns for this provider',
+  '冷却中的 Provider · 按最早恢复排序': 'Cooling providers · soonest recovery first',
+  '已清除 ': 'Cleared ',
+  ' 条冷却': ' cooldowns',
+  '重置失败: ': 'Reset failed: ',
+  'Token 已过期': 'Token expired',
+  'Token 到期 ': 'Token expires ',
+  '最近 ': 'Last ',
+  ' 次成功 ': ' successes',
   '账号池容量': 'Pool Capacity',
   '累计请求': 'Total requests',
   '总数': 'Total',
@@ -761,6 +898,59 @@ const I18N = {
   '优先级': 'Priority',
   'CodeBuddy CN（腾讯）': 'CodeBuddy CN (Tencent)',
   '多个 Provider 提供同名模型时，可在 Model 后追加 @Provider名 钉选来源，如 deepseek-chat@我的Provider（失败只报错、不悄悄换源）。': 'When several providers serve the same model id, append @ProviderName to Model to pin the source, e.g. deepseek-chat@MyProvider. A pinned request fails loudly instead of silently switching providers.',
+  // §MC 快速开始 / 配额与预算 / 错误日志下载 / 会话清除 / 差异预览
+  '快速开始': 'Quick Start',
+  '配额与预算': 'Quota & Budget',
+  '三步接入：添加账号 → 生成密钥 → 配置客户端': 'Three steps: add an account → generate an API key → configure your client',
+  '接入步骤': 'Setup Steps',
+  '前往账号与连接': 'Go to Accounts',
+  '前往密钥与安全': 'Go to Keys & Security',
+  '按下方客户端示例填入 Base URL 与密钥即可。': 'Fill in the Base URL and key from the client examples below.',
+  '客户端配置示例': 'Client Configuration Examples',
+  'Base URL 中的端口与监听地址以「关于」页 API 地址为准；多 Provider 同名模型可用': 'Use the port and listen address shown on the About page as the Base URL; for same-named models across providers use',
+  '模型@Provider名': 'model@ProviderName',
+  '钉选来源（失败只报错、不悄悄换源）。': 'to pin the source (fails loudly, never silently switches).',
+  'Claude Code（Anthropic 协议）': 'Claude Code (Anthropic API)',
+  'Cline / Roo Code（VS Code 插件）': 'Cline / Roo Code (VS Code extension)',
+  '通用 OpenAI 兼容客户端': 'Generic OpenAI-compatible client',
+  'curl 冒烟测试': 'curl smoke test',
+  '下一步': 'Next Steps',
+  '接入更多免费上游（OpenCode / Zen）': 'Connect more free upstreams (OpenCode / Zen)',
+  '添加自定义 Provider': 'Add a custom Provider',
+  '配置模型组合自动换源': 'Set up model combos with auto-fallback',
+  '查看配额与预算': 'View Quota & Budget',
+  'Provider 每分钟 / 每日预算用量、冷却恢复与账号 Token 总量': 'Per-provider RPM / daily budget usage, cooldown recovery and account token totals',
+  '运行时长': 'Uptime',
+  '· 启动于': '· started at',
+  '添加账号 → 生成 API Key → 客户端配置': 'Add account → generate API key → configure client',
+  '。完整步骤与各客户端示例见「快速开始」页。': '. Full steps and per-client examples live on the Quick Start page.',
+  '打开快速开始': 'Open Quick Start',
+  '下载错误日志': 'Download Error Logs',
+  '仅下载失败请求': 'Failed requests only',
+  '当前无失败日志': 'No failed logs to download',
+  '后台登录会话': 'Admin Login Sessions',
+  '清除全部登录会话': 'Clear all login sessions',
+  '强制所有浏览器（包括当前页面）重新登录，凭据数据不受影响': 'Forces every browser (including this page) to log in again; credential data is untouched',
+  '确认清除全部后台登录会话？所有浏览器（包括当前页面）都需要重新登录。': 'Clear all admin login sessions? Every browser, including this one, will need to log in again.',
+  '已清除全部登录会话': 'All admin sessions cleared',
+  '操作失败: ': 'Operation failed: ',
+  '查看差异': 'View Diff',
+  '无法生成差异预览': 'Cannot build diff preview',
+  '每分钟请求': 'Requests / minute',
+  '每日请求': 'Requests / day',
+  '未设预算': 'no budget set',
+  '无冷却': 'No cooldowns',
+  '冷却中的模型': 'Models in cooldown',
+  '重置全部冷却': 'Reset all cooldowns',
+  '账号总数': 'Accounts',
+  '活跃账号': 'Active',
+  '总请求': 'Total requests',
+  '总 Token': 'Total tokens',
+  '距每日预算 UTC 重置': 'Until daily budget UTC reset',
+  '暂无 Provider，先在「自定义 Provider」页添加': 'No providers yet — add one on the Custom Providers page first',
+  '已重置 ': 'Reset ',
+  ' 条冷却': ' cooldown(s)',
+  '重置失败': 'Reset failed',
 };
 let LANG = 'zh';
 const LC = () => LANG === 'en' ? 'en-US' : 'zh-CN';
@@ -803,6 +993,7 @@ function applyLang(){
   const lp = LANG === 'en' ? 'false' : 'true';
   if (_('langZh')) _('langZh').setAttribute('aria-pressed', lp);
   if (_('langEn')) _('langEn').setAttribute('aria-pressed', LANG === 'en' ? 'true' : 'false');
+  if (typeof syncNavCollapseBtn === 'function') syncNavCollapseBtn(); // 侧栏按钮 title 随语言更新
 }
 function setLang(l){
   LANG = l;
@@ -936,21 +1127,42 @@ function applyTab(name){
   });
   document.querySelectorAll('.tab-panel').forEach(e => e.style.display = 'none');
   const panel = _('tab-' + name);
-  if (panel) panel.style.display = 'block';
+  if (panel) {
+    panel.style.display = 'block';
+    panel.classList.remove('enter');
+    void panel.offsetWidth; // 强制重排以重放入场动画
+    panel.classList.add('enter');
+  }
   try { history.replaceState(null, '', '#' + name); } catch(e){}
   setActiveTab(name);
-  if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); }
+  if (name !== 'dashboard' && typeof stopDashPolling === 'function') stopDashPolling();
+  if (name !== 'logs' && typeof stopLogPolling === 'function') stopLogPolling();
+  if (name === 'dashboard') { applyLang(); loadStats(); loadAccounts(); loadDashboardOverview(); startDashPolling(); }
   else if (name === 'accounts') { loadAccounts(); loadConnections(); }
   if (fromImport) toggleLoginImport(true);
-  else if (name === 'logs') loadRequestLogs(true);
+  else if (name === 'logs') { loadRequestLogs(true); startLogPolling(); }
   else if (name === 'routing') { loadModels().then(() => { loadConfig(); }); }
   else if (name === 'combos') { loadCombos(); }
   else if (name === 'upstreams') { loadOcConfig(); loadClineProxyConfig(); loadZenHeaders(); }
   else if (name === 'providers') { loadProviders(); loadConnections(); }
   else if (name === 'security') { loadKeys(); loadConfig(); }
+  else if (name === 'quota') { loadQuota(true); }
+  else if (name === 'about') { if (typeof checkForUpdate === 'function' && !_verCheckDone) checkForUpdate(false); }
+  refreshSaveBar();
 }
 
 function switchTab(name) { applyTab(name); }
+
+// 顶栏一键刷新：重新加载当前页数据（对齐 CLIProxyAPI 面板的 header refresh）
+function refreshAll(btn) {
+  const el = document.querySelector('.nav-item.active');
+  if (!el || !el.dataset.tab) return;
+  if (btn) {
+    btn.classList.add('spinning');
+    setTimeout(() => btn.classList.remove('spinning'), 800);
+  }
+  applyTab(el.dataset.tab);
+}
 
 document.querySelectorAll('.nav-item').forEach(el => {
   el.addEventListener('click', () => {
@@ -962,31 +1174,44 @@ document.querySelectorAll('.nav-item').forEach(el => {
 // 从 URL/SessionStorage 恢复上次打开的标签页（统一在底部初始化时执行）
 
 // ========== 侧栏排序（拖拽） ==========
+// 排序持久化按布局版本隔离：body.html 侧栏重新分组后 bump NAV_LAYOUT_VERSION，
+// 旧版本（含最早的裸数组格式）保存的顺序直接作废——否则旧顺序会在新分组上
+// 逐条重演，把重排效果抵消掉（表现为「改了布局但侧栏看起来没变」）。
 const NAV_ORDER_KEY = 'cline_admin_nav_order';
+const NAV_LAYOUT_VERSION = '3';
 function applyNavOrder() {
-  let order = [];
-  try { order = JSON.parse(localStorage.getItem(NAV_ORDER_KEY) || '[]'); } catch(e) {}
-  if (!Array.isArray(order) || !order.length) return;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(NAV_ORDER_KEY) || 'null'); } catch(e) {}
+  if (!saved || saved.v !== NAV_LAYOUT_VERSION || !Array.isArray(saved.order) || !saved.order.length) {
+    try { localStorage.removeItem(NAV_ORDER_KEY); } catch(e) {} // 清掉旧版本/裸数组遗留
+    return;
+  }
+  const order = saved.order;
   const nav = document.querySelector('.nav-section').parentElement;
   const items = {};
-  nav.querySelectorAll('.nav-item').forEach(el => { items[el.dataset.tab] = el; });
-  // 重排：按保存的顺序把条目移回其分区末尾，未知 tab 忽略
+  nav.querySelectorAll('.nav-section .nav-item').forEach(el => { items[el.dataset.tab] = el; });
+  // 重排：按保存的顺序把条目移回其分区末尾，未知 tab 忽略（固定项不参与排序）
   order.forEach(tab => {
     const el = items[tab];
     if (!el) return;
     const sec = el.closest('.nav-section');
+    if (!sec) return;
     sec.appendChild(el);
   });
 }
 function saveNavOrder() {
-  const order = Array.from(document.querySelectorAll('.nav-item')).map(el => el.dataset.tab);
-  try { localStorage.setItem(NAV_ORDER_KEY, JSON.stringify(order)); } catch(e) {}
+  const order = Array.from(document.querySelectorAll('.nav-section .nav-item')).map(el => el.dataset.tab);
+  try { localStorage.setItem(NAV_ORDER_KEY, JSON.stringify({ v: NAV_LAYOUT_VERSION, order: order })); } catch(e) {}
 }
 function initNavDrag() {
   let dragged = null;
-  document.querySelectorAll('.nav-item').forEach(el => {
+  // 固定项（.nav-pinned，如「快速开始」）不参与拖拽排序
+  document.querySelectorAll('.nav-section .nav-item').forEach(el => {
     el.draggable = true;
-    el.addEventListener('dragstart', e => { dragged = el; el.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', el.dataset.tab); } catch(err){} e.dataTransfer.effectAllowed = 'move'; });
+    el.addEventListener('dragstart', e => {
+      if (document.documentElement.dataset.nav === 'collapsed') { e.preventDefault(); return; } // 轨道图标态拖拽目标靠猜，禁用
+      dragged = el; el.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', el.dataset.tab); } catch(err){} e.dataTransfer.effectAllowed = 'move';
+    });
     el.addEventListener('dragend', () => { el.classList.remove('dragging'); document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('drop-target')); dragged = null; });
     el.addEventListener('dragover', e => {
       e.preventDefault();
@@ -1125,17 +1350,27 @@ function openDrawer(name) {
   if (ov) ov.classList.add('open');
   dr.classList.add('open');
   if (!_openDrawers.includes(name)) _openDrawers.push(name);
+  refreshSaveBar();
 }
-function closeDrawer(name) {
+const _drawerGuards = {};
+function setDrawerGuard(name, fn) { if (fn) _drawerGuards[name] = fn; else delete _drawerGuards[name]; }
+async function closeDrawer(name) {
+  const g = _drawerGuards[name];
+  if (g) {
+    let ok = true;
+    try { ok = await g(); } catch (e) { ok = true; }
+    if (!ok) return;
+  }
   const ov = _(name + 'Overlay'), dr = _(name);
   if (ov) ov.classList.remove('open');
   if (dr) dr.classList.remove('open');
   const i = _openDrawers.indexOf(name);
   if (i >= 0) _openDrawers.splice(i, 1);
+  refreshSaveBar();
 }
 // ESC closes the topmost drawer, but only when no modal layer is open on top
 // of it (modal Esc handling lives in 06_models and runs on the same event).
-const _ESC_MODAL_IDS = ['confirmModal','modelMetaEditor','provPickerModal','comboModelPicker','presetPickerModal','importPreviewModal','connLoginModal','connImportModal','comboTestModal','modelSyncOverlay'];
+const _ESC_MODAL_IDS = ['confirmModal','diffModal','modelMetaEditor','provPickerModal','comboModelPicker','presetPickerModal','importPreviewModal','connLoginModal','connImportModal','comboTestModal','modelSyncOverlay','logDetailModal'];
 function _modalLayerOpen() {
   return _ESC_MODAL_IDS.some(id => { const el = _(id); return el && el.style.display === 'flex'; });
 }
@@ -1143,17 +1378,117 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && _openDrawers.length && !_modalLayerOpen()) closeDrawer(_openDrawers[_openDrawers.length - 1]);
 });
 
+// ========== 未保存更改：悬浮保存条 + 变更预览弹窗 ==========
+var _verCheckDone = false; // 「关于」页更新检查只自动跑一次（checkForUpdate 在 03_settings 定义）
+// 每个面（provider 抽屉 / 路由页调优卡）注册一个 ctx；同一时刻只展示优先级最高且脏的那个。
+const _saveBarCtxs = {};
+const _SAVE_BAR_ORDER = ['provider', 'tuning'];
+function setSaveBarCtx(surface, ctx) {
+  if (ctx) _saveBarCtxs[surface] = ctx; else delete _saveBarCtxs[surface];
+  refreshSaveBar();
+}
+function _currentSaveBarCtx() {
+  if (_modalLayerOpen()) return null; // 弹窗（含变更预览/确认）盖住时收起保存条
+  for (const k of _SAVE_BAR_ORDER) {
+    const c = _saveBarCtxs[k];
+    if (c && c.host() && c.dirty()) return c;
+  }
+  return null;
+}
+function refreshSaveBar() {
+  const bar = _('saveDiscardBar');
+  if (!bar) return;
+  const ctx = _currentSaveBarCtx();
+  bar.classList.toggle('show', !!ctx);
+  const diffBtn = _('saveBarDiff');
+  if (diffBtn) diffBtn.hidden = !(ctx && typeof ctx.diff === 'function');
+  // 有未保存更改时，关闭/刷新页面前提示（浏览器统一展示原生确认文案）
+  if (ctx) window.onbeforeunload = e => { e.preventDefault(); return ''; };
+  else window.onbeforeunload = null;
+}
+function discardSaveBar() { const c = _currentSaveBarCtx(); if (c) c.discard(); }
+function saveViaBar() { const c = _currentSaveBarCtx(); if (c) c.save(); }
+async function diffViaBar() {
+  const c = _currentSaveBarCtx();
+  if (!c || typeof c.diff !== 'function') return;
+  let changes = [];
+  try { changes = (await c.diff()) || []; } catch (e) { toast(t('无法生成差异预览'), 'error'); return; }
+  showDiffModal(changes);
+}
+// 表单任意输入都会冒泡到这里，统一做脏检查（事件委托，兼容动态生成的行）
+document.addEventListener('input', refreshSaveBar, true);
+document.addEventListener('change', refreshSaveBar, true);
+
+function fmtDiffVal(v) {
+  if (v === undefined || v === null) return '';
+  if (Array.isArray(v)) v = v.map(x => (x && typeof x === 'object') ? JSON.stringify(x) : String(x)).join(', ');
+  else if (typeof v === 'object') v = JSON.stringify(v);
+  else v = String(v);
+  if (v.length > 90) v = v.slice(0, 90) + '…';
+  return v;
+}
+// 两个同构浅对象（值可为标量/数组）→ [{label, from, to}]；值应已经 fmtDiffVal 字符串化
+function diffFlat(base, cur) {
+  const out = [];
+  const keys = Object.keys(base);
+  Object.keys(cur).forEach(k => { if (keys.indexOf(k) === -1) keys.push(k); });
+  for (const k of keys) {
+    const a = base[k] === undefined ? '' : base[k];
+    const b = cur[k] === undefined ? '' : cur[k];
+    if (String(a) === String(b)) continue;
+    out.push({ label: k, from: String(a), to: String(b) });
+  }
+  return out;
+}
+const SENSITIVE_LABEL_RE = /(key|token|secret|password|authorization)/i;
+let _diffResolve = null;
+function showDiffModal(changes) {
+  return new Promise(resolve => {
+    const list = _('diffList');
+    if (list) list.textContent = '';
+    (changes || []).forEach(ch => {
+      const sens = SENSITIVE_LABEL_RE.test(ch.label);
+      const row = document.createElement('div'); row.className = 'diff-row';
+      const lab = document.createElement('span'); lab.className = 'diff-label'; lab.textContent = ch.label;
+      const from = document.createElement('span'); from.className = 'diff-from';
+      const to = document.createElement('span'); to.className = 'diff-to';
+      if (sens) {
+        from.textContent = ch.from ? '••••' : '';
+        to.textContent = ch.to ? '••••' : '';
+        if (ch.from || ch.to) from.title = to.title = t('敏感值已隐藏');
+      } else {
+        from.textContent = ch.from;
+        to.textContent = ch.to;
+      }
+      const arrow = document.createElement('span'); arrow.className = 'diff-arrow'; arrow.textContent = '→';
+      row.appendChild(lab); row.appendChild(from); row.appendChild(arrow); row.appendChild(to);
+      if (list) list.appendChild(row);
+    });
+    const m = _('diffModal');
+    if (m) m.style.display = 'flex';
+    _diffResolve = resolve;
+  });
+}
+function resolveDiff(val) {
+  const m = _('diffModal');
+  if (m) m.style.display = 'none';
+  if (_diffResolve) { const r = _diffResolve; _diffResolve = null; r(!!val); }
+}
+
 // ========== 侧栏收起 ==========
 const NAV_COLLAPSE_KEY = 'cline_admin_nav';
+// 轨道提示单例元素引用：必须在 syncNavCollapseBtn() 首次顶层调用之前初始化，
+// 否则 _navTipHide 读取 TDZ 中的 let 会抛错并中断后续脚本（悬停监听器将不会注册）。
+let _navRailTipEl = null;
 function syncNavCollapseBtn() {
   const collapsed = document.documentElement.dataset.nav === 'collapsed';
-  const btn = document.querySelector('.nav-collapse-btn');
-  if (!btn) return;
   const label = collapsed ? t('展开侧栏') : t('收起侧栏');
-  btn.title = label; btn.setAttribute('aria-label', label);
-  btn.innerHTML = collapsed
-    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>'
-    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>';
+  // 头部按钮（仅窄屏可见）与边缘悬浮钮（仅桌面可见）共用文案；图标翻转由 CSS 完成，
+  // 不再重写 innerHTML
+  document.querySelectorAll('.nav-collapse-btn,.nav-edge-toggle').forEach(btn => {
+    btn.title = label; btn.setAttribute('aria-label', label);
+  });
+  _navTipHide(); // 状态切换后旧提示文案即失效
 }
 function toggleNav() {
   const collapsed = document.documentElement.dataset.nav === 'collapsed';
@@ -1163,4 +1498,68 @@ function toggleNav() {
   syncNavCollapseBtn();
 }
 syncNavCollapseBtn();
+
+// ========== 收起态轨道提示（控制台 nav-tooltip 等价物） ==========
+// 单例固定元素；仅 data-nav=collapsed 且宽屏时显示，文案取 .nav-label 文本节点
+// （applyLang 已保证语言正确），因此无需额外的提示词条映射。
+function _navTipHide() { if (_navRailTipEl) _navRailTipEl.classList.remove('show'); }
+function _navTipShow(text, centerY) {
+  if (window.innerWidth <= 760) return;
+  if (!_navRailTipEl) {
+    _navRailTipEl = document.createElement('div');
+    _navRailTipEl.className = 'nav-rail-tip';
+    document.body.appendChild(_navRailTipEl);
+  }
+  const tip = _navRailTipEl;
+  tip.textContent = text;
+  tip.style.display = 'block';
+  const h = tip.getBoundingClientRect().height;
+  tip.style.left = '72px';
+  tip.style.top = Math.max(6, Math.min(centerY - h / 2, window.innerHeight - h - 6)) + 'px';
+  tip.classList.add('show');
+  tip.style.display = '';
+}
+(function initNavRailTip() {
+  const nav = document.querySelector('.sidebar-nav');
+  if (!nav) return;
+  const collapsed = () => document.documentElement.dataset.nav === 'collapsed';
+  const itemOf = e => {
+    const it = e.target && e.target.closest ? e.target.closest('.nav-item') : null;
+    return it && nav.contains(it) ? it : null;
+  };
+  const showForItem = e => {
+    if (!collapsed()) return;
+    const it = itemOf(e);
+    if (!it) return;
+    const lab = it.querySelector('.nav-label');
+    if (!lab || !lab.textContent) return;
+    const r = it.getBoundingClientRect();
+    _navTipShow(lab.textContent, r.top + r.height / 2);
+  };
+  nav.addEventListener('mouseover', showForItem);
+  nav.addEventListener('mouseout', e => { if (itemOf(e)) _navTipHide(); });
+  nav.addEventListener('click', _navTipHide);
+  nav.addEventListener('scroll', _navTipHide);
+  const edge = document.querySelector('.nav-edge-toggle');
+  if (edge) {
+    const show = () => {
+      const label = document.documentElement.dataset.nav === 'collapsed' ? t('展开侧栏') : t('收起侧栏');
+      _navTipShow(label + ' · Ctrl+B', 56 + 12);
+    };
+    edge.addEventListener('mouseenter', show);
+    edge.addEventListener('mouseleave', _navTipHide);
+    edge.addEventListener('focus', show);
+    edge.addEventListener('blur', _navTipHide);
+  }
+})();
+
+// Ctrl/Cmd+B 收起/展开侧栏（输入控件聚焦时不拦截）
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'b' || e.key === 'B')) {
+    const evTarget = e.target;
+    if (evTarget && (evTarget.tagName === 'INPUT' || evTarget.tagName === 'TEXTAREA' || evTarget.isContentEditable)) return;
+    e.preventDefault();
+    toggleNav();
+  }
+});
 

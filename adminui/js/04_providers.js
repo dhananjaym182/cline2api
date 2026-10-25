@@ -10,17 +10,20 @@ async function loadProviders() {
       api('GET', '/providers/sync-status').catch(() => ({ data: {} })),
     ]);
     _provSync = (sd && sd.data && sd.data.providers) || {};
+    _provHealth = (d.data && d.data.health) || {};
     const list = d.data.providers || [];
     const box = _('providersList');
     renderProviderSyncBanner(list);
     if (!list.length) { box.innerHTML = listEmptyState(ICON_PROVIDERS, t('暂无自定义 Provider')); return; }
-    box.innerHTML = '<table class="action-table"><thead><tr><th>' + t('名称') + '</th><th>Base URL</th><th>' + t('模型') + '</th><th class="num-col">' + t('优先级') + '</th><th>' + t('状态') + '</th><th>' + t('最近检测') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
+    box.innerHTML = renderProvCooldownBar(list) +
+      '<table class="action-table"><thead><tr><th>' + t('名称') + '</th><th>Base URL</th><th>' + t('模型') + '</th><th class="num-col">' + t('优先级') + '</th><th>' + t('健康') + '</th><th>' + t('状态') + '</th><th>' + t('最近检测') + '</th><th>' + t('操作') + '</th></tr></thead><tbody>' +
       list.map(p =>
         '<tr>' +
           '<td>' + esc(p.name) + (p.free ? ' <span style="color:var(--green);font-size:11px">free</span>' : '') + (function () { const n = (p.connectionIds || []).length || (p.connectionId ? 1 : 0); return n ? ' <span style="color:var(--accent);font-size:11px" title="' + t('连接池轮转派发') + '">token×' + n + '</span>' : ''; })() + '</td>' +
           '<td class="mono" style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(p.baseURL) + '</td>' +
           '<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc((p.modelIds || []).join(', ')) + '</td>' +
           '<td class="num-col">' + p.priority + '</td>' +
+          '<td class="prov-health-cell">' + provHealthCell(p) + '</td>' +
           '<td>' + (p.enabled
             ? '<span class="status active"><span class="status-dot active"></span>' + t('已启用') + '</span>'
             : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('已停用') + '</span>') + '</td>' +
@@ -39,6 +42,100 @@ async function loadProviders() {
     if (box) box.innerHTML = '<div class="empty" style="padding:10px;color:var(--text3)">' + t('加载失败') + ': ' + esc(e.message) + '</div>';
   }
 }
+
+// ========== §健康：配额表 / 冷却恢复 / 近期成败热度 ==========
+let _provHealth = {};
+
+function provQuotaHtml(p) {
+  const h = _provHealth[p.id] || {};
+  const lim = h.limits || {};
+  const daily = Number(lim.daily) || 0, rpm = Number(lim.rpm) || 0;
+  let out = '';
+  if (daily > 0) {
+    const used = Number(h.daily) || 0;
+    const ratio = Math.min(1, used / daily);
+    const left = 1 - ratio;
+    const tone = left >= 0.7 ? 'ok' : (left >= 0.3 ? 'warn' : 'bad');
+    out += '<div class="quota-row" title="' + escAttr(t('每日已用 ') + used + '/' + daily) + '">' +
+      '<span class="quota-meter"><span class="' + tone + '" style="width:' + (ratio * 100).toFixed(1) + '%"></span></span>' +
+      '<span class="quota-num">' + formatNumber(used) + '/' + formatNumber(daily) + '</span></div>';
+  }
+  if (rpm > 0) {
+    const used = Number(h.rpm) || 0;
+    const left = 1 - Math.min(1, used / rpm);
+    const tone = left >= 0.7 ? 'ok' : (left >= 0.3 ? 'warn' : 'bad');
+    out += '<div class="quota-row rpm" title="' + escAttr(t('每分钟已用 ') + used + '/' + rpm) + '">' +
+      '<span class="quota-label">rpm</span>' +
+      '<span class="quota-meter narrow"><span class="' + tone + '" style="width:' + (Math.min(1, used / rpm) * 100).toFixed(1) + '%"></span></span>' +
+      '<span class="quota-num">' + used + '/' + rpm + '</span></div>';
+  }
+  return out;
+}
+
+function provHeatCellHtml(p) {
+  const h = _provHealth[p.id] || {};
+  const recent = h.recent || [];
+  if (!recent.length) return '<span class="heat-none">' + t('暂无样本') + '</span>';
+  const blocks = recent.slice(-12);
+  const rate = Number(h.rate) || 0;
+  const title = t('成功率') + ' ' + (rate * 100).toFixed(0) + '% · ' + t('样本') + ' ' + (h.samples || 0) +
+    (h.avgLatencyMs ? ' · ' + Math.round(h.avgLatencyMs) + 'ms' : '');
+  return '<span class="heat-blocks" title="' + escAttr(title) + '">' +
+    blocks.map(v => '<i class="' + (v ? 'ok' : 'bad') + '"></i>').join('') + '</span>';
+}
+
+function fmtLeft(untilRFC) {
+  const ms = new Date(untilRFC).getTime() - Date.now();
+  if (isNaN(ms) || ms <= 0) return t('即将恢复');
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return t('剩 ') + s + 's';
+  if (s < 3600) return t('剩 ') + Math.floor(s / 60) + 'm';
+  return t('剩 ') + Math.floor(s / 3600) + 'h' + Math.floor((s % 3600) / 60) + 'm';
+}
+
+function provHealthCell(p) {
+  const h = _provHealth[p.id] || {};
+  const cool = (h.cooldowns || []).length;
+  let out = provQuotaHtml(p) + provHeatCellHtml(p);
+  if (cool) {
+    out += ' <button type="button" class="chip warn cooldown-chip" onclick="resetProviderCooldown(\'' + escAttr(p.id) + '\', \'\', this)" title="' + escAttr(t('点击清除该 Provider 全部冷却')) + '">⏳ ' + cool + ' · ' + fmtLeft(h.recoveryAt) + '</button>';
+  }
+  return out;
+}
+
+// 冷却快照条：所有活跃冷却按最早恢复排序，支持逐项/整组手动重置
+function renderProvCooldownBar(list) {
+  const names = {};
+  list.forEach(p => { names[p.id] = p.name; });
+  const rows = [];
+  list.forEach(p => {
+    (( _provHealth[p.id] || {}).cooldowns || []).forEach(c => {
+      rows.push({ id: p.id, name: p.name, model: c.model, until: c.until });
+    });
+  });
+  if (!rows.length) return '';
+  rows.sort((a, b) => new Date(a.until) - new Date(b.until));
+  return '<div class="prov-cooldown-bar"><div class="pcb-title">' + t('冷却中的 Provider · 按最早恢复排序') + '</div>' +
+    rows.map(r =>
+      '<div class="pcb-row">' +
+        '<span class="pcb-name">' + esc(r.name) + '</span>' +
+        '<span class="mono pcb-model">' + esc(r.model) + '</span>' +
+        '<span class="pcb-left">' + fmtLeft(r.until) + '</span>' +
+        '<button class="btn btn-sm" onclick="resetProviderCooldown(\'' + escAttr(r.id) + '\', \'' + escAttr(r.model) + '\', this)">' + t('重置') + '</button>' +
+      '</div>').join('') + '</div>';
+}
+
+async function resetProviderCooldown(id, model, btn) {
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
+  try {
+    const d = await api('POST', '/providers/cooldown-reset', { id: id, model: model || undefined });
+    const n = (d.data && d.data.removed) || 0;
+    toast(t('已清除 ') + n + t(' 条冷却'), 'success');
+    loadProviders();
+  } catch (e) { toast(t('重置失败: ') + e.message, 'error'); if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
+}
+
 
 // ========== §W3-C 上游自动检测：列表状态列 + 待审横幅 ==========
 let _provSync = {};
@@ -169,6 +266,26 @@ function showProviderEditor(p) {
   if (adv) adv.style.display = 'none';
   const title = _('providerEditorTitle');
   if (title) title.textContent = p ? t('编辑 Provider') : t('添加 Provider');
+  applyProviderForm(p);
+  if (!_connList.length) loadConnections();
+  const testOut = _('provTestResult');
+  if (testOut) testOut.innerHTML = '';
+  _provBaseData = p;
+  rebaselineProvForm();
+  // 关闭守卫：表单相对打开时基线有改动 → 先确认再丢弃（覆盖 Esc / 遮罩 / 取消按钮全部路径）
+  setDrawerGuard('providerEditor', async () => !provFormDirty() || (await showConfirm(t('有未保存的修改，确定放弃？'))));
+  setSaveBarCtx('provider', {
+    host: () => { const d = _('providerEditor'); return !!d && d.classList.contains('open'); },
+    dirty: provFormDirty,
+    diff: provFormChanges,
+    discard: discardProviderForm,
+    save: () => saveProvider(null),
+  });
+  openDrawer('providerEditor');
+}
+
+// 表单字段回填（showProviderEditor 与「放弃更改」共用）
+function applyProviderForm(p) {
   _('provName').value = p ? p.name : '';
   _('provBaseURL').value = p ? p.baseURL : '';
   _('provKey').value = p ? (p.apiKey || '') : '';
@@ -184,11 +301,45 @@ function showProviderEditor(p) {
   // 手动新建默认付费：整源标 free 会把付费模型误标为免费（审计 §9.2）；free 来源应由预设/导入按模型判定
   _('provFree').value = p ? String(!!p.free) : 'false';
   initConnPick(p ? (p.connectionIds && p.connectionIds.length ? p.connectionIds : (p.connectionId ? [p.connectionId] : [])) : []);
-  if (!_connList.length) loadConnections();
-  const testOut = _('provTestResult');
-  if (testOut) testOut.innerHTML = '';
   renderProvModelChips();
-  openDrawer('providerEditor');
+}
+
+// 脏检查基线：稳定 ASCII 键（切语言不影响快照）；展示时再经 PROV_FIELD_LABELS 本地化
+const PROV_FIELD_LABELS = {
+  name: '名称', baseURL: 'Base URL', apiKey: 'API Key', priority: '优先级', timeoutSec: '超时(秒)',
+  rpmLimit: '分钟请求上限', dailyLimit: '每日请求上限', proxyUrl: '出口代理', weight: '权重',
+  models: '模型', headers: '自定义请求头', enabled: '启用', free: '免费来源', connections: '连接池',
+};
+function serializeProvForm() {
+  return {
+    name: _('provName').value.trim(),
+    baseURL: _('provBaseURL').value.trim(),
+    apiKey: _('provKey').value.trim(),
+    priority: _('provPriority').value,
+    timeoutSec: _('provTimeout').value,
+    rpmLimit: _('provRpmLimit').value,
+    dailyLimit: _('provDailyLimit').value,
+    proxyUrl: _('provProxyUrl').value.trim(),
+    weight: _('provWeight').value,
+    models: _('provModels').value.split(',').map(s => s.trim()).filter(Boolean).join(', '),
+    headers: _('provHeaders').value.trim(),
+    enabled: _('provEnabled').value,
+    free: _('provFree').value,
+    connections: (_provConnSel || []).slice().sort().join(','),
+  };
+}
+let _provBaseData = null;
+let _provBaseJson = '';
+function rebaselineProvForm() { _provBaseJson = JSON.stringify(serializeProvForm()); }
+function provFormDirty() { return JSON.stringify(serializeProvForm()) !== _provBaseJson; }
+function provFormChanges() {
+  return diffFlat(JSON.parse(_provBaseJson || '{}'), serializeProvForm())
+    .map(ch => ({ label: t(PROV_FIELD_LABELS[ch.label] || ch.label), from: ch.from, to: ch.to }));
+}
+function discardProviderForm() {
+  applyProviderForm(_provBaseData);
+  rebaselineProvForm();
+  refreshSaveBar();
 }
 
 function hideProviderEditor() { closeDrawer('providerEditor'); }
@@ -197,6 +348,7 @@ function hideProviderEditor() { closeDrawer('providerEditor'); }
 function renderProvModelChips() {
   const box = _('provModelsChips');
   const ids = _('provModels').value.split(',').map(s => s.trim()).filter(Boolean);
+  refreshSaveBar(); // 覆盖程序化改值的路径（移除芯片 / 勾选模型回填），input 路径由委托触发
   const cnt = _('provModelsCount');
   if (cnt) cnt.textContent = ' · ' + (ids.length ? ids.length + t(' 个模型') : t('未选择'));
   if (!box) return;
@@ -239,11 +391,17 @@ async function saveProvider(btn) {
     connectionIds: _provConnSel.slice(),
     connectionId: '',
   };
+  // 变更预览：编辑已有 Provider 时列出与基线的字段差异，确认后才 POST；无改动直接关闭
+  const changes = provFormChanges();
+  if (!changes.length && _editingProviderId) { hideProviderEditor(); return; }
+  if (changes.length && !(await showDiffModal(changes))) return;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   const isNew = !payload.id;
   try {
     const d = await api('POST', '/providers/save', payload);
+    _provBaseData = payload; // 刚保存的状态即新基线（不重刷表单，避免服务端脱敏字段覆盖输入）
+    rebaselineProvForm();
     toast(t('Provider 已保存'), 'success');
     hideProviderEditor();
     loadProviders();
@@ -899,6 +1057,21 @@ function renderConnectionProviders() {
   box.innerHTML = group(t('已连接'), connected) + group(t('未连接'), unconnected);
 }
 
+// Token 到期倒计时：<1h 红（紧急）、<24h 琥珀、其余灰
+function connExpiryHtml(c) {
+  const ms = Number(c.expiresAt) || 0;
+  if (!ms) return '';
+  const left = ms - Date.now();
+  if (left <= 0) return '<div class="conn-expiry bad">' + t('Token 已过期') + '</div>';
+  const s = Math.floor(left / 1000);
+  let text;
+  if (s < 3600) text = t('剩 ') + Math.floor(s / 60) + 'm';
+  else if (s < 86400) text = t('剩 ') + Math.floor(s / 3600) + 'h' + Math.floor((s % 3600) / 60) + 'm';
+  else text = t('剩 ') + Math.floor(s / 86400) + 'd';
+  const tone = s < 3600 ? 'bad' : (s < 86400 ? 'warn' : '');
+  return '<div class="conn-expiry ' + tone + '" title="' + escAttr(new Date(ms).toLocaleString(LC())) + '">' + t('Token 到期 ') + text + '</div>';
+}
+
 // Wave-4: connection rows live on the merged Accounts page (账号与连接),
 // grouped by provider service, each with its own usage + per-model stats.
 function renderConnectionsList() {
@@ -935,7 +1108,7 @@ function renderConnectionsList() {
       '<td style="font-size:12px">' + esc(c.email || (c.providerSpecificData && c.providerSpecificData.orgId ? 'org ' + c.providerSpecificData.orgId : '—')) + '</td>' +
       '<td>' + (c.status === 'active'
         ? '<span class="status active"><span class="status-dot active"></span>' + t('已登录') + '</span>'
-        : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('需重新登录') + '</span>') + '</td>' +
+        : '<span class="status disabled"><span class="status-dot disabled"></span>' + t('需重新登录') + '</span>') + connExpiryHtml(c) + '</td>' +
       '<td style="font-size:12px">' + (c.usageCount
         ? formatNumber(c.usageCount) + ' ' + t('请求') + ' · ' + formatTokenCount(c.totalTokens || 0) + ' token'
         : '<span style="color:var(--text3)">—</span>') + '</td>' +
@@ -1114,6 +1287,7 @@ function toggleConnPick(id, on) {
   if (!on && i >= 0) _provConnSel.splice(i, 1);
   const cnt = _('provConnCount');
   if (cnt) cnt.textContent = ' · ' + (_provConnSel.length ? _provConnSel.length + t('已选') : t('未选择'));
+  refreshSaveBar(); // 委托监听先于本函数执行，需在此补一次脏检查
 }
 
 function renderConnPick() {

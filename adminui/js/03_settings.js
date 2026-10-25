@@ -88,57 +88,250 @@ function tuningNum(id) {
   return isNaN(n) ? 0 : n;
 }
 
-function parseAliasLines(text) {
+// ========== 结构化编辑器：模型别名 / 错误规则 / 排除模型 ==========
+const ERROR_RULE_ACTIONS = ['stop', 'stop_and_cooldown', 'continue', 'continue_and_cooldown'];
+
+function ensureModelIdList() {
+  const dl = _('modelIdList');
+  if (!dl || !_cachedModels.length) return;
+  if (dl.dataset.filled === String(_cachedModels.length)) return;
+  dl.innerHTML = '';
+  const seen = {};
+  _cachedModels.forEach(m => {
+    const id = m.id || m.ID;
+    if (!id || seen[id]) return;
+    seen[id] = true;
+    const opt = document.createElement('option');
+    opt.value = id;
+    dl.appendChild(opt);
+  });
+  dl.dataset.filled = String(_cachedModels.length);
+}
+
+function seCell(cls, el) {
+  const span = document.createElement('span');
+  span.className = cls;
+  span.appendChild(el);
+  return span;
+}
+
+function seInput(cls, placeholder, value, listId) {
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = cls;
+  inp.placeholder = placeholder;
+  inp.value = value || '';
+  if (listId) inp.setAttribute('list', listId);
+  return inp;
+}
+
+function addAliasRow(alias, target, provider) {
+  ensureModelIdList();
+  const box = _('tunAliasesEditor');
+  if (!box) return null;
+  const row = document.createElement('div');
+  row.className = 'se-row alias-row';
+  const a = seInput('se-alias', t('别名'), alias);
+  const tgt = seInput('se-target', t('目标模型'), target, 'modelIdList');
+  const prov = seInput('se-provider', t('Provider（可选）'), provider);
+  const rem = document.createElement('button');
+  rem.type = 'button';
+  rem.className = 'btn btn-sm btn-danger se-remove';
+  rem.textContent = '✕';
+  rem.title = t('移除');
+  rem.addEventListener('click', () => { row.remove(); checkAliasDupes(); refreshSaveBar(); });
+  a.addEventListener('input', checkAliasDupes);
+  row.appendChild(a);
+  row.appendChild(document.createTextNode(' → '));
+  row.appendChild(tgt);
+  row.appendChild(document.createTextNode(' @ '));
+  row.appendChild(prov);
+  row.appendChild(rem);
+  box.appendChild(row);
+  checkAliasDupes();
+  return row;
+}
+
+function readAliasRows() {
   const out = [];
-  (text || '').split('\n').forEach(line => {
-    line = line.trim();
-    if (!line) return;
-    const idx = line.indexOf('->');
-    if (idx < 0) return;
-    let target = line.slice(idx + 2).trim();
-    let provider = '';
-    const at = target.lastIndexOf(' @');
-    if (at >= 0) { provider = target.slice(at + 2).trim(); target = target.slice(0, at).trim(); }
-    out.push({ alias: line.slice(0, idx).trim(), target: target, provider: provider });
+  document.querySelectorAll('#tunAliasesEditor .alias-row').forEach(r => {
+    const alias = r.querySelector('.se-alias').value.trim();
+    const target = r.querySelector('.se-target').value.trim();
+    const provider = r.querySelector('.se-provider').value.trim();
+    if (!alias && !target) return;
+    out.push({ alias: alias, target: target, provider: provider });
   });
   return out;
 }
 
-function parseRuleLines(text) {
+function checkAliasDupes() {
+  const seen = {}, dups = {};
+  document.querySelectorAll('#tunAliasesEditor .alias-row').forEach(r => {
+    const inp = r.querySelector('.se-alias');
+    const v = inp.value.trim().toLowerCase();
+    if (!v) { inp.classList.remove('dup'); return; }
+    if (seen[v]) { inp.classList.add('dup'); dups[v] = true; } else { seen[v] = true; inp.classList.remove('dup'); }
+  });
+  const warn = _('aliasDupWarn');
+  const n = Object.keys(dups).length;
+  if (warn) {
+    warn.hidden = n === 0;
+    warn.textContent = n ? t('别名重复：保存会被拒绝') + '（' + n + '）' : '';
+  }
+}
+
+function addErrorRuleRow(codes, match, action, regex) {
+  const box = _('tunErrorRulesEditor');
+  if (!box) return null;
+  const row = document.createElement('div');
+  row.className = 'se-row rule-row';
+  const codesInp = seInput('se-codes', t('状态码 429,503'), (codes || []).join(','));
+  codesInp.style.width = '110px';
+  const matchInp = seInput('se-match', t('错误文本 / 正则'));
+  matchInp.value = match || '';
+  const actSel = document.createElement('select');
+  actSel.className = 'se-action';
+  ERROR_RULE_ACTIONS.forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a; opt.textContent = a;
+    actSel.appendChild(opt);
+  });
+  actSel.value = action || 'continue';
+  const regexWrap = document.createElement('label');
+  regexWrap.className = 'se-regex';
+  const regexInp = document.createElement('input');
+  regexInp.type = 'checkbox';
+  regexInp.checked = !!regex;
+  regexWrap.appendChild(regexInp);
+  regexWrap.appendChild(document.createTextNode(' regex'));
+  const up = document.createElement('button');
+  up.type = 'button'; up.className = 'btn btn-sm se-move'; up.textContent = '↑';
+  up.title = t('上移');
+  up.addEventListener('click', () => { const prev = row.previousElementSibling; if (prev) { row.parentNode.insertBefore(row, prev); refreshSaveBar(); } });
+  const down = document.createElement('button');
+  down.type = 'button'; down.className = 'btn btn-sm se-move'; down.textContent = '↓';
+  down.title = t('下移');
+  down.addEventListener('click', () => { const next = row.nextElementSibling; if (next) { row.parentNode.insertBefore(next, row); refreshSaveBar(); } });
+  const rem = document.createElement('button');
+  rem.type = 'button'; rem.className = 'btn btn-sm btn-danger se-remove'; rem.textContent = '✕';
+  rem.title = t('移除');
+  rem.addEventListener('click', () => { row.remove(); refreshSaveBar(); });
+  row.appendChild(codesInp);
+  row.appendChild(matchInp);
+  row.appendChild(actSel);
+  row.appendChild(regexWrap);
+  row.appendChild(up);
+  row.appendChild(down);
+  row.appendChild(rem);
+  box.appendChild(row);
+  return row;
+}
+
+function readErrorRuleRows() {
   const out = [];
-  (text || '').split('\n').forEach(line => {
-    line = line.trim();
-    if (!line) return;
-    const rule = { statusCodes: [], match: '', action: '', regex: false };
-    let known = false;
-    line.split(';').forEach(token => {
-      token = token.trim();
-      if (!token) return;
-      const eq = token.indexOf('=');
-      if (eq < 0) return;
-      const key = token.slice(0, eq).trim().toLowerCase();
-      const val = token.slice(eq + 1).trim();
-      if (key === 'codes') {
-        rule.statusCodes = val.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
-        known = true;
-      } else if (key === 'match') {
-        rule.match = val;
-        known = true;
-      } else if (key === 'action') {
-        rule.action = val;
-        known = true;
-      } else if (key === 'regex') {
-        rule.regex = val === '1' || val.toLowerCase() === 'true';
-        known = true;
-      }
+  document.querySelectorAll('#tunErrorRulesEditor .rule-row').forEach(r => {
+    const codes = r.querySelector('.se-codes').value.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+    const match = r.querySelector('.se-match').value.trim();
+    const rule = {
+      statusCodes: codes,
+      match: match,
+      action: r.querySelector('.se-action').value,
+      regex: r.querySelector('.se-regex input').checked
+    };
+    if (!codes.length && !match) return;
+    out.push(rule);
+  });
+  return out;
+}
+
+function excludedModelIds() {
+  return _cachedModels.map(m => m.id || m.ID).filter(Boolean);
+}
+
+function wildcardToRegex(pattern) {
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, ch => ch === '*' ? '.*' : '\\' + ch);
+  return new RegExp('^' + escaped + '$', 'i');
+}
+
+function countExcludedMatch(pattern) {
+  pattern = pattern.trim();
+  if (!pattern) return 0;
+  const ids = excludedModelIds();
+  if (pattern.indexOf('*') === -1) return ids.filter(id => id.toLowerCase() === pattern.toLowerCase()).length;
+  const re = wildcardToRegex(pattern);
+  return ids.filter(id => re.test(id)).length;
+}
+
+function updateExcludedMatchCounts() {
+  const box = _('excludedMatchCounts');
+  if (!box) return;
+  box.innerHTML = '';
+  const raw = (_('tunExcluded').value || '').trim();
+  if (!raw || !_cachedModels.length) return;
+  raw.split(',').map(s => s.trim()).filter(Boolean).forEach(pattern => {
+    const n = countExcludedMatch(pattern);
+    const chip = document.createElement('span');
+    chip.className = 'excl-count' + (n ? '' : ' none');
+    chip.textContent = pattern + ' → ' + n;
+    box.appendChild(chip);
+  });
+}
+
+function toggleExcludedPicker() {
+  const p = _('excludedPicker');
+  if (!p) return;
+  const show = p.hidden;
+  p.hidden = !show;
+  if (show) renderExcludedPicker();
+}
+
+function renderExcludedPicker() {
+  const list = _('excludedPickerList');
+  if (!list) return;
+  list.innerHTML = '';
+  ensureModelIdList();
+  const current = new Set((_('tunExcluded').value || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+  const q = (_('excludedPickerSearch').value || '').trim().toLowerCase();
+  const ids = [...new Set(excludedModelIds())].sort();
+  const visible = ids.filter(id => !q || id.toLowerCase().indexOf(q) !== -1).slice(0, 200);
+  if (!ids.length) {
+    const hint = document.createElement('div');
+    hint.className = 'excluded-picker-empty';
+    hint.textContent = t('模型列表尚未同步，先前往模型页同步后再勾选');
+    list.appendChild(hint);
+    return;
+  }
+  visible.forEach(id => {
+    const label = document.createElement('label');
+    label.className = 'excluded-picker-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = current.has(id.toLowerCase());
+    cb.addEventListener('change', () => {
+      const parts = (_('tunExcluded').value || '').split(',').map(s => s.trim()).filter(Boolean);
+      const idxLower = parts.map(s => s.toLowerCase());
+      const i = idxLower.indexOf(id.toLowerCase());
+      if (cb.checked && i === -1) parts.push(id);
+      if (!cb.checked && i !== -1) parts.splice(i, 1);
+      _('tunExcluded').value = parts.join(', ');
+      updateExcludedMatchCounts();
+      refreshSaveBar();
     });
-    if (known) out.push(rule);
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + id));
+    list.appendChild(label);
   });
-  return out;
+  if (visible.length < ids.filter(id => !q || id.toLowerCase().indexOf(q) !== -1).length) {
+    const more = document.createElement('div');
+    more.className = 'excluded-picker-empty';
+    more.textContent = t('仅显示前 200 项，请缩小搜索范围');
+    list.appendChild(more);
+  }
 }
 
-async function saveTuning(btn) {
-  const payload = {
+// ========== 调优参数：脏检查基线 + 变更预览 ==========
+function collectTuningPayload() {
+  return {
     retry: {
       maxRounds: tuningNum('tunRetryRounds'),
       maxCredentialsPerRound: tuningNum('tunRetryCreds'),
@@ -159,10 +352,62 @@ async function saveTuning(btn) {
     maxRequestBodyBytes: tuningNum('tunMaxBodyMB') * 1048576,
     passthroughHeaders: _('tunPassthrough').value === 'true',
     nonstreamKeepaliveSeconds: tuningNum('tunNonstreamKeepalive'),
-    modelAliases: parseAliasLines(_('tunAliases').value),
+    modelAliases: readAliasRows(),
     excludedModels: (_('tunExcluded').value || '').split(',').map(s => s.trim()).filter(Boolean),
-    requestErrorRules: parseRuleLines(_('tunErrorRules').value),
+    requestErrorRules: readErrorRuleRows(),
   };
+}
+let _tunBaseJson = '';
+let _tunBaseCfg = null;
+function tuningDirty() { return _tunBaseJson !== '' && JSON.stringify(collectTuningPayload()) !== _tunBaseJson; }
+function discardTuning() { if (_tunBaseCfg) fillTuning(_tunBaseCfg); }
+// 扁平化为「点号字段 -> 字符串值」，供 diffFlat 比较（数组/对象统一 fmtDiffVal 序列化）
+function flattenTuning(obj, prefix, out) {
+  Object.keys(obj || {}).forEach(k => {
+    const v = obj[k];
+    if (v && typeof v === 'object' && !Array.isArray(v)) flattenTuning(v, prefix + k + '.', out);
+    else out[prefix + k] = fmtDiffVal(v);
+  });
+  return out;
+}
+const TUN_FIELD_LABELS = {
+  'retry.maxRounds': '最大回退轮次',
+  'retry.maxCredentialsPerRound': '每轮账号上限',
+  'retry.maxIntervalSeconds': '轮间隔上限(秒)',
+  'retry.transientCooldownSeconds': '瞬时错误冷却(秒)',
+  'retry.maxFailoverModels': '故障转移模型上限',
+  'stream.keepaliveSeconds': 'SSE 心跳间隔(秒)',
+  'stream.bootstrapRetries': '首包前重试次数',
+  'stream.firstContentTimeoutSeconds': '首内容超时(秒)',
+  'stream.suppressKeepaliveBeforeFirstToken': '首 token 前抑制心跳',
+  'sessionAffinity.enabled': '会话亲和',
+  'sessionAffinity.ttlSeconds': '亲和绑定 TTL(秒)',
+  'maxRequestBodyBytes': '请求体上限(MB)',
+  'passthroughHeaders': '透传上游响应头',
+  'nonstreamKeepaliveSeconds': '非流式占位心跳(秒)',
+  modelAliases: '模型别名',
+  excludedModels: '排除模型',
+  requestErrorRules: '错误规则',
+};
+function tuningDiff() {
+  if (_tunBaseJson === '') return [];
+  return diffFlat(flattenTuning(JSON.parse(_tunBaseJson), '', {}), flattenTuning(collectTuningPayload(), '', {}))
+    .map(ch => {
+      let from = ch.from, to = ch.to;
+      if (ch.label === 'maxRequestBodyBytes') {
+        const mb = v => v === '' ? '' : (parseInt(v, 10) / 1048576) + ' MB';
+        from = mb(from); to = mb(to);
+      }
+      return { label: t(TUN_FIELD_LABELS[ch.label] || ch.label), from: from, to: to };
+    });
+}
+
+async function saveTuning(btn) {
+  const dup = document.querySelector('#tunAliasesEditor .se-alias.dup');
+  if (dup) { toast(t('存在重复别名，请先修正'), 'error'); return; }
+  const payload = collectTuningPayload();
+  const changes = tuningDiff();
+  if (changes.length && !(await showDiffModal(changes))) return;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span> ' + t('保存中...'); }
   try {
@@ -193,17 +438,28 @@ function fillTuning(c) {
   num('tunAffinityTTL', a.ttlSeconds);
   if (_('tunMaxBodyMB')) _('tunMaxBodyMB').value = c.maxRequestBodyBytes ? String(Math.round(c.maxRequestBodyBytes / 1048576)) : '';
   if (_('tunPassthrough')) _('tunPassthrough').value = String(!!c.passthroughHeaders);
-  if (_('tunAliases')) _('tunAliases').value = (c.modelAliases || []).map(al =>
-    al.alias + ' -> ' + al.target + (al.provider ? ' @' + al.provider : '')).join('\n');
+  const aliasBox = _('tunAliasesEditor');
+  if (aliasBox) {
+    aliasBox.innerHTML = '';
+    (c.modelAliases || []).forEach(al => addAliasRow(al.alias, al.target, al.provider));
+  }
+  const ruleBox = _('tunErrorRulesEditor');
+  if (ruleBox) {
+    ruleBox.innerHTML = '';
+    (c.requestErrorRules || []).forEach(rl => addErrorRuleRow(rl.statusCodes, rl.match, rl.action, rl.regex));
+  }
   if (_('tunExcluded')) _('tunExcluded').value = (c.excludedModels || []).join(', ');
-  if (_('tunErrorRules')) _('tunErrorRules').value = (c.requestErrorRules || []).map(rl => {
-    const parts = [];
-    if (rl.statusCodes && rl.statusCodes.length) parts.push('codes=' + rl.statusCodes.join(','));
-    if (rl.match) parts.push('match=' + rl.match);
-    if (rl.action && rl.action !== 'continue') parts.push('action=' + rl.action);
-    if (rl.regex) parts.push('regex=1');
-    return parts.join('; ');
-  }).join('\n');
+  updateExcludedMatchCounts();
+  // 回填完成 → 以此为脏检查基线；注册保存条（host=路由页可见）
+  _tunBaseJson = JSON.stringify(collectTuningPayload());
+  _tunBaseCfg = c;
+  setSaveBarCtx('tuning', {
+    host: () => { const el = document.querySelector('.nav-item.active'); return !!el && el.dataset.tab === 'routing'; },
+    dirty: tuningDirty,
+    diff: tuningDiff,
+    discard: discardTuning,
+    save: () => saveTuning(null),
+  });
 }
 
 // 保存监听地址：保存后程序自动重启监听（立即生效）
@@ -236,6 +492,21 @@ async function savePassword(btn) {
     await loadConfig();
   } catch (e) { toast(t('保存失败: ') + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
+}
+
+// 清除全部后台登录会话（含当前浏览器）：共享机器上强制重新登录，不动凭据数据
+async function clearAdminSessions(btn) {
+  if (!(await showConfirm(t('确认清除全部后台登录会话？所有浏览器（包括当前页面）都需要重新登录。')))) return;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading"></span>'; }
+  try {
+    await api('POST', '/admin-sessions/clear');
+    toast(t('已清除全部登录会话'), 'success');
+    setTimeout(() => location.reload(), 400); // 当前会话同被作废，重载后进入登录页
+  } catch (e) {
+    toast(t('操作失败: ') + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
 }
 
 function addHeaderRow() {
@@ -318,3 +589,45 @@ async function saveZenHeaders(btn) {
   finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
 }
 
+
+// ========== 版本更新检查（关于页；服务端缓存 6h，?force=1 强制刷新） ==========
+async function checkForUpdate(force, btn) {
+  const el = _('aboutVerCheck');
+  if (!el) return;
+  if (btn) btn.disabled = true;
+  el.textContent = t('检查中...');
+  el.style.color = 'var(--text3)';
+  try {
+    const d = await api('GET', '/version-check' + (force ? '?force=1' : ''));
+    const v = d.data || {};
+    el.textContent = '';
+    const span = document.createElement('span');
+    if (v.error && !v.latest) {
+      span.textContent = t('检查失败') + ': ' + v.error;
+      el.style.color = 'var(--red)';
+    } else if (v.updateAvailable) {
+      span.textContent = t('发现新版本 ') + v.latest + '（' + t('当前 ') + (v.current || '-') + '）';
+      el.style.color = 'var(--yellow)';
+    } else if (!/^v?\d/.test(v.current || '')) {
+      span.textContent = t('开发版本') + (v.latest ? ' · ' + t('最新 ') + v.latest : '');
+      el.style.color = 'var(--text2)';
+    } else {
+      span.textContent = t('已是最新版本') + ' · ' + v.current;
+      el.style.color = 'var(--green)';
+    }
+    el.appendChild(span);
+    if (v.updateAvailable && v.releaseURL) {
+      const a = document.createElement('a');
+      a.href = '#';
+      a.textContent = t('下载更新');
+      a.style.cssText = 'color:var(--accent);cursor:pointer;margin-left:8px;font-size:12px';
+      a.onclick = function () { openExternal(v.releaseURL); return false; };
+      el.appendChild(document.createTextNode(' '));
+      el.appendChild(a);
+    }
+    _verCheckDone = true;
+  } catch (e) {
+    el.textContent = t('检查失败') + ': ' + e.message;
+    el.style.color = 'var(--red)';
+  } finally { if (btn) btn.disabled = false; }
+}

@@ -44,6 +44,24 @@ func TestConfigGetExposesTuningPolicies(t *testing.T) {
 	}
 }
 
+func TestConfigGetExposesBuildInfo(t *testing.T) {
+	h, _ := newConfigHandler()
+	rec := httptest.NewRecorder()
+	h.Get(rec, httptest.NewRequest(http.MethodGet, "/admin/api/config", nil))
+	if strings.Contains(rec.Body.String(), `"build"`) {
+		t.Fatal("build should be omitted when callback absent")
+	}
+
+	h.Build = func() map[string]any { return map[string]any{"commit": "abc1234", "goVersion": "go1.25.0"} }
+	rec = httptest.NewRecorder()
+	h.Get(rec, httptest.NewRequest(http.MethodGet, "/admin/api/config", nil))
+	data := decodeEnvelope(t, rec).Data.(map[string]any)
+	build, ok := data["build"].(map[string]any)
+	if !ok || build["commit"] != "abc1234" {
+		t.Fatalf("build = %v", data["build"])
+	}
+}
+
 func TestConfigUpdateAppliesTuningPatches(t *testing.T) {
 	h, f := newConfigHandler()
 	body := `{

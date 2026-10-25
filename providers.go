@@ -1217,7 +1217,11 @@ func callCustomProviderAPINamed(params map[string]any, stream bool, name string)
 // ============================================================================
 
 func handleProvidersList(w http.ResponseWriter, r *http.Request) {
-	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{"providers": listProviders()}})
+	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: map[string]any{
+		"providers":     listProviders(),
+		"health":        providerHealthSnapshot(),
+		"accountHealth": accountRecentOutcomes(),
+	}})
 }
 
 func handleProviderSave(w http.ResponseWriter, r *http.Request) {
@@ -1401,12 +1405,13 @@ func handleProviderTest(w http.ResponseWriter, r *http.Request) {
 	writeAPI(w, http.StatusOK, apiResponse{Success: true, Data: runProviderMiniTest(target, model)})
 }
 
-// runProviderMiniTest 用 callProvider 发一条 min-token（16 tokens / 单条 "hi"）
+// runProviderMiniTest 用 callProvider 发一条安全预算（1024 tokens / 单条 "hi"）
 // 非流式补全，返回测试结果 map：durationMs/model/ok,error?/inputTokens?/outputTokens?。
+// 预算不能用 16：推理模型会整份耗在 reasoning 上导致上游空正文假失败（issue #32）。
 func runProviderMiniTest(p *CustomProvider, model string) map[string]any {
 	params := map[string]any{
 		"model":      model,
-		"max_tokens": 16,
+		"max_tokens": 1024,
 		"messages":   []any{map[string]any{"role": "user", "content": "hi"}},
 	}
 	started := time.Now()

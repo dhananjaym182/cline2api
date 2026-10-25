@@ -45,7 +45,7 @@ jobs:
           CGO_LDFLAGS: ${{ runner.os == 'macOS' && '-framework UniformTypeIdentifiers' || '' }}
           # tag 触发时为 v1.3.0 形式；workflow_dispatch 手动触发时为分支名
           APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
-        run: go build -tags "desktop production" -trimpath -ldflags="-s -w -X main.appVersion=${APP_VERSION} ${{ matrix.ldflags }}" -o ${{ matrix.artifact }} .
+        run: go build -tags "desktop production" -trimpath -ldflags="-s -w -X main.appVersion=${APP_VERSION} -X main.appGitCommit=$(git rev-parse --short HEAD) -X main.appBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) ${{ matrix.ldflags }}" -o ${{ matrix.artifact }} .
 
       - name: Verify selfcheck
         if: runner.os != 'Linux'

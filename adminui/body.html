@@ -13,6 +13,10 @@
     <button type="button" class="nav-collapse-btn" onclick="toggleNav()" title="收起侧栏" aria-label="收起侧栏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg></button>
   </div>
   <div class="sidebar-nav" role="navigation" aria-label="主导航">
+  <div class="nav-item nav-pinned" data-tab="quickstart">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    <span class="nav-label">快速开始</span>
+  </div>
   <div class="nav-section">
     <div class="nav-section-label">概览</div>
     <div class="nav-item active" data-tab="dashboard">
@@ -23,23 +27,16 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
       <span class="nav-label">请求日志</span>
     </div>
-  </div>
-  <div class="nav-section">
-    <div class="nav-section-label">账户</div>
-    <div class="nav-item" data-tab="accounts">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <span class="nav-label">账号与连接</span>
+    <div class="nav-item" data-tab="quota">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.87"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+      <span class="nav-label">配额与预算</span>
     </div>
   </div>
   <div class="nav-section">
-    <div class="nav-section-label">配置</div>
+    <div class="nav-section-label">模型与路由</div>
     <div class="nav-item" data-tab="routing">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v3a3 3 0 0 0 3 3h6"/></svg>
       <span class="nav-label">路由与模型</span>
-    </div>
-    <div class="nav-item" data-tab="upstreams">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-      <span class="nav-label">上游服务</span>
     </div>
     <div class="nav-item" data-tab="providers">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
@@ -49,40 +46,45 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
       <span class="nav-label">模型组合</span>
     </div>
+    <div class="nav-item" data-tab="upstreams">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      <span class="nav-label">上游服务</span>
+    </div>
   </div>
   <div class="nav-section">
-    <div class="nav-section-label">系统</div>
+    <div class="nav-section-label">账户与安全</div>
+    <div class="nav-item" data-tab="accounts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span class="nav-label">账号与连接</span>
+    </div>
     <div class="nav-item" data-tab="security">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span class="nav-label">密钥与安全</span>
     </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">系统</div>
     <div class="nav-item" data-tab="about">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
       <span class="nav-label">关于</span>
     </div>
   </div>
   </div>
-  <div class="sidebar-footer">
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-      <span style="font-weight:600;color:var(--text)">Cline2API</span>
-      <span id="footerVersion" style="font-size:11px;opacity:0.7">dev</span>
-    </div>
-    <div style="margin-bottom:4px">API: <span id="footerApiAddr">127.0.0.1:3457</span></div>
-    <div><a href="#" onclick="openExternal('https://github.com/luawei1/cline2api');return false">GitHub</a> · <a href="#" onclick="openExternal('https://github.com/luawei1/cline2api/issues');return false">反馈</a> · MIT</div>
-  </div>
-  <div class="sidebar-lang">
-    <div class="seg theme-switch" id="themeSwitch" role="group" aria-label="主题">
-      <button type="button" data-theme-opt="light" onclick="setTheme('light')" title="浅色" aria-label="浅色"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
-      <button type="button" data-theme-opt="dark" onclick="setTheme('dark')" title="深色" aria-label="深色"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
-    </div>
-    <div class="lang-switch" role="group" aria-label="语言">
-      <button type="button" id="langZh" onclick="setLang('zh')" aria-pressed="true">中文</button>
-      <button type="button" id="langEn" onclick="setLang('en')" aria-pressed="false">English</button>
-    </div>
-  </div>
 </div>
+<button type="button" class="nav-edge-toggle" id="navEdgeToggle" onclick="toggleNav()" title="收起侧栏" aria-label="收起侧栏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
 
 <div class="main">
+<div class="top-tools">
+  <button type="button" class="tool-btn" id="refreshAllBtn" onclick="refreshAll(this)" title="刷新当前页" aria-label="刷新当前页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+  <div class="seg theme-switch" id="themeSwitch" role="group" aria-label="主题">
+    <button type="button" data-theme-opt="light" onclick="setTheme('light')" title="浅色" aria-label="浅色"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+    <button type="button" data-theme-opt="dark" onclick="setTheme('dark')" title="深色" aria-label="深色"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+  </div>
+  <div class="seg lang-switch" role="group" aria-label="语言">
+    <button type="button" id="langZh" onclick="setLang('zh')" aria-pressed="true">中文</button>
+    <button type="button" id="langEn" onclick="setLang('en')" aria-pressed="false">English</button>
+  </div>
+</div>
 <div class="content-shell">
 
 <div id="tab-dashboard" class="tab-panel">
@@ -90,6 +92,53 @@
     <div>
       <div class="large-title">仪表盘</div>
       <div class="large-subtitle">账号池容量与用量总览</div>
+    </div>
+  </div>
+  <div class="metric-section">
+    <div class="dash-hero" id="dashHero">
+      <div class="dash-hero-main">
+        <div class="dash-verdict-row">
+          <span class="dash-dot" id="dashLiveDot"></span>
+          <span class="dash-verdict" id="dashVerdict">加载中…</span>
+          <span class="dash-live-badge" id="dashLiveBadge" hidden>LIVE</span>
+        </div>
+        <div class="dash-count"><b id="dashReqCount">0</b><span id="dashCountLabel">窗口内请求</span></div>
+        <div class="dash-ratio" role="img" aria-label="成功失败占比"><span class="ratio-ok" id="dashRatioOk" style="width:100%"></span><span class="ratio-err" id="dashRatioErr" style="width:0%"></span></div>
+        <div class="dash-ratio-labels">
+          <span class="ok-lbl">✓ <b id="dashOkCount">0</b></span>
+          <span class="err-lbl">✗ <b id="dashErrCount">0</b></span>
+          <span class="rate-lbl" id="dashRateLabel">—</span>
+        </div>
+        <div class="dash-ranges" role="group" aria-label="时间窗口">
+          <button type="button" class="chip range" data-hours="1" onclick="setDashRange(1, this)">1h</button>
+          <button type="button" class="chip range active" data-hours="24" onclick="setDashRange(24, this)">24h</button>
+          <button type="button" class="chip range" data-hours="72" onclick="setDashRange(72, this)">3d</button>
+          <button type="button" class="chip range" data-hours="168" onclick="setDashRange(168, this)">7d</button>
+        </div>
+      </div>
+      <div class="dash-kpis">
+        <div class="dash-kpi"><div class="kpi-num" id="dashKpiLatency">—</div><div class="kpi-label">平均时延</div><div class="kpi-meter"><span id="dashMeterLatency"></span></div></div>
+        <div class="dash-kpi"><div class="kpi-num" id="dashKpiTtft">—</div><div class="kpi-label">首字延迟</div><div class="kpi-meter"><span id="dashMeterTtft"></span></div></div>
+        <div class="dash-kpi"><div class="kpi-num" id="dashKpiTokens">—</div><div class="kpi-label">窗口 Token</div><div class="kpi-meter"><span id="dashMeterTokens"></span></div></div>
+        <div class="dash-kpi"><div class="kpi-num" id="dashKpiFallback">—</div><div class="kpi-label">降级切换</div><div class="kpi-meter"><span id="dashMeterFallback"></span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="metric-section">
+    <div class="metric-heading">吞吐趋势</div>
+    <div class="dash-chart" id="dashThroughput"><div class="sk-stack"><span class="skeleton"></span></div></div>
+  </div>
+  <div class="metric-section">
+    <div class="dash-grid">
+      <div class="dash-col">
+        <div class="metric-heading">上游分布</div>
+        <div class="dash-fleet" id="dashFleet"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span></div></div>
+        <div class="dash-runtime" id="dashRuntime"></div>
+      </div>
+      <div class="dash-col">
+        <div class="metric-heading">热门模型</div>
+        <div class="dash-models" id="dashModels"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span></div></div>
+      </div>
     </div>
   </div>
   <div class="metric-section">
@@ -310,18 +359,34 @@
       <div class="large-title">请求日志</div>
       <div class="large-subtitle">查看每次请求的 Token 消耗、缓存、耗时与流式速度</div>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-primary" id="logFollowBtn" onclick="toggleLogFollow(this)" title="自动跟随新日志">跟随新日志</button>
+      <button class="btn btn-sm" onclick="downloadLogs(this)" title="下载当前筛选结果">下载</button>
+      <button class="btn btn-sm" onclick="downloadErrorLogs(this)" title="仅下载失败请求">下载错误日志</button>
+      <button class="btn btn-sm" onclick="toggleLogFullscreen(this)" title="全屏">全屏</button>
+      <button class="btn btn-sm btn-danger" onclick="clearRequestLogs(this)" title="清空全部日志">清空</button>
       <button class="btn btn-sm" onclick="loadRequestLogs(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
     </div>
+  </div>
+  <div class="log-toolbar">
+    <div class="log-chips" id="logFilterChips" role="group" aria-label="快捷筛选"></div>
+    <div class="log-filters">
+      <select id="logFilterProtocol" onchange="onLogProtoFilterChange()" aria-label="协议筛选"><option value="">全部协议</option></select>
+      <input type="search" id="logSearch" placeholder="搜索模型 / 账号 / 请求 ID…" oninput="onLogSearchInput()">
+    </div>
+  </div>
+  <div class="log-resume-bar" id="logResumeBar" hidden>
+    <button class="btn btn-sm btn-primary" onclick="resumeLogFollow()">恢复跟随</button>
+    <span id="logResumeText"></span>
   </div>
   <div class="section">
     <div class="section-body flush">
       <table class="log-table">
         <thead>
-          <tr><th>时间</th><th>账号</th><th>协议</th><th>模型</th><th>输入</th><th>输出</th><th>缓存</th><th>总</th><th>耗时</th><th>TTFT</th><th>tok/s</th><th>状态</th></tr>
+          <tr><th>时间</th><th>账号</th><th>协议</th><th>模型</th><th>输入</th><th>输出</th><th>缓存</th><th>总</th><th>耗时</th><th>TTFT</th><th>tok/s</th><th>状态</th><th>操作</th></tr>
         </thead>
         <tbody id="logTableBody">
-          <tr><td colspan="12"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></td></tr>
+          <tr><td colspan="13"><div class="sk-stack"><span class="skeleton"></span><span class="skeleton w70"></span><span class="skeleton w45"></span></div></td></tr>
         </tbody>
       </table>
       <div id="logCards" class="log-cards"></div>
@@ -329,6 +394,17 @@
   </div>
   <div id="logLoadMore" style="display:none;text-align:center;padding:16px">
     <button class="btn btn-primary" onclick="loadRequestLogs(false)">加载更多</button>
+  </div>
+  <div id="logDetailModal" class="overlay-modal" onclick="if(event.target===this)closeLogDetail()">
+    <div class="modal-card modal-card-col w760" role="dialog" aria-modal="true" aria-label="请求详情">
+      <div class="modal-title">请求详情 <span class="mono" id="logDetailId"></span></div>
+      <div class="modal-sub" id="logDetailSub"></div>
+      <div class="log-detail-body" id="logDetailBody"></div>
+      <div class="modal-actions">
+        <button class="btn btn-sm" onclick="copyLogDetailJson(this)">复制 JSON</button>
+        <button class="btn btn-sm" onclick="closeLogDetail()">关闭弹窗</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -390,6 +466,15 @@
             <button class="btn btn-primary" onclick="savePassword(this)">保存</button>
           </div>
           <div style="font-size:12px;color:var(--text3);margin-top:4px">设置后访问管理后台需输入密码，默认无密码</div>
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <div class="field" style="flex:1">
+          <label>后台登录会话</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn" onclick="clearAdminSessions(this)">清除全部登录会话</button>
+            <span style="font-size:12px;color:var(--text3)">强制所有浏览器（包括当前页面）重新登录，凭据数据不受影响</span>
+          </div>
         </div>
       </div>
     </div>
@@ -508,13 +593,29 @@
         </div>
       </div>
       <div class="form-group-label">模型别名 / 排除 / 错误规则</div>
-      <div class="form-row">
-        <div class="field" style="flex:1"><label>模型别名（每行一条：别名 -> 目标 [@Provider]）</label><textarea id="tunAliases" rows="3" style="font-family:ui-monospace,monospace;font-size:12px" placeholder="fast -> z-ai/glm-5.3-flash @OpenRouter"></textarea></div>
-        <div class="field" style="flex:1"><label>错误规则（每行：codes=429; match=文本或正则; action=stop|stop_and_cooldown|continue|continue_and_cooldown; regex=1）</label><textarea id="tunErrorRules" rows="3" style="font-family:ui-monospace,monospace;font-size:12px" placeholder="codes=429; match=slow pool; action=continue_and_cooldown"></textarea></div>
+      <div class="field">
+        <label>模型别名（请求名 -> 实际模型，可选限定 Provider）</label>
+        <div id="tunAliasesEditor" class="structured-editor"></div>
+        <div class="se-foot"><button type="button" class="btn btn-sm" onclick="addAliasRow()">+ 添加别名</button><span id="aliasDupWarn" class="se-warn" hidden></span></div>
       </div>
-      <div class="form-row">
-        <div class="field" style="flex:1"><label>排除模型（逗号分隔，支持 * 通配；对全部来源生效）</label><input type="text" id="tunExcluded" placeholder="gpt-4-*, *-preview" style="font-family:ui-monospace,monospace"></div>
+      <div class="field">
+        <label>错误规则（命中上游错误后执行的调度动作，按顺序匹配）</label>
+        <div id="tunErrorRulesEditor" class="structured-editor"></div>
+        <div class="se-foot"><button type="button" class="btn btn-sm" onclick="addErrorRuleRow()">+ 添加规则</button></div>
       </div>
+      <div class="field">
+        <label>排除模型（逗号分隔，支持 * 通配；对全部来源生效）</label>
+        <input type="text" id="tunExcluded" placeholder="gpt-4-*, *-preview" style="font-family:ui-monospace,monospace" oninput="updateExcludedMatchCounts()">
+        <div class="se-foot">
+          <button type="button" class="btn btn-sm" onclick="toggleExcludedPicker()" id="excludedPickerBtn">选择模型</button>
+          <span id="excludedMatchCounts" class="excluded-matches"></span>
+        </div>
+        <div id="excludedPicker" class="excluded-picker" hidden>
+          <input type="search" id="excludedPickerSearch" placeholder="搜索模型…" oninput="renderExcludedPicker()">
+          <div id="excludedPickerList" class="excluded-picker-list"></div>
+        </div>
+      </div>
+      <datalist id="modelIdList"></datalist>
       <div class="form-actions">
         <button class="btn btn-primary" onclick="saveTuning(this)">保存调优参数</button>
         <span style="font-size:12px;color:var(--text3)">非法别名/规则会整次拒绝并提示，不会部分生效</span>
@@ -545,14 +646,20 @@
           <option value="">全部状态</option>
           <option value="enabled">已启用</option>
           <option value="disabled">已停用</option>
+          <option value="failed">测试失败</option>
+          <option value="delisted">已下架</option>
         </select>
         <button class="btn btn-sm" onclick="toggleAddModelRow()">＋ 添加模型</button>
         <!-- 低频批量操作收入「更多」，避免工具栏两行铺满；保留筛选 / 同步一键直达 -->
         <div class="toolbar-more" id="modelBulkMore">
           <button class="btn btn-sm" onclick="toggleToolbarMore(event)" aria-haspopup="true" aria-expanded="false" id="toolbarMoreBtn">更多操作 ▾</button>
           <div class="toolbar-more-menu">
+            <button class="btn btn-sm" onclick="setAllModelGroups(true)">展开全部</button>
+            <button class="btn btn-sm" onclick="setAllModelGroups(false)">折叠全部</button>
             <button class="btn btn-sm" id="bulkEnableFreeBtn" onclick="bulkModelToggle('free')">启用全部免费</button>
             <button class="btn btn-sm" id="bulkDisablePaidBtn" onclick="bulkModelToggle('paid')">停用全部付费</button>
+            <button class="btn btn-sm" id="bulkEnableFilteredBtn" onclick="bulkToggleFiltered(false)">启用当前筛选</button>
+            <button class="btn btn-sm" id="bulkDisableFilteredBtn" onclick="bulkToggleFiltered(true)">停用当前筛选</button>
           </div>
         </div>
         <button class="sync-btn" id="syncModelsBtn" onclick="syncModels()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>从 Cline 同步模型</span></button>
@@ -834,6 +941,24 @@
   </div>
 
 <!-- Provider 编辑器抽屉（fixed 浮层，与本页预设/导入弹窗同级） -->
+<div id="saveDiscardBar" class="save-discard-bar" role="region" aria-label="未保存的更改">
+  <span class="sdb-dot" aria-hidden="true"></span>
+  <span>未保存的更改</span>
+  <button type="button" class="btn btn-sm" id="saveBarDiff" hidden onclick="diffViaBar()">查看差异</button>
+  <button type="button" class="btn btn-sm" onclick="discardSaveBar()">放弃</button>
+  <button type="button" class="btn btn-sm btn-primary" onclick="saveViaBar()">保存更改</button>
+</div>
+<div id="diffModal" class="overlay-modal overlay-top" onclick="if(event.target===this)resolveDiff(false)">
+  <div class="modal-card w560" role="dialog" aria-modal="true" aria-label="变更预览">
+    <div class="modal-title">变更预览</div>
+    <div class="modal-sub">仅以下字段发生变化，确认后保存：</div>
+    <div id="diffList" class="diff-list"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" onclick="resolveDiff(false)">取消</button>
+      <button class="btn btn-sm btn-primary" onclick="resolveDiff(true)">确认保存</button>
+    </div>
+  </div>
+</div>
 <div id="providerEditorOverlay" class="drawer-overlay" onclick="hideProviderEditor()"></div>
 <aside id="providerEditor" class="drawer" role="dialog" aria-modal="true" aria-labelledby="providerEditorTitle">
   <div class="drawer-header">
@@ -993,6 +1118,112 @@
     </div>
   </div>
 
+<div id="tab-quickstart" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">快速开始</div>
+      <div class="large-subtitle">三步接入：添加账号 → 生成密钥 → 配置客户端</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">接入步骤</div>
+    <div class="section-body">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div class="step-dot">1</div>
+          <div>
+            <div style="font-weight:600;color:var(--text)">添加 Cline 账号</div>
+            <div style="font-size:13px;color:var(--text2);margin-top:2px">在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。</div>
+            <button class="btn btn-sm" style="margin-top:6px" onclick="switchTab('accounts')">前往账号与连接</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div class="step-dot">2</div>
+          <div>
+            <div style="font-weight:600;color:var(--text)">生成 API Key</div>
+            <div style="font-size:13px;color:var(--text2);margin-top:2px">前往「密钥与安全」页面生成密钥。如不配置任何密钥，代理允许匿名访问。</div>
+            <button class="btn btn-sm" style="margin-top:6px" onclick="switchTab('security')">前往密钥与安全</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div class="step-dot">3</div>
+          <div>
+            <div style="font-weight:600;color:var(--text)">配置客户端</div>
+            <div style="font-size:13px;color:var(--text2);margin-top:2px">按下方客户端示例填入 Base URL 与密钥即可。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">客户端配置示例</div>
+    <div class="section-desc">Base URL 中的端口与监听地址以「关于」页 API 地址为准；多 Provider 同名模型可用 <code>模型@Provider名</code> 钉选来源（失败只报错、不悄悄换源）。</div>
+    <div class="section-body">
+      <div class="quickstart-grid">
+        <div class="quickstart-card">
+          <div class="quickstart-card-title">Claude Code（Anthropic 协议）</div>
+          <pre class="quickstart-code">export ANTHROPIC_BASE_URL="http://127.0.0.1:3457"
+export ANTHROPIC_API_KEY="&lt;your-api-key&gt;"
+claude --model cline-free/glm-5.2</pre>
+        </div>
+        <div class="quickstart-card">
+          <div class="quickstart-card-title">Cline / Roo Code（VS Code 插件）</div>
+          <pre class="quickstart-code">API Provider: Anthropic
+Base URL:  http://127.0.0.1:3457
+API Key:   &lt;your-api-key&gt;
+Model:     cline-free/glm-5.2</pre>
+        </div>
+        <div class="quickstart-card">
+          <div class="quickstart-card-title">通用 OpenAI 兼容客户端</div>
+          <pre class="quickstart-code">Base URL: http://127.0.0.1:3457/v1
+API Key:  &lt;your-api-key&gt;
+Model:    cline-free/glm-5.2</pre>
+        </div>
+        <div class="quickstart-card">
+          <div class="quickstart-card-title">curl 冒烟测试</div>
+          <pre class="quickstart-code">curl -s http://127.0.0.1:3457/v1/chat/completions \
+  -H "x-api-key: &lt;your-api-key&gt;" -H "Content-Type: application/json" \
+  -d '{"model":"cline-free/glm-5.2","messages":[{"role":"user","content":"hi"}]}'</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">下一步</div>
+    <div class="section-body">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px">
+        <button class="btn btn-sm" onclick="switchTab('upstreams')">接入更多免费上游（OpenCode / Zen）</button>
+        <button class="btn btn-sm" onclick="switchTab('providers')">添加自定义 Provider</button>
+        <button class="btn btn-sm" onclick="switchTab('combos')">配置模型组合自动换源</button>
+        <button class="btn btn-sm" onclick="switchTab('quota')">查看配额与预算</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-quota" class="tab-panel" style="display:none">
+  <div class="page-header">
+    <div>
+      <div class="large-title">配额与预算</div>
+      <div class="large-subtitle">Provider 每分钟 / 每日预算用量、冷却恢复与账号 Token 总量</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="loadQuota(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-body flush">
+      <div id="quotaSummary" class="quota-summary"></div>
+    </div>
+  </div>
+  <div id="quotaList">
+    <div class="sk-stack" style="padding:16px"><span class="skeleton"></span><span class="skeleton w70"></span></div>
+  </div>
+</div>
+
 <div id="tab-about" class="tab-panel" style="display:none">
   <div class="large-title">关于</div>
   <div class="large-subtitle">应用信息、使用指南与开源协议</div>
@@ -1008,6 +1239,9 @@
           <div style="font-size:20px;font-weight:700;color:var(--text)">Cline2API</div>
           <div style="font-size:13px;color:var(--text2);margin-top:2px">Cline API 反向代理 · 多账号轮询 · 双协议兼容</div>
           <div style="font-size:12px;color:var(--text3);margin-top:4px"><span id="aboutVersion">版本 dev</span> · MIT License · Go 1.25 + Wails v2</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px" id="aboutBuildRow" hidden><span>构建信息</span>: <span id="aboutGitInfo">—</span></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px"><span>API 地址</span>: <span id="aboutApiAddr">127.0.0.1:3457</span></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px" id="aboutUptimeRow" hidden><span>运行时长</span>: <span id="aboutUptime">—</span><span id="aboutStartedAtWrap"> · 启动于 <span id="aboutStartedAt">—</span></span></div>
         </div>
       </div>
     </div>
@@ -1016,42 +1250,14 @@
   <div class="section">
     <div class="section-title">快速上手</div>
     <div class="section-body">
-      <div style="display:flex;flex-direction:column;gap:16px">
-        <div style="display:flex;gap:12px;align-items:flex-start">
-          <div class="step-dot">1</div>
-          <div>
-            <div style="font-weight:600;color:var(--text)">添加 Cline 账号</div>
-            <div style="font-size:13px;color:var(--text2);margin-top:2px">在「账号与连接」页展开「登录与导入」分区，通过 OAuth 登录或手动输入 refreshToken 添加账号。支持批量导入。</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:12px;align-items:flex-start">
-          <div class="step-dot">2</div>
-          <div>
-            <div style="font-weight:600;color:var(--text)">生成 API Key</div>
-            <div style="font-size:13px;color:var(--text2);margin-top:2px">前往「密钥与安全」页面生成密钥。如不配置任何密钥，代理允许匿名访问。</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:12px;align-items:flex-start">
-          <div class="step-dot">3</div>
-          <div>
-            <div style="font-weight:600;color:var(--text)">配置客户端</div>
-            <div style="font-size:13px;color:var(--text2);margin-top:2px">在 Claude Code、Cline 等客户端中设置：</div>
-            <div style="font-family:ui-monospace,monospace;font-size:12px;background:var(--surface2);padding:8px 12px;border-radius:6px;margin-top:6px;color:var(--text2)">
-              Base URL: http://127.0.0.1:3457/v1<br>
-              API Key: &lt;生成的密钥&gt;<br>
-              Model: cline-free/glm-5.2
-            </div>
-            <div style="font-size:12px;color:var(--text3);margin-top:6px">多个 Provider 提供同名模型时，可在 Model 后追加 @Provider名 钉选来源，如 deepseek-chat@我的Provider（失败只报错、不悄悄换源）。</div>
-          </div>
-        </div>
-      </div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.8">添加账号 → 生成 API Key → 客户端配置 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-size:12px">Base URL: http://127.0.0.1:3457/v1</code>。完整步骤与各客户端示例见「快速开始」页。<button class="btn btn-sm" style="margin-left:8px" onclick="switchTab('quickstart')">打开快速开始</button></div>
     </div>
   </div>
 
   <div class="section">
     <div class="section-title">功能特性</div>
     <div class="section-body">
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:13px;color:var(--text2)">
+      <div class="about-feature-grid" style="font-size:13px;color:var(--text2)">
         <div>✅ 多账号轮询（轮询/填满/随机）</div>
         <div>✅ OpenAI & Anthropic 双协议</div>
         <div>✅ 429 冷却自动恢复</div>
@@ -1071,6 +1277,7 @@
         <div><span style="color:var(--text3);display:inline-block;width:80px">仓库地址</span><a href="#" onclick="openExternal('https://github.com/luawei1/cline2api');return false" style="color:var(--accent);cursor:pointer">github.com/luawei1/cline2api</a></div>
         <div><span style="color:var(--text3);display:inline-block;width:80px">问题反馈</span><a href="#" onclick="openExternal('https://github.com/luawei1/cline2api/issues');return false" style="color:var(--accent);cursor:pointer">github.com/luawei1/cline2api/issues</a></div>
         <div><span style="color:var(--text3);display:inline-block;width:80px">下载更新</span><a href="#" onclick="openExternal('https://github.com/luawei1/cline2api/releases');return false" style="color:var(--accent);cursor:pointer">github.com/luawei1/cline2api/releases</a></div>
+        <div><span style="color:var(--text3);display:inline-block;width:80px">更新检查</span><span id="aboutVerCheck" style="font-size:13px;color:var(--text3)">未检查</span> <button type="button" class="btn btn-sm" onclick="checkForUpdate(true,this)">检查更新</button></div>
         <div><span style="color:var(--text3);display:inline-block;width:80px">开源协议</span>MIT License © 2026 luawei1</div>
       </div>
     </div>

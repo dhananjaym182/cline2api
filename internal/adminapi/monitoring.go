@@ -3,10 +3,12 @@ package adminapi
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"cline-go-proxy/internal/domain"
 	"cline-go-proxy/internal/httpx"
 )
+
 
 // DefaultRequestLogLimit is the page size used when the caller does not ask for
 // one. It matches the persisted request-log store's default.
@@ -19,6 +21,7 @@ type Monitoring struct {
 	Strategy        func() string
 	ModelChain      func() []string
 	Version         func() string
+	StartedAt       func() time.Time
 	OpencodeToday   func() any
 	ListRequestLogs func(limit int, cursor string) (any, error)
 	Translate       func(*http.Request, string) string
@@ -50,6 +53,17 @@ func (m *Monitoring) version() string {
 		return m.Version()
 	}
 	return ""
+}
+
+func (m *Monitoring) startedAt() (time.Time, bool) {
+	if m.StartedAt == nil {
+		return time.Time{}, false
+	}
+	t := m.StartedAt()
+	if t.IsZero() {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // Stats handles GET /admin/api/stats.
@@ -86,23 +100,30 @@ func (m *Monitoring) Stats(w http.ResponseWriter, r *http.Request) {
 		opencodeToday = m.OpencodeToday()
 	}
 
+	data := map[string]any{
+		"total":            len(accounts),
+		"active":           active,
+		"cooldown":         cooldown,
+		"expired":          expired,
+		"usageCount":       usageCount,
+		"promptTokens":     promptTokens,
+		"completionTokens": completionTokens,
+		"totalTokens":      totalTokens,
+		"cachedTokens":     cachedTokens,
+		"strategy":         m.strategy(),
+		"modelChain":       m.modelChain(),
+		"version":          m.version(),
+		"opencodeToday":    opencodeToday,
+	}
+	if t, ok := m.startedAt(); ok {
+		data["startedAt"] = t.UTC().Format(time.RFC3339)
+		if secs := int64(time.Since(t).Seconds()); secs > 0 {
+			data["uptimeSeconds"] = secs
+		}
+	}
 	httpx.WriteAPI(w, http.StatusOK, httpx.Response{
 		Success: true,
-		Data: map[string]any{
-			"total":            len(accounts),
-			"active":           active,
-			"cooldown":         cooldown,
-			"expired":          expired,
-			"usageCount":       usageCount,
-			"promptTokens":     promptTokens,
-			"completionTokens": completionTokens,
-			"totalTokens":      totalTokens,
-			"cachedTokens":     cachedTokens,
-			"strategy":         m.strategy(),
-			"modelChain":       m.modelChain(),
-			"version":          m.version(),
-			"opencodeToday":    opencodeToday,
-		},
+		Data:    data,
 	})
 }
 

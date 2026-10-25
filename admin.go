@@ -72,6 +72,7 @@ var adminMonitoring = &adminapi.Monitoring{
 	Strategy:      func() string { return getProxyConfig().Strategy },
 	ModelChain:    func() []string { return getProxyConfig().ModelChain },
 	Version:       func() string { return appVersion },
+	StartedAt:     func() time.Time { return serverStartedAt },
 	OpencodeToday: func() any { return opencodeUsageToday() },
 	ListRequestLogs: func(limit int, cursor string) (any, error) {
 		return listRequestLogs(limit, cursor)
@@ -109,6 +110,7 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	auth := func(h http.HandlerFunc) http.HandlerFunc {
 		return requireAdminAuth(corsHandler(h))
 	}
+	mux.HandleFunc("/admin/api/admin-sessions/clear", auth(handleAdminSessionsClear))
 	mux.HandleFunc("/admin/api/accounts", auth(handleAdminAccounts))
 	mux.HandleFunc("/admin/api/accounts/add", auth(handleAdminAccountAdd))
 	mux.HandleFunc("/admin/api/accounts/delete", auth(handleAdminAccountDelete))
@@ -117,6 +119,7 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/oauth/status", auth(handleOAuthStatus))
 	mux.HandleFunc("/admin/api/sso/import", auth(handleSSOImport))
 	mux.HandleFunc("/admin/api/stats", auth(handleAdminStats))
+	mux.HandleFunc("/admin/api/dashboard/overview", auth(handleDashboardOverview))
 	mux.HandleFunc("/admin/api/batch-import", auth(handleBatchImport))
 	mux.HandleFunc("/admin/api/accounts/refresh-all", auth(handleAdminRefreshAll))
 	mux.HandleFunc("/admin/api/accounts/delete-all", auth(handleAdminDeleteAll))
@@ -168,6 +171,10 @@ func registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/combos/test", auth(handleComboTest))
 	mux.HandleFunc("/admin/api/password", auth(handleAdminPassword))
 	mux.HandleFunc("/admin/api/request-logs", auth(handleAdminRequestLogs))
+	mux.HandleFunc("/admin/api/request-logs/clear", auth(handleAdminRequestLogsClear))
+	mux.HandleFunc("/admin/api/providers/cooldown-reset", auth(handleProviderCooldownReset))
+	mux.HandleFunc("/admin/api/account-health", auth(handleAccountHealth))
+	mux.HandleFunc("/admin/api/version-check", auth(handleAdminVersionCheck))
 	mux.HandleFunc("/admin/api/open-external", auth(handleOpenExternal))
 }
 
@@ -217,6 +224,18 @@ func handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 // POST /admin/api/logout
 func handleAdminLogout(w http.ResponseWriter, r *http.Request) {
 	adminAuthHandlers.Logout(w, r)
+}
+
+// POST /admin/api/admin-sessions/clear 清空全部后台登录会话（含当前浏览器），
+// 用于共享机器上强制所有人重新登录。
+func handleAdminSessionsClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPI(w, http.StatusMethodNotAllowed, apiResponse{Error: tAPI(r, "method_not_allowed")})
+		return
+	}
+	adminSessions.Clear()
+	log.Printf("admin: cleared all admin login sessions")
+	writeAPI(w, http.StatusOK, apiResponse{Success: true})
 }
 
 // POST /admin/api/password  body: {password}（空 = 清除密码，恢复无密码访问）

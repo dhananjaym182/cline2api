@@ -5,7 +5,9 @@ COPY go.mod ./
 RUN go mod download 2>/dev/null || true
 COPY . .
 ARG APP_VERSION=dev
-RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.appVersion=${APP_VERSION}" -o cline-proxy .
+ARG GIT_COMMIT=
+ARG BUILD_DATE=
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X main.appVersion=${APP_VERSION} -X main.appGitCommit=${GIT_COMMIT} -X main.appBuildDate=${BUILD_DATE}" -o cline-proxy .
 
 FROM alpine:3.21
 

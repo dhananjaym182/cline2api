@@ -36,11 +36,14 @@ const (
 	quickTestModelsTimeout = 15 * time.Second
 )
 
-// miniTestParams 一条 min-token 测试请求体（与 handleProviderTest 同口径）。
+// miniTestParams 一条安全预算测试请求体（与 handleProviderTest 同口径）。
+// max_tokens 不能太小（issue #32）：推理模型会把小预算整份耗在 reasoning 上、
+// 正文为空，上游必然回 500「empty response content」，测试就误报模型不可用；
+// 且 16 恰好等于 minUpstreamMaxTokens，不会被 buildUpstreamBody 夹大兜底。
 func miniTestParams(model string) map[string]any {
 	return map[string]any{
 		"model":      model,
-		"max_tokens": 16,
+		"max_tokens": 1024,
 		"messages":   []any{map[string]any{"role": "user", "content": "hi"}},
 	}
 }

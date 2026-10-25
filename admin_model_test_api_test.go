@@ -401,3 +401,41 @@ func TestComboTestDoesNotMutateCombo(t *testing.T) {
 		t.Fatalf("combo mutated by test: %+v", c)
 	}
 }
+
+// issue #32 回归：探测预算不能是 16。推理模型会把 16 token 整份耗在
+// reasoning 上，api.cline.bot 必然回 500「empty response content」，管理页
+// 把可用模型误报为不可用（且 16 恰好等于 minUpstreamMaxTokens，不会被夹大）。
+func TestQuickModelTestTokenBudget(t *testing.T) {
+	installPool(t, []Model{
+		{ID: "mprov", Cost: "pass", Status: "active"},
+		{ID: "mcline", Cost: "pass", Status: "active", Source: "remote"},
+	})
+	installConfig(t, defaultProxyConfig())
+	installProviders(t, &CustomProvider{ID: "pp", Name: "PP", BaseURL: "http://pp.test/v1",
+		ModelIDs: []string{"mprov"}, Enabled: true})
+	readMT := func(req *http.Request) float64 {
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Errorf("decode upstream body: %v", err)
+		}
+		mt, _ := body["max_tokens"].(float64)
+		return mt
+	}
+	var gotMT float64
+	installTransport(t, func(req *http.Request) *http.Response {
+		gotMT = readMT(req)
+		return stubResp(req, http.StatusOK, okCompletion)
+	})
+	if res := quickModelTest("mcline", nil); res["ok"] != true {
+		t.Fatalf("pool route: %v", res)
+	}
+	if gotMT < 1024 {
+		t.Fatalf("cline pool probe max_tokens = %v, want >= 1024", gotMT)
+	}
+	if res := quickModelTest("mprov", nil); res["ok"] != true {
+		t.Fatalf("provider route: %v", res)
+	}
+	if gotMT < 1024 {
+		t.Fatalf("provider probe max_tokens = %v, want >= 1024", gotMT)
+	}
+}

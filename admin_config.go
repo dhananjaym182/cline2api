@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"runtime"
 
 	"cline-go-proxy/internal/adminapi"
 )
@@ -33,10 +34,20 @@ var adminConfig = &adminapi.Config{
 	ListenPort:         func() int { return listenPort },
 	EffectiveAdminHost: effectiveAdminHost,
 	Version:            appVersion,
-	ZenHeaders:         func() map[string]string { return getZenConfig().ZenHeaders },
-	PoolPath:           poolPath,
-	HasPassword:        func() bool { return loadPool().AdminPasswordHash != "" },
-	RestartListener:    restartListener,
-	Translate:          func(r *http.Request, key string) string { return tAPI(r, key) },
-	Logf:               log.Printf,
+	Build: func() map[string]any {
+		m := map[string]any{"goVersion": runtime.Version()}
+		if appGitCommit != "" {
+			m["commit"] = appGitCommit
+		}
+		if appBuildDate != "" {
+			m["date"] = appBuildDate
+		}
+		return m
+	},
+	ZenHeaders:      func() map[string]string { return getZenConfig().ZenHeaders },
+	PoolPath:        poolPath,
+	HasPassword:     func() bool { return loadPool().AdminPasswordHash != "" },
+	RestartListener: restartListener,
+	Translate:       func(r *http.Request, key string) string { return tAPI(r, key) },
+	Logf:            log.Printf,
 }
